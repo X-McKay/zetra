@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-09T00:56:57.987Z",
+  "checkedAt": "2026-10-09T09:23:45.389Z",
   "status": "passed",
   "checks": [
     "desktop/mobile rendered pages",
@@ -47,8 +47,8 @@
       "width": 1440,
       "scrollWidth": 1440,
       "title": "The Agent Playbook | Zetra",
-      "figures": 14,
-      "codeBlocks": 45,
+      "figures": 20,
+      "codeBlocks": 53,
       "brokenImages": 0
     },
     {
@@ -59,6 +59,16 @@
       "title": "Integration Deep Dive | Zetra",
       "figures": 3,
       "codeBlocks": 10,
+      "brokenImages": 0
+    },
+    {
+      "document": "lifecycle-guide",
+      "viewport": "desktop",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "title": "Agent Development Walkthrough | Zetra",
+      "figures": 6,
+      "codeBlocks": 8,
       "brokenImages": 0
     },
     {
@@ -137,8 +147,8 @@
       "width": 390,
       "scrollWidth": 390,
       "title": "The Agent Playbook | Zetra",
-      "figures": 14,
-      "codeBlocks": 45,
+      "figures": 20,
+      "codeBlocks": 53,
       "brokenImages": 0
     },
     {
@@ -149,6 +159,16 @@
       "title": "Integration Deep Dive | Zetra",
       "figures": 3,
       "codeBlocks": 10,
+      "brokenImages": 0
+    },
+    {
+      "document": "lifecycle-guide",
+      "viewport": "mobile",
+      "width": 390,
+      "scrollWidth": 390,
+      "title": "Agent Development Walkthrough | Zetra",
+      "figures": 6,
+      "codeBlocks": 8,
       "brokenImages": 0
     },
     {

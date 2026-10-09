@@ -21,7 +21,7 @@
     {
       "component": "document-rendering",
       "report": "docs/research/document-qa.json",
-      "sha256": "4c8f4a244bed2909fb147953e46407efd6bb58038dea38c3cdcf96e3f780fce9",
+      "sha256": "01aaa95d593320c2c7e5b937817018a58c0e361e6a2cee967e1d5c5881eb2553",
       "status": "passed",
       "scope": [],
       "checkCount": 7,

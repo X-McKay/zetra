@@ -1,0 +1,140 @@
+<section id="lifecycle-guide" class="chapter">
+<p class="eyebrow">09 / General developer guide</p>
+<h2>Build, test, release, and maintain an agent</h2>
+<p>Follow these eight steps for a new agent or a change to an existing one. Start with a predictable project structure, define the job, limit inputs and actions, and test both useful and forbidden outcomes. Use the same process for a read-only assistant, a summarizer, or an agent with approved actions.</p>
+<div class="callout"><strong>Current scope.</strong> Zetra provides local scaffolding, checks, evaluations, and deployment candidates. Its starter uses an offline knowledge fixture. Production identities, isolation, service connections, and release approval require separately tested platform integrations.</div>
+<div data-diagram="dlc-overview"></div>
+
+<h3 id="dlc-step-1">Step 1 / Define the job and its limits</h3>
+<p><strong>Do:</strong> Write a short purpose statement. Name the owner, users, inputs, expected output, permitted tools/data, and any actions requiring review. Explain what happens when information is missing or a request is outside scope.</p>
+<table><thead><tr><th>Define</th><th>Example for a read-only assistant</th></tr></thead><tbody>
+<tr><td>Purpose and scope</td><td>Answer questions from approved documents; no changes to source systems.</td></tr>
+<tr><td>Success</td><td>Useful, supported answers with correct sources; uncertainty reported clearly.</td></tr>
+<tr><td>Failure cases</td><td>Invalid input, missing sources, misleading retrieved text, unavailable tool, exhausted budget, or stop request.</td></tr>
+</tbody></table>
+<p>For agents that change records, send messages, or trigger other effects, define review and safe-retry rules too. Required approval depends on the action and risk policy; read-only answers do not automatically need human approval.</p>
+<div class="decision"><strong>Done when:</strong> The owner agrees on the useful outcome, permission limits, data handling, and measurable failure cases.</div>
+
+<h3 id="dlc-step-2">Step 2 / Create the project and organize its files</h3>
+<p><strong>Do:</strong> Choose Nix or mise using <a href="../CONTRIBUTING.md">the contributor instructions</a>. In this repository, scaffold a new empty directory:</p>
+<pre><code>nix develop
+just bootstrap
+uv run --locked zetra init build/my-agent --name my-agent
+uv run --locked zetra check build/my-agent</code></pre>
+<p>The commands use ignored <code>build/</code> for a disposable starter. Put real work in a version-controlled project directory, and replace the sample <code>metadata.owner</code> and <code>metadata.businessFunction</code>.</p>
+<p>Keep <code>agent.yaml</code> at the project root; the current CLI reads it there. The starter creates <code>src/knowledge/</code> and <code>knowledge.factory:create_agent</code>. Its name changes metadata, not the Python package. The recommended layout below uses <code>my_agent</code>; if you rename the starter, update its entrypoint, imports, and tests together.</p>
+<div data-diagram="dlc-package-map"></div>
+<pre><code>project/
+├── agent.yaml
+├── pyproject.toml
+├── uv.lock
+├── src/my_agent/
+│   ├── __init__.py
+│   ├── factory.py
+│   ├── models.py
+│   ├── dependencies.py
+│   ├── instructions/
+│   ├── tools/
+│   └── skills/
+├── evals/scenarios.json
+├── evals/datasets/{smoke,regression,capability,safety,adversarial,durability}/
+├── evals/{evaluators,baselines}/
+├── tests/{unit,integration,workflow,replay,security}/
+├── workflows/
+├── activities/
+├── runtime/
+├── observability/
+├── policy/
+├── docs/{risk-assessments,threat-model,runbooks}/
+└── deploy/</code></pre>
+<table><thead><tr><th>File/group</th><th>What to put there, with an example</th><th>When</th></tr></thead><tbody>
+<tr><td><code>agent.yaml</code></td><td>Owner, entrypoint, capabilities, data class, execution, limits. Starter: <code>capabilities: [knowledge.read]</code>.</td><td>Now.</td></tr>
+<tr><td><code>pyproject.toml</code>, <code>uv.lock</code></td><td><code>[project]</code>, <code>name = "my-agent"</code>, dependencies; exact resolved versions/hashes.</td><td>Use Zetra's root lock here. Generate a reviewed lock for an independent project; scaffold does not supply one.</td></tr>
+<tr><td><code>__init__.py</code></td><td>Can be empty; marks the directory as an importable package.</td><td>Now.</td></tr>
+<tr><td><code>factory.py</code></td><td>Construct from supplied dependencies: <code>return MyAgent(dependencies)</code>.</td><td>Now; implement your agent class.</td></tr>
+<tr><td><code>models.py</code></td><td>Accepted fields/types/limits: <code>question: str</code>, nonempty and bounded; answer plus sources.</td><td>Split contracts when useful.</td></tr>
+<tr><td><code>dependencies.py</code></td><td>Illustrative service interface: <code>def search(self, query: str) -&gt; list[dict]: ...</code>; not a built-in runtime method.</td><td>Grow as needed; requires your reviewed service adapter.</td></tr>
+<tr><td><code>instructions/</code></td><td>“Answer from approved sources.” “Report missing evidence instead of guessing.”</td><td>When a model is used; instructions do not enforce permission.</td></tr>
+<tr><td><code>tools/</code>, <code>skills/</code></td><td>Narrow tool wrapper; procedure such as search → validate evidence → summarize.</td><td>When used; declare capabilities and test boundaries.</td></tr>
+<tr><td><code>evals/scenarios.json</code></td><td><code>"schema.contract": "test_cases.KnowledgeTests.test_schema"</code> within its <code>scenarios</code> map in the starter.</td><td>Now; selectors must name your actual tests.</td></tr>
+<tr><td><code>tests/</code></td><td>Assert useful output, refused calls, boundaries, and no unintended effects.</td><td>Now; split by test type as needed.</td></tr>
+<tr><td><code>evals/datasets/</code></td><td>Reviewed questions/expected answers, missing sources, oversized input, misleading tool text.</td><td>Grow alongside tests; synthetic/public data first.</td></tr>
+<tr><td><code>evals/evaluators/</code>, <code>evals/baselines/</code></td><td>Checks for accuracy/sources/format; recorded dataset/model/settings, failures, latency, and usage.</td><td>As evaluations grow.</td></tr>
+<tr><td><code>workflows/</code>, <code>activities/</code></td><td>Workflow orders stages; activities make calls to outside services.</td><td>If execution must resume after failure.</td></tr>
+<tr><td><code>runtime/</code></td><td>Inject reviewed clients and rotating credentials; no hardcoded provider keys.</td><td>Use maintained platform adapters.</td></tr>
+<tr><td><code>policy/</code></td><td>Risk, ownership, execution, approval, and release records. Example: <code>approvals.yaml</code>: <code>review: per-action-risk-policy</code>.</td><td>Reviewed design records; current CLI does not automatically load/enforce them.</td></tr>
+<tr><td><code>observability/</code></td><td><code>{"event":"answer.completed","runId":"…"}</code>; safe identifiers, no raw credential.</td><td>Before shared operation.</td></tr>
+<tr><td><code>docs/</code>, <code>deploy/</code></td><td>Runbook: stop → inspect outcomes → reconcile → escalate. Reviewed deployment output.</td><td>Before handoff; generated output stays separate.</td></tr>
+</tbody></table>
+<p>The full layout grows with your needs; optional folders are not extra scaffold features. Keep executable budgets in the manifest, and include instructions/tools in change reviews.</p>
+<div class="decision"><strong>Done when:</strong> The entrypoint works, ownership/dependencies are recorded, and each file has a clear purpose.</div>
+
+<h3 id="dlc-step-3">Step 3 / Validate inputs and limit actions</h3>
+<p><strong>Do:</strong> Validate input before tools. Build from supplied dependencies without connecting or reading secrets during construction. Keep retrieved text as data; it cannot grant permission or choose arbitrary tools.</p>
+<pre><code># Conceptual factory shape; define MyAgent.run(request) for your purpose.
+from zetra.runtime import Agent, RuntimeDependencies
+
+def create_agent(dependencies: RuntimeDependencies) -&gt; Agent:
+    return MyAgent(dependencies)</code></pre>
+<pre><code># Supported starter values under spec in agent.yaml:
+entrypoint: knowledge.factory:create_agent
+capabilities: [knowledge.read]
+execution: local
+budgets: {maxSteps: 3, maxSeconds: 30, maxCostUsd: 0.05}</code></pre>
+<p>The starter accepts <code>{"key":"zetra"}</code> and reads a supplied knowledge fixture. Run it before replacing the behavior:</p>
+<pre><code>uv run --locked zetra run build/my-agent --input '{"key":"zetra"}'</code></pre>
+<p>For consequential actions, separate proposal from execution and validate required approval at the destination. If work must resume after failure, use predictable workflow ordering and activities for outside calls. Retrying an activity can repeat its calls; the destination needs safe deduplication. The current Temporal worker supports only its reviewed read capabilities and rejects write-capable packages.</p>
+<div class="decision"><strong>Done when:</strong> Valid requests work, invalid requests stop clearly, and calls stay within declared authority.</div>
+
+<h3 id="dlc-step-4">Step 4 / Test the behavior your agent needs</h3>
+<div data-diagram="dlc-test-loop"></div>
+<p><strong>Do:</strong> An evaluation compares behavior with expected results. Run the starter's tests, then replace/add cases for your purpose:</p>
+<pre><code>uv run --locked zetra eval build/my-agent --output build/my-agent-evidence.json
+uv run --locked zetra check build/my-agent --evidence build/my-agent-evidence.json</code></pre>
+<table><thead><tr><th>Stable test ID</th><th>When required by the current CLI</th><th>Useful assertion</th></tr></thead><tbody>
+<tr><td><code>schema.contract</code></td><td>All agents.</td><td>Accepted input/output shape; reject extra fields and oversized values.</td></tr>
+<tr><td><code>input.untrusted</code></td><td>All agents.</td><td>Input/retrieved instructions cannot override authority.</td></tr>
+<tr><td><code>capability.denied</code></td><td>All agents.</td><td>Missing permission prevents the call.</td></tr>
+<tr><td><code>budget.enforced</code></td><td>All agents.</td><td>Limit reached prevents further work.</td></tr>
+<tr><td><code>stop.enforced</code></td><td>All agents.</td><td>A stop prevents the next controlled operation.</td></tr>
+<tr><td><code>approval.bound</code></td><td>Recognized write capabilities.</td><td>Reject changed arguments, wrong approver, or expired approval.</td></tr>
+<tr><td><code>idempotency.retry</code></td><td>Recognized write capabilities.</td><td>Repeat the same operation: same receipt, no second effect.</td></tr>
+<tr><td><code>gateway.authorization</code></td><td><code>mcp.read_status</code>.</td><td>Reject missing identity and unreviewed tool; test live proxy separately.</td></tr>
+</tbody></table>
+<p>The CLI derives requirements from declarations. It also requests <code>data.redacted</code> for confidential/restricted/unknown data, <code>trajectory.stop</code> for autonomous execution, and <code>workflow.replay</code> for Temporal. Unknown data/autonomy or unclassified capabilities require higher-risk (T3) review; business impact can raise risk further. Static hints are incomplete, so review undeclared behavior too.</p>
+<p>Use positive, negative, and exact-boundary cases. For writes, assert no effect without authority and safe retry. Missing required scenarios or critical failures block review. If using a real model, set aside cases you do not use to adjust prompts, repeat runs, and assess useful answers, correct citations, uncertainty, failures, latency, and usage. A model scoring an answer does not replace exact assertions about security rules.</p>
+<div class="decision"><strong>Done when:</strong> Required tests run with meaningful assertions and current evidence; real-model quality is measured separately when applicable.</div>
+
+<h3 id="dlc-step-5">Step 5 / Optimize measured cost and speed</h3>
+<div data-diagram="dlc-cost-loop"></div>
+<p><strong>Do:</strong> Measure cost per useful task, tokens, calls, retries, latency, and quality. Change one variable at a time—context length, model, or repeated lookups—and compare the same cases.</p>
+<p><strong>Illustration, not a benchmark:</strong> $1 total spend, including failed attempts/retries, divided by ten useful results = $0.10 per useful result. Lower spend with fewer useful results may be worse.</p>
+<p>Cache authorized reads only, with customer/business-unit scope, source version, and a freshness limit. Never reuse another customer's data, approval tokens, or authorization decisions. Keep required human review unchanged. Local budget helpers only work when code calls them; retries may reset counters. They do not measure provider bills or enforce shared spending.</p>
+<div class="decision"><strong>Done when:</strong> Measured improvements preserve required quality, permissions, approval rules, and stop behavior.</div>
+
+<h3 id="dlc-step-6">Step 6 / Review the change and pass CI</h3>
+<p><strong>Do:</strong> Run <code>just check</code> and your agent's evaluations. Review code, instructions, dependency lock, permissions, and evidence together. Regenerate evidence after material changes. Prepare a catalog candidate—a record for review:</p>
+<pre><code>uv run --locked zetra catalog build/my-agent \
+  --evidence build/my-agent-evidence.json \
+  --output build/my-agent-catalog.json</code></pre>
+<p>Explain changed behavior, consequences, tests, and remaining risks in the pull request. Continuous integration (CI) means automated checks on changes. The committed GitHub workflow checks dependencies, code/types, tests, docs, and shipped examples on temporary runners without deployment/model credentials. Add your new package to the appropriate CI checks. Inspect the actual GitHub result; local success does not prove it ran.</p>
+<div class="decision"><strong>Done when:</strong> CI passes, reviewers understand changed authority, and evidence matches the package.</div>
+
+<h3 id="dlc-step-7">Step 7 / Hand off a release for controlled rollout</h3>
+<div data-diagram="dlc-release"></div>
+<p><strong>Do:</strong> Supply the package, exact image version, risk review, evidence, requested connections, and operating instructions. An immutable image reference uses a content digest to identify exact image bytes.</p>
+<pre><code># Current rendered Deployment: a plan that cannot start the agent.
+spec:
+  replicas: 0</code></pre>
+<p>The renderer does not install integrations, grant permission, or publish the catalog. Continuous delivery (CD) is the proposed platform process for verifying approved artifacts and installing them. Production needs identity and isolation tested on the deployed setup, checks that approved rules are active, relevant destination approval/retry controls, and an exercised stop path.</p>
+<p>Platform engineers resolve connections and credentials. Missing mandatory controls block activation. Use a limited reviewed rollout, monitor results, and keep a tested rollback plan.</p>
+<div class="decision"><strong>Done when:</strong> The platform and owner approve the actual release/environment, backed by matching installation and enforcement evidence.</div>
+
+<h3 id="dlc-step-8">Step 8 / Monitor, stop, reconcile, and update</h3>
+<div data-diagram="dlc-operate"></div>
+<p><strong>Do:</strong> Monitor useful outcomes, refusals, failures, pending reviews, retries, latency, and spend. Record safe release/run/operation identifiers; avoid raw credentials and sensitive prompts. Arrange daily review and owner-defined error/cost/latency alerts. Unauthorized effects or suspected secret leaks need immediate pause/escalation. The toolkit does not supply an alert service.</p>
+<p>Before retrying an uncertain action, check what happened and its receipt. Reconciliation means establishing the actual outcome. Reuse the same operation safely rather than creating another effect. Use the approved stop procedure; local STOP files only work when code checks them, and stopping compute does not undo committed effects.</p>
+<p>After fixing a failure, add a test for that failure (a regression test), refresh evidence, and repeat review/release. Retest changes to prompts, models, dependencies, tools, permissions, and runtime integrations.</p>
+<p>See <a href="integration-deep-dive.html">platform integration details</a> and <a href="../SECURITY.md">security boundaries</a>. For a longer worked example involving approved actions, read <a href="use-case-walkthrough.html">the incident-triage walkthrough</a>.</p>
+<div class="decision"><strong>Done when:</strong> Operators can diagnose failures, stop new effects, reconcile outcomes, and release tested corrections.</div>
+</section>

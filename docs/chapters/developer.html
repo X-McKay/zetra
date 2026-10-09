@@ -47,7 +47,7 @@ metadata:
   owner: agent-engineering
   businessFunction: knowledge-operations
 spec:
-  entrypoint: agent:create_agent
+  entrypoint: knowledge.factory:create_agent
   capabilities: []
   dataClassification: internal
   autonomy: assist
@@ -107,8 +107,9 @@ def create_agent(deps: Dependencies) -&gt; KnowledgeAgent:
   <p>Start with a charter and a bounded package. Implement typed input/output and a deterministic fake before connecting a provider. Declare tools and data flows, then build tests that demonstrate both permitted work and expected denials. Run the local validator and evaluation runner repeatedly. Once behavior stabilizes, generate a candidate deployment plan and an evidence bundle. Platform integration tests, owner review, and tier-specific approvals precede promotion. Monitor the deployed release, and feed discovered failures into the regression set.</p>
   <pre><code># Supported v0.1 local commands; use the included examples first.
 zetra init /tmp/my-agent --name my-agent
-zetra check /tmp/my-agent --evidence /tmp/check.json
+zetra check /tmp/my-agent
 zetra eval /tmp/my-agent --output /tmp/eval.json
+zetra check /tmp/my-agent --evidence /tmp/eval.json
 zetra run /tmp/my-agent --input '{"key":"zetra"}'
 
 # Render is a withheld plan until runtime adapters are qualified.

@@ -2,7 +2,9 @@
 
 A comprehensive Agent Playbook and an initial framework-neutral Python toolkit for building, evaluating, deploying and governing agents with explicit authority.
 
-Start with the [complete HTML playbook](docs/index.html), or choose an audience:
+For a shorter, step-by-step introduction, start with the [Agent Development Walkthrough](docs/lifecycle-guide.html): files, evaluations, cost, release and monitoring.
+
+For more detail, read the [complete HTML playbook](docs/index.html), or choose an audience:
 
 - [Agent Strategy](docs/strategy.html) — business outcomes, success measures, a unified lifecycle and platform operating model.
 - [Agent Developer Playbook](docs/developer.html) — package structure, typed factories, evaluations, security and developer tools.
