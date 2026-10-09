@@ -41,7 +41,7 @@ just ci-lint       # GitHub Actions expressions and embedded shell
 just shell-lint    # ShellCheck of the integration launcher
 just test          # deterministic unit and contract tests
 just docs          # rebuild and validate HTML playbooks
-just examples      # evaluate all four reference agents
+just examples      # evaluate reference agents and test the offline developer starter
 just check         # complete local contributor gate
 ```
 

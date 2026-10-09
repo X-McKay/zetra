@@ -1,0 +1,9 @@
+[application]
+name = "document-assistant"
+instruction_file = "instructions/system.md"
+document_root = "fixtures/documents"
+allowed_document_ids = ["staff-handbook", "expense-policy"]
+max_documents = 2
+
+[fixture]
+kind = "offline-extractive"

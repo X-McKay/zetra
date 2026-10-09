@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-09T09:23:45.389Z",
+  "checkedAt": "2026-10-09T10:26:01.201Z",
   "status": "passed",
   "checks": [
     "desktop/mobile rendered pages",
@@ -47,8 +47,8 @@
       "width": 1440,
       "scrollWidth": 1440,
       "title": "The Agent Playbook | Zetra",
-      "figures": 20,
-      "codeBlocks": 53,
+      "figures": 23,
+      "codeBlocks": 57,
       "brokenImages": 0
     },
     {
@@ -66,9 +66,9 @@
       "viewport": "desktop",
       "width": 1440,
       "scrollWidth": 1440,
-      "title": "Agent Development Walkthrough | Zetra",
-      "figures": 6,
-      "codeBlocks": 8,
+      "title": "Agent Developer Guide",
+      "figures": 9,
+      "codeBlocks": 12,
       "brokenImages": 0
     },
     {
@@ -147,8 +147,8 @@
       "width": 390,
       "scrollWidth": 390,
       "title": "The Agent Playbook | Zetra",
-      "figures": 20,
-      "codeBlocks": 53,
+      "figures": 23,
+      "codeBlocks": 57,
       "brokenImages": 0
     },
     {
@@ -166,9 +166,9 @@
       "viewport": "mobile",
       "width": 390,
       "scrollWidth": 390,
-      "title": "Agent Development Walkthrough | Zetra",
-      "figures": 6,
-      "codeBlocks": 8,
+      "title": "Agent Developer Guide",
+      "figures": 9,
+      "codeBlocks": 12,
       "brokenImages": 0
     },
     {

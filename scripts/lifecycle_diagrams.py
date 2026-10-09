@@ -3,74 +3,228 @@
 from technical_diagrams import band, box, edge, figure, label
 
 
+def three_steps(key, title, stages, summary, caption):
+    body = label(24, 28, title.upper(), 12, weight=700)
+    for x, (heading, lines, tone) in zip((24, 382, 740), stages, strict=True):
+        body += box(x, 58, heading, lines, tone)
+    body += edge([(340, 114), (376, 114)]) + edge([(698, 114), (734, 114)])
+    body += band(222, summary[0], summary[1], "ink", 78)
+    return figure(key, title, body, 326, caption)
+
+
 def lifecycle_diagram(key):
+    extra = {
+        "dlc-skills-tools": (
+            "Skills guide the work; tools perform operations",
+            [
+                (
+                    "Skill: how to do a task",
+                    [
+                        "Reusable instructions and examples",
+                        "Load when relevant",
+                        "May explain when to use a tool",
+                    ],
+                    "teal",
+                ),
+                (
+                    "Tool: a callable operation",
+                    [
+                        "A name and typed arguments",
+                        "Validate inputs, limits and access",
+                        "Return structured results",
+                    ],
+                    "blue",
+                ),
+                (
+                    "Service: enforce permission",
+                    [
+                        "Authenticate the actual caller",
+                        "Check resource and action rights",
+                        "Require approval for risky writes",
+                    ],
+                    "orange",
+                ),
+            ],
+            (
+                "Example: answer from approved documents",
+                "Skill: check sources and cite evidence. Tool: read_document(id). Service: restrict which documents this user can read.",
+            ),
+            "Skill instructions cannot grant credentials or override permission checks. Treat document and tool contents as untrusted data.",
+        ),
+        "dlc-mcp": (
+            "MCP standardizes the connection",
+            [
+                (
+                    "Your application",
+                    [
+                        "Host owns the agent and user UI",
+                        "MCP client connects to a server",
+                        "Select only needed capabilities",
+                    ],
+                    "teal",
+                ),
+                (
+                    "MCP server",
+                    [
+                        "Advertises tools and schemas",
+                        "May offer resources and prompts",
+                        "Validate each incoming request",
+                    ],
+                    "blue",
+                ),
+                (
+                    "Connected service",
+                    [
+                        "Documents, search or another API",
+                        "Enforce user and resource access",
+                        "Return permitted information",
+                    ],
+                    "orange",
+                ),
+            ],
+            (
+                "Choose the transport and credentials deliberately",
+                "Local: stdio starts a process. Remote: Streamable HTTP connects to a service. Neither makes code or output trustworthy.",
+            ),
+            "Requests go left to right; results return through the connection. Retrieved text must not grant new authority.",
+        ),
+        "dlc-evaluations": (
+            "Evaluations measure how well the task is done",
+            [
+                (
+                    "Choose cases",
+                    [
+                        "Common, difficult and missing data",
+                        "Safety and denied-action cases",
+                        "Keep a held-out comparison set",
+                    ],
+                    "teal",
+                ),
+                (
+                    "Run and score",
+                    [
+                        "Freeze data, model and settings",
+                        "Check sources and actual actions",
+                        "Repeat variable model trials",
+                    ],
+                    "blue",
+                ),
+                (
+                    "Inspect results",
+                    [
+                        "Compare each task and category",
+                        "Review failures and judge errors",
+                        "Save results with release details",
+                    ],
+                    "orange",
+                ),
+            ],
+            (
+                "Choose scoring that fits the output",
+                "Schema checks for structure; exact assertions for actions; evidence checks for claims; calibrated review for subjective usefulness.",
+            ),
+            "An average can hide failures in an important category. Inspect those categories and critical cases separately.",
+        ),
+        "dlc-release": (
+            "Release only when all required gates pass",
+            [
+                (
+                    "CI: verify the change",
+                    [
+                        "Locked tools, lint, types and tests",
+                        "Run versioned evaluations",
+                        "Record code, model and settings",
+                    ],
+                    "blue",
+                ),
+                (
+                    "Review both kinds of gate",
+                    [
+                        "Absolute: meet a fixed target",
+                        "Relative: compare with baseline",
+                        "Critical safety cases must pass",
+                    ],
+                    "orange",
+                ),
+                (
+                    "CD: deploy and observe",
+                    [
+                        "Review access and configuration",
+                        "Start small and monitor outcomes",
+                        "Keep a tested rollback plan",
+                    ],
+                    "teal",
+                ),
+            ],
+            (
+                "Example quality gates: both must pass",
+                "Candidate success ≥ 90%; candidate minus approved baseline ≥ −1 percentage point. Also check cost, latency and critical cases.",
+            ),
+            "Thresholds are examples. Compare the same cases under the same conditions and agree how uncertainty affects the release decision.",
+        ),
+    }
+    if key in extra:
+        return three_steps(key, *extra[key])
     if key == "dlc-overview":
-        body = label(
-            24, 28, "ONE TASK → WORKING CODE → CHECKED RELEASE → DAILY OPERATION", 12, weight=700
-        )
+        body = label(24, 28, "BUILD IN SMALL STEPS; RETURN TO THEM AS YOU LEARN", 12, weight=700)
         stages = [
+            ("1 / Define the problem", ["Outcome, success measures", "Data, access and limits"]),
             (
-                24,
-                58,
-                "1 / Decide the task",
-                ["Write the goal and limits", "Name the owner"],
-                "teal",
+                "2 / Set up the repository",
+                ["Clear files and dependencies", "Repeatable local commands"],
             ),
             (
-                382,
-                58,
-                "2 / Create the files",
-                ["Manifest, typed code and tools", "Keep secrets outside the package"],
-                "blue",
+                "3 / Add skills and tools",
+                ["Instructions guide behavior", "Code validates operations"],
             ),
             (
-                740,
-                58,
-                "3 / Make one run work",
-                ["Use fake tools first", "Inspect the exact result"],
-                "teal",
+                "4 / Connect MCP servers",
+                ["A standard connection protocol", "Review server access and trust"],
             ),
             (
-                740,
-                228,
-                "4 / Test expected + bad inputs",
-                ["Useful answers and denied actions", "Save results tied to this code"],
-                "orange",
+                "5 / Test the software",
+                ["Inputs, connections and failures", "Check forbidden behavior"],
             ),
             (
-                382,
-                228,
-                "5 / Reduce wasted work",
-                ["Measure quality, time and cost", "Change one thing; test again"],
-                "blue",
+                "6 / Evaluate the behavior",
+                ["Representative tasks and scoring", "Measure usefulness and safety"],
             ),
+            ("7 / Optimize", ["Compare quality, cost and time", "Keep changes that meet targets"]),
+            ("8 / Release", ["Version relevant changes", "Review gates, deploy gradually"]),
             (
-                24,
-                228,
-                "6 / Review the change",
-                ["CI runs checks automatically", "Prepare a plan for review"],
-                "orange",
+                "9 / Monitor and improve",
+                ["Observe outcomes and failures", "Turn problems into new cases"],
             ),
         ]
-        for x, y, title, lines, tone in stages:
-            body += box(x, y, title, lines, tone, height=98)
-        body += edge([(340, 108), (376, 108)]) + edge([(698, 108), (734, 108)])
-        body += edge([(898, 156), (898, 222)])
-        body += edge([(740, 276), (704, 276)]) + edge([(382, 276), (346, 276)])
-        body += band(
-            374,
-            "7 / Approve and deploy → 8 / Monitor, fix and update",
-            "Check the real deployment first. Watch results, turn failures into tests, and review each change before releasing it.",
-            "teal",
-            78,
-        )
-        body += edge([(182, 326), (182, 368)])
+        for i, (heading, lines) in enumerate(stages):
+            row, col = divmod(i, 3)
+            body += box(
+                24 + col * 358,
+                58 + row * 160,
+                heading,
+                lines,
+                ("teal", "blue", "orange")[col],
+                height=98,
+            )
+            if col < 2:
+                body += edge(
+                    [(340 + col * 358, 108 + row * 160), (376 + col * 358, 108 + row * 160)]
+                )
+            elif row < 2:
+                body += edge(
+                    [
+                        (898, 156 + row * 160),
+                        (898, 188 + row * 160),
+                        (182, 188 + row * 160),
+                        (182, 212 + row * 160),
+                    ]
+                )
         return figure(
             key,
-            "The eight steps",
+            "The nine steps",
             body,
-            474,
-            "Work down the guide in order. After release, monitoring feeds the next tested change.",
+            498,
+            "Start with one useful task. Revisit the checks whenever code, instructions, models, data or access change.",
         )
     if key == "dlc-package-map":
         body = label(24, 28, "FILES HAVE DIFFERENT JOBS", 12, weight=700)
@@ -79,7 +233,7 @@ def lifecycle_diagram(key):
             58,
             "Describe the task",
             [
-                "agent.yaml: owner, access, limits",
+                "application.toml: task and settings",
                 "instructions/: purpose and stop rules",
                 "models.py: allowed inputs / outputs",
             ],
@@ -92,7 +246,7 @@ def lifecycle_diagram(key):
             [
                 "factory.py: build and run the agent",
                 "dependencies.py: supplied services",
-                "tools/: small, checked operations",
+                "tools.py: small, checked operations",
             ],
             "blue",
         )
@@ -102,8 +256,8 @@ def lifecycle_diagram(key):
             "Check the task",
             [
                 "tests/: expected + forbidden behavior",
-                "evals/scenarios.json: runnable cases",
-                "datasets + baselines: quality checks",
+                "evals/: tasks, scoring and baselines",
+                "docs/: setup and recovery notes",
             ],
             "orange",
         )
@@ -111,7 +265,7 @@ def lifecycle_diagram(key):
         body += band(
             220,
             "Project-wide files",
-            "pyproject.toml + uv.lock: dependencies; policy/: review notes; docs/: operating instructions; deploy/: generated plans.",
+            "pyproject.toml + uv.lock: dependencies; justfile: repeatable commands; CI: automatic checks; deploy/: deployment settings.",
             "ink",
             80,
         )
@@ -127,59 +281,46 @@ def lifecycle_diagram(key):
             "Where each kind of information belongs",
             body,
             430,
-            "The root manifest is what the current CLI reads. Optional folders organize a larger agent; empty folders do not satisfy any check.",
+            "Suggested names help organize the work. Configuration only takes effect when application code or a deployment service reads it.",
         )
     if key == "dlc-test-loop":
-        body = label(24, 28, "TEST WHAT SHOULD HAPPEN AND WHAT MUST NEVER HAPPEN", 12, weight=700)
-        body += box(
-            24,
-            58,
-            "Choose concrete cases",
-            [
-                "Expected input and result",
-                "Bad input, denied access, retry",
-                "Case IDs stay the same over time",
-            ],
-            "teal",
-        )
-        body += box(
-            382,
-            58,
-            "Run and inspect",
-            [
-                "Unit tests: exact assertions",
-                "Model checks: repeated sample runs",
-                "Platform checks: real boundaries",
-            ],
-            "blue",
-        )
-        body += box(
-            740,
-            58,
-            "Keep or fix the change",
-            [
-                "All required safety cases pass",
-                "Quality meets the agreed target",
-                "Results match this code version",
-            ],
-            "orange",
-        )
-        body += edge([(340, 114), (376, 114)]) + edge([(698, 114), (734, 114)])
-        body += edge([(898, 170), (898, 216), (182, 216), (182, 176)], True, "orange")
-        body += label(316, 205, "Failure → fix code or coverage → run again", 12, color="#bd5e30")
-        body += band(
-            264,
-            "Choose tests that match the agent's actions",
-            "All agents: inputs, outputs, limits and failures. Add approval and retry tests for writes; access checks for connected tools.",
-            "teal",
-            78,
-        )
-        return figure(
+        return three_steps(
             key,
-            "Check useful behavior and the limits on actions",
-            body,
-            364,
-            "The offline examples check program behavior. They do not measure a real model's answer quality or prove production isolation.",
+            "Tests check whether the software works",
+            [
+                (
+                    "Fast local checks",
+                    [
+                        "Smoke: can it start and finish?",
+                        "Unit: one component in isolation",
+                        "Use deterministic fake services",
+                    ],
+                    "teal",
+                ),
+                (
+                    "Check the connections",
+                    [
+                        "Integration: components together",
+                        "Contract: request / response shapes",
+                        "Check errors and denied access",
+                    ],
+                    "blue",
+                ),
+                (
+                    "Check a complete task",
+                    [
+                        "End-to-end: entry to final result",
+                        "Test the actual effects and state",
+                        "Include missing data and failures",
+                    ],
+                    "orange",
+                ),
+            ],
+            (
+                "Use checks that can catch a real defect",
+                "Local fixtures keep tests repeatable. Separate live tests verify actual services, credentials, access, timeouts and limits.",
+            ),
+            "A passing startup check cannot establish answer quality. Evaluate that separately, and test deployed permissions on the actual service.",
         )
     if key == "dlc-cost-loop":
         body = label(24, 28, "OPTIMIZE AGAINST THE SAME CASES", 12, weight=700)
@@ -236,88 +377,7 @@ def lifecycle_diagram(key):
             "Measure → change one thing → compare",
             body,
             424,
-            "Model-dependent changes need real model evaluation. The current local budget helper is a work limit, not a verified billing ledger.",
-        )
-    if key == "dlc-release":
-        body = label(24, 28, "AUTOMATED CHECKS AND DEPLOYMENT ARE SEPARATE STEPS", 12, weight=700)
-        body += box(
-            24,
-            58,
-            "Developer / reviewer",
-            ["Open a pull request", "Review code, tools and test cases", "Run just check locally"],
-            "teal",
-        )
-        body += box(
-            382,
-            58,
-            "CI: automatic repository checks",
-            [
-                "Locked tools, lint, types and tests",
-                "Example evaluations + HTML build",
-                "Passing CI is not release approval",
-            ],
-            "blue",
-        )
-        body += box(
-            740,
-            58,
-            "Current local output",
-            [
-                "Evaluation result + catalog draft",
-                "Image-pinned Kubernetes plan",
-                "replicas: 0 — no workload starts",
-            ],
-            "blue",
-        )
-        body += edge([(340, 114), (376, 114)]) + edge([(698, 114), (734, 114)])
-        body += box(
-            24,
-            278,
-            "Platform checks",
-            [
-                "Build and verify the exact image",
-                "Install approved access controls",
-                "Test allowed and forbidden paths",
-            ],
-            "orange",
-        )
-        body += box(
-            382,
-            278,
-            "Owner approves release",
-            [
-                "Review results and open risks",
-                "Check stop and recovery procedure",
-                "Authorize this version / environment",
-            ],
-            "orange",
-        )
-        body += box(
-            740,
-            278,
-            "CD: controlled deployment",
-            [
-                "Start a small supervised release",
-                "Watch results and error rate",
-                "Pause if agreed limits are exceeded",
-            ],
-            "teal",
-        )
-        body += edge([(898, 170), (898, 226), (182, 226), (182, 272)], True)
-        body += label(
-            286,
-            214,
-            "Production deployment service still needs to be provided",
-            12,
-            color="#bd5e30",
-        )
-        body += edge([(340, 334), (376, 334)]) + edge([(698, 334), (734, 334)])
-        return figure(
-            key,
-            "From pull request to an approved deployment",
-            body,
-            414,
-            "The top row is supported by this repository. The lower row is the required production process, not an automatic Zetra deployment feature.",
+            "Compare on the same cases and inspect each category. Track actual usage and charges; a configured budget is not a billing measurement.",
         )
     if key == "dlc-operate":
         body = label(24, 28, "WATCH RESULTS, THEN ACT ON WHAT CHANGED", 12, weight=700)

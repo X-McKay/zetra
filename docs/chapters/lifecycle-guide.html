@@ -1,140 +1,284 @@
 <section id="lifecycle-guide" class="chapter">
-<p class="eyebrow">09 / General developer guide</p>
-<h2>Build, test, release, and maintain an agent</h2>
-<p>Follow these eight steps for a new agent or a change to an existing one. Start with a predictable project structure, define the job, limit inputs and actions, and test both useful and forbidden outcomes. Use the same process for a read-only assistant, a summarizer, or an agent with approved actions.</p>
-<div class="callout"><strong>Current scope.</strong> Zetra provides local scaffolding, checks, evaluations, and deployment candidates. Its starter uses an offline knowledge fixture. Production identities, isolation, service connections, and release approval require separately tested platform integrations.</div>
+<p class="eyebrow">A practical guide for developers</p>
+<h2>Start with one useful task</h2>
+<p>Build an agent by defining a useful job, giving it a small set of tools, and checking both its answers and its actions. This guide follows nine steps from an empty project to a maintained release. The illustration is an assistant that answers questions using approved documents. The same steps apply to other agents; the data, tools, and approval rules change with the job.</p>
+<div class="callout"><strong>Runnable example.</strong> The accompanying <a href="../examples/developer-starter/README.md">Python starter</a> uses local sample documents and an explicitly named offline answer fixture. It needs no model key or network connection. Its results test code and example behavior, not the quality of a real language model.</div>
 <div data-diagram="dlc-overview"></div>
 
-<h3 id="dlc-step-1">Step 1 / Define the job and its limits</h3>
-<p><strong>Do:</strong> Write a short purpose statement. Name the owner, users, inputs, expected output, permitted tools/data, and any actions requiring review. Explain what happens when information is missing or a request is outside scope.</p>
-<table><thead><tr><th>Define</th><th>Example for a read-only assistant</th></tr></thead><tbody>
-<tr><td>Purpose and scope</td><td>Answer questions from approved documents; no changes to source systems.</td></tr>
-<tr><td>Success</td><td>Useful, supported answers with correct sources; uncertainty reported clearly.</td></tr>
-<tr><td>Failure cases</td><td>Invalid input, missing sources, misleading retrieved text, unavailable tool, exhausted budget, or stop request.</td></tr>
+<h3 id="dlc-step-1">Step 1 / Define the problem and objective</h3>
+<p><strong>Do:</strong> Write the job in one sentence, then describe a useful result and the limits around it. For example: “Answer staff questions using the approved handbook, cite the supporting documents, and say when those documents do not answer the question.” Decide whether an agent is needed: a fixed lookup, form, or ordinary function may solve a simpler job with fewer moving parts.</p>
+<table><thead><tr><th>Decision</th><th>Example</th><th>Write down</th></tr></thead><tbody>
+<tr><td>Users and success</td><td>Staff receive accurate, understandable answers with valid sources.</td><td>Owner, intended users, representative questions, measurable quality and response-time goals.</td></tr>
+<tr><td>Allowed actions</td><td>Read approved documents and draft an answer.</td><td>Permitted tools; forbidden changes, messages, and purchases; actions needing review.</td></tr>
+<tr><td>Connectivity</td><td>Local files first; an approved document service later.</td><td>Services, destinations, credentials, user permissions, timeouts, and offline behavior.</td></tr>
+<tr><td>Data</td><td>Public/synthetic samples for development; restricted access for real staff material.</td><td>Inputs, outputs, sensitivity, permitted storage, retention/deletion, user identity, and who may see results.</td></tr>
+<tr><td>Uncertainty</td><td>Missing evidence produces “needs review,” not a guessed policy.</td><td>Refusal, clarification, escalation, stop, and recovery behavior.</td></tr>
 </tbody></table>
-<p>For agents that change records, send messages, or trigger other effects, define review and safe-retry rules too. Required approval depends on the action and risk policy; read-only answers do not automatically need human approval.</p>
-<div class="decision"><strong>Done when:</strong> The owner agrees on the useful outcome, permission limits, data handling, and measurable failure cases.</div>
+<p>Agree on a small scorecard before building. Illustrative targets are: supported-answer success at least 90% of all assigned evaluation tasks; correct access checks in every listed permission case; 95% of completed requests within eight seconds; and total cost per useful task below an owner-approved budget. These are example targets, not measured results. Compare with the current manual process or a simple search interface: an agent should improve a useful outcome, not merely add a conversational screen.</p>
+<p>Consider how data travels. A question, retrieved passage, prompt, answer, and log can each expose information. Decide what may leave the organization before connecting a model or remote tool. Keep secrets out of prompts, source files, sample datasets, and logs. A user who can ask a question is not automatically allowed to read every document.</p>
+<p>For an agent that changes records or triggers effects, define the consequence separately from answer quality. Specify who approves, what exact action they approve, how long approval lasts, and what happens after an uncertain response. Read-only answers do not inherently require human approval, but sensitive or consequential decisions may.</p>
+<div class="decision"><strong>Done when:</strong> The owner agrees on success, permitted connections/data/actions, and what the agent must do when it cannot safely finish.</div>
 
-<h3 id="dlc-step-2">Step 2 / Create the project and organize its files</h3>
-<p><strong>Do:</strong> Choose Nix or mise using <a href="../CONTRIBUTING.md">the contributor instructions</a>. In this repository, scaffold a new empty directory:</p>
-<pre><code>nix develop
-just bootstrap
-uv run --locked zetra init build/my-agent --name my-agent
-uv run --locked zetra check build/my-agent</code></pre>
-<p>The commands use ignored <code>build/</code> for a disposable starter. Put real work in a version-controlled project directory, and replace the sample <code>metadata.owner</code> and <code>metadata.businessFunction</code>.</p>
-<p>Keep <code>agent.yaml</code> at the project root; the current CLI reads it there. The starter creates <code>src/knowledge/</code> and <code>knowledge.factory:create_agent</code>. Its name changes metadata, not the Python package. The recommended layout below uses <code>my_agent</code>; if you rename the starter, update its entrypoint, imports, and tests together.</p>
+<h3 id="dlc-step-2">Step 2 / Create the repository and files</h3>
+<p><strong>Do:</strong> Put behavior, instructions, tests, and operating notes in a version-controlled project. Start small and separate files when their responsibilities grow. Keep the source files people edit separate from generated reports. The layout below is a suggested Python project, not a universal agent standard.</p>
 <div data-diagram="dlc-package-map"></div>
-<pre><code>project/
-├── agent.yaml
+<pre><code>document-assistant/
+├── README.md
 ├── pyproject.toml
-├── uv.lock
-├── src/my_agent/
+├── uv.lock                     # if uv manages added dependencies
+├── .gitignore
+├── application.toml
+├── run.py
+├── evaluate.py
+├── instructions/system.md
+├── skills/answer-from-documents/SKILL.md
+├── src/document_assistant/
 │   ├── __init__.py
-│   ├── factory.py
 │   ├── models.py
 │   ├── dependencies.py
-│   ├── instructions/
-│   ├── tools/
-│   └── skills/
-├── evals/scenarios.json
-├── evals/datasets/{smoke,regression,capability,safety,adversarial,durability}/
-├── evals/{evaluators,baselines}/
-├── tests/{unit,integration,workflow,replay,security}/
-├── workflows/
-├── activities/
-├── runtime/
+│   ├── config.py
+│   ├── factory.py
+│   ├── tools.py
+│   └── fixture.py
+├── fixtures/documents/
+├── tests/{test_unit.py,test_smoke.py,test_integration.py,test_end_to_end.py}
+├── evals/{cases.jsonl,evaluators/,baselines/}
 ├── observability/
 ├── policy/
-├── docs/{risk-assessments,threat-model,runbooks}/
-└── deploy/</code></pre>
-<table><thead><tr><th>File/group</th><th>What to put there, with an example</th><th>When</th></tr></thead><tbody>
-<tr><td><code>agent.yaml</code></td><td>Owner, entrypoint, capabilities, data class, execution, limits. Starter: <code>capabilities: [knowledge.read]</code>.</td><td>Now.</td></tr>
-<tr><td><code>pyproject.toml</code>, <code>uv.lock</code></td><td><code>[project]</code>, <code>name = "my-agent"</code>, dependencies; exact resolved versions/hashes.</td><td>Use Zetra's root lock here. Generate a reviewed lock for an independent project; scaffold does not supply one.</td></tr>
-<tr><td><code>__init__.py</code></td><td>Can be empty; marks the directory as an importable package.</td><td>Now.</td></tr>
-<tr><td><code>factory.py</code></td><td>Construct from supplied dependencies: <code>return MyAgent(dependencies)</code>.</td><td>Now; implement your agent class.</td></tr>
-<tr><td><code>models.py</code></td><td>Accepted fields/types/limits: <code>question: str</code>, nonempty and bounded; answer plus sources.</td><td>Split contracts when useful.</td></tr>
-<tr><td><code>dependencies.py</code></td><td>Illustrative service interface: <code>def search(self, query: str) -&gt; list[dict]: ...</code>; not a built-in runtime method.</td><td>Grow as needed; requires your reviewed service adapter.</td></tr>
-<tr><td><code>instructions/</code></td><td>“Answer from approved sources.” “Report missing evidence instead of guessing.”</td><td>When a model is used; instructions do not enforce permission.</td></tr>
-<tr><td><code>tools/</code>, <code>skills/</code></td><td>Narrow tool wrapper; procedure such as search → validate evidence → summarize.</td><td>When used; declare capabilities and test boundaries.</td></tr>
-<tr><td><code>evals/scenarios.json</code></td><td><code>"schema.contract": "test_cases.KnowledgeTests.test_schema"</code> within its <code>scenarios</code> map in the starter.</td><td>Now; selectors must name your actual tests.</td></tr>
-<tr><td><code>tests/</code></td><td>Assert useful output, refused calls, boundaries, and no unintended effects.</td><td>Now; split by test type as needed.</td></tr>
-<tr><td><code>evals/datasets/</code></td><td>Reviewed questions/expected answers, missing sources, oversized input, misleading tool text.</td><td>Grow alongside tests; synthetic/public data first.</td></tr>
-<tr><td><code>evals/evaluators/</code>, <code>evals/baselines/</code></td><td>Checks for accuracy/sources/format; recorded dataset/model/settings, failures, latency, and usage.</td><td>As evaluations grow.</td></tr>
-<tr><td><code>workflows/</code>, <code>activities/</code></td><td>Workflow orders stages; activities make calls to outside services.</td><td>If execution must resume after failure.</td></tr>
-<tr><td><code>runtime/</code></td><td>Inject reviewed clients and rotating credentials; no hardcoded provider keys.</td><td>Use maintained platform adapters.</td></tr>
-<tr><td><code>policy/</code></td><td>Risk, ownership, execution, approval, and release records. Example: <code>approvals.yaml</code>: <code>review: per-action-risk-policy</code>.</td><td>Reviewed design records; current CLI does not automatically load/enforce them.</td></tr>
-<tr><td><code>observability/</code></td><td><code>{"event":"answer.completed","runId":"…"}</code>; safe identifiers, no raw credential.</td><td>Before shared operation.</td></tr>
-<tr><td><code>docs/</code>, <code>deploy/</code></td><td>Runbook: stop → inspect outcomes → reconcile → escalate. Reviewed deployment output.</td><td>Before handoff; generated output stays separate.</td></tr>
+├── docs/{decisions/,runbook.md}
+├── .github/workflows/checks.yml  # once automated checks are added
+└── deploy/                      # once a hosting environment is chosen</code></pre>
+<table><thead><tr><th>File/group</th><th>Contents and a small example</th></tr></thead><tbody>
+<tr><td><code>README.md</code></td><td>Purpose, setup, run/test commands, limits, and owner. Example: “Answers from approved documents; no changes to source systems.”</td></tr>
+<tr><td><code>pyproject.toml</code></td><td>Package metadata and dependencies. Example: <code>[project]</code>, <code>name = "document-assistant"</code>. <code>requires-python = ">=3.11"</code>. Record exact dependency versions in a lockfile when adding packages; review updates with their tests.</td></tr>
+<tr><td><code>run.py</code>, <code>evaluate.py</code></td><td>Command entry points: load settings, construct the application, parse a request, or run scored cases and save a report.</td></tr>
+<tr><td><code>.gitignore</code>, lockfile, CI</td><td>Ignore <code>.venv/</code>, secrets, and generated reports; keep dependency resolutions in review; automate the same trusted checks developers run locally.</td></tr>
+<tr><td><code>application.toml</code>, <code>config.py</code></td><td>Application-specific settings and their validation. Example: approved document IDs and <code>max_documents = 2</code>.</td></tr>
+<tr><td><code>models.py</code></td><td>Accepted input/output fields and limits: a question, requested document IDs, answer text, source IDs, and answered/needs-review outcome.</td></tr>
+<tr><td><code>dependencies.py</code>, <code>factory.py</code></td><td>Expected service interfaces and construction. Example: a document reader and answerer supplied to the agent rather than created inside every run.</td></tr>
+<tr><td><code>tools.py</code></td><td>Small executable operations, argument checks, permission checks, response limits, and errors. Example: read one approved document ID.</td></tr>
+<tr><td><code>instructions/</code>, <code>skills/</code></td><td>Model guidance and reusable procedures. Example: answer from supplied evidence; report gaps; cite existing sources.</td></tr>
+<tr><td><code>fixture.py</code>, <code>fixtures/</code></td><td>Controlled substitutes and synthetic inputs for offline tests. Give them names that make their limits obvious.</td></tr>
+<tr><td><code>tests/</code></td><td>Code tests, a quick runnable check, component interaction tests, and complete-request tests.</td></tr>
+<tr><td><code>evals/</code></td><td>Reviewed cases, scoring functions, and recorded comparison results. Example: question, allowed sources, expected outcome, and required evidence.</td></tr>
+<tr><td><code>observability/</code>, <code>policy/</code>, <code>docs/</code></td><td>Safe events and metrics; reviewed access/approval decisions; troubleshooting and stop/recovery instructions.</td></tr>
 </tbody></table>
-<p>The full layout grows with your needs; optional folders are not extra scaffold features. Keep executable budgets in the manifest, and include instructions/tools in change reviews.</p>
-<div class="decision"><strong>Done when:</strong> The entrypoint works, ownership/dependencies are recorded, and each file has a clear purpose.</div>
+<p>An empty <code>__init__.py</code> marks a regular Python package. Add workflow/state files if the job needs multiple resumable stages, and deployment files when a hosting environment is chosen. Do not create empty directories just to imply a capability exists.</p>
+<p>The starter implements the core reader, typed contracts, offline fixture, instructions, tests, and cases; the broader layout shows extensions to add only when needed. Here are short file examples. Python type hints describe expected shapes; explicit runtime checks must still reject bad input.</p>
+<pre><code># models.py — shortened illustration; validation is omitted here.
+from dataclasses import dataclass
+from typing import Literal
 
-<h3 id="dlc-step-3">Step 3 / Validate inputs and limit actions</h3>
-<p><strong>Do:</strong> Validate input before tools. Build from supplied dependencies without connecting or reading secrets during construction. Keep retrieved text as data; it cannot grant permission or choose arbitrary tools.</p>
-<pre><code># Conceptual factory shape; define MyAgent.run(request) for your purpose.
-from zetra.runtime import Agent, RuntimeDependencies
+@dataclass(frozen=True)
+class Request:
+    question: str
+    document_ids: tuple[str, ...]
 
-def create_agent(dependencies: RuntimeDependencies) -&gt; Agent:
-    return MyAgent(dependencies)</code></pre>
-<pre><code># Supported starter values under spec in agent.yaml:
-entrypoint: knowledge.factory:create_agent
-capabilities: [knowledge.read]
-execution: local
-budgets: {maxSteps: 3, maxSeconds: 30, maxCostUsd: 0.05}</code></pre>
-<p>The starter accepts <code>{"key":"zetra"}</code> and reads a supplied knowledge fixture. Run it before replacing the behavior:</p>
-<pre><code>uv run --locked zetra run build/my-agent --input '{"key":"zetra"}'</code></pre>
-<p>For consequential actions, separate proposal from execution and validate required approval at the destination. If work must resume after failure, use predictable workflow ordering and activities for outside calls. Retrying an activity can repeat its calls; the destination needs safe deduplication. The current Temporal worker supports only its reviewed read capabilities and rejects write-capable packages.</p>
-<div class="decision"><strong>Done when:</strong> Valid requests work, invalid requests stop clearly, and calls stay within declared authority.</div>
+@dataclass(frozen=True)
+class Answer:
+    text: str
+    source_ids: tuple[str, ...]
+    outcome: Literal["answered", "needs_review"]
 
-<h3 id="dlc-step-4">Step 4 / Test the behavior your agent needs</h3>
+@dataclass(frozen=True)
+class Document:
+    identifier: str
+    title: str
+    content: str
+
+# dependencies.py — a replaceable interface, not a network client.
+from typing import Protocol
+from document_assistant.models import Document
+class DocumentReader(Protocol):
+    def read(self, identifier: str) -&gt; Document: ...
+
+# Construction usage, with the starter src directory on PYTHONPATH.
+# The supplied run.py handles this import path automatically.
+from pathlib import Path
+from document_assistant.factory import create_application
+app = create_application(Path("examples/developer-starter"))</code></pre>
+<p><code>Document</code> above is the project's typed document record. The starter factory supplies an approved-file reader, validated settings, instructions, and <code>OfflineAnswerFixture</code>. A real model adapter would be a separately implemented replacement for the answerer, with its own timeout, credentials, validation, and evaluation.</p>
+<pre><code># application.toml — starter-specific configuration.
+[application]
+name = "document-assistant"
+instruction_file = "instructions/system.md"
+document_root = "fixtures/documents"
+allowed_document_ids = ["staff-handbook", "expense-policy"]
+max_documents = 2
+
+[fixture]
+kind = "offline-extractive"</code></pre>
+<p>This is the starter's own configuration format, not a universal agent manifest. Your code must load and validate it. Additional time, cost, and output limits require implementation rather than extra unrecognized settings. Keep credentials outside it. An operating note can say “pause new requests; inspect failed tool calls; check access before retrying”; a policy record can list “document owner, permitted audience, approval date,” but becomes effective only when the relevant code/service enforces it.</p>
+<p>Use Python 3.11 or newer for the starter. It uses the standard library, so no package installation is required. For a larger project, create a virtual environment (<code>python3 -m venv .venv</code>), use its interpreter, and adopt one dependency manager. If using uv, commit <code>pyproject.toml</code> and <code>uv.lock</code> together and use a locked install in automated checks. Review configuration and scripts before executing them.</p>
+<div class="decision"><strong>Done when:</strong> Another developer can locate each responsibility, reproduce setup, and identify the exact files that affect a run.</div>
+
+<h3 id="dlc-step-3">Step 3 / Build skills and tools</h3>
+<div data-diagram="dlc-skills-tools"></div>
+<p><strong>Do:</strong> Separate a procedure from the operations it uses. A <strong>skill</strong> explains how to carry out a task; a <strong>tool</strong> is code that performs an operation. “Find relevant documents, compare evidence, and draft an answer” is a skill. Reading a document is a tool. A skill file does not implement that reader or grant file/network access.</p>
+<p>Optional <code>skills/answer-from-documents/SKILL.md</code>, for a host that supports Agent Skills:</p>
+<pre><code>---
+name: answer-from-documents
+description: Answer questions using approved documents and cite supporting evidence.
+---
+1. Read only documents the caller is permitted to access.
+2. Identify evidence that addresses the question.
+3. State missing or conflicting evidence.
+4. Draft an answer with source IDs; do not invent a source.</code></pre>
+<p>The <a href="https://agentskills.io/specification">Agent Skills specification</a> defines a skill directory with <code>SKILL.md</code> and optional scripts, references, and assets. Hosts differ in how they load and apply skills. Review included scripts like other executable code; instruction text is not an enforcement boundary.</p>
+<p>Make tools narrow and understandable. Prefer <code>read_document(document_id)</code> to unrestricted filesystem access. Define allowed arguments, maximum size, return shape, side effects, failure behavior, and permissions. Give the model only the tools it needs. Do not let it manufacture a trusted user identity by putting a user name into tool arguments.</p>
+<pre><code># Illustrative tool boundary; these service functions are application code.
+def read_document(document_id, authenticated_user):
+    validate_document_id(document_id)
+    authorize_read(authenticated_user, document_id)
+    document = repository.read(document_id)
+    validate_document_result(document)
+    return document</code></pre>
+<p>The model may propose an operation, but deterministic code validates arguments and the destination checks access for the authenticated caller. The model's statement that permission exists is not evidence. Retrieved documents and tool results can contain misleading instructions; treat them as data. Validate answer fields and require each cited source to belong to the permitted, actually retrieved set.</p>
+<p>For write tools, keep proposal/review/commit separate when policy requires it. Bind approval to the exact action and arguments. A retry after a timeout can repeat an already completed effect. Give each business operation a stable ID and have the receiver return its existing receipt instead of writing again. This safe-repeat behavior is often called <em>idempotency</em>. A new random ID on each retry defeats it.</p>
+<div class="decision"><strong>Done when:</strong> Every tool has a clear contract, external permission checks, bounded results, and meaningful refusal behavior; each skill uses only reviewed tools.</div>
+
+<h3 id="dlc-step-4">Step 4 / Connect MCP only where it helps</h3>
+<div data-diagram="dlc-mcp"></div>
+<p><strong>Do:</strong> Use Model Context Protocol (MCP) when a separate service already exposes the tools or data your application needs. Your application is the host, its client connector communicates with the server, and the server is the code/service that exposes capabilities. A server may provide resources (readable context), prompts (reusable message templates), and tools (callable operations). Choose only what the task needs. A direct function is sufficient for a local reader; adding MCP does not itself improve answer quality or authorize access.</p>
+<p>Choose the server, transport, version, and allowed tools deliberately. Local standard-input/output transport launches a process; its dependencies and permissions need review. Streamable HTTP connects to a remote endpoint; it needs explicit network trust and, for protected services, authentication. Use compatible client/server versions. Do not assume every protocol version has the same initialization or session behavior.</p>
+<p>The following illustrative MCP 2025-11-25 call comes after that version’s initialization. The selected server must implement and permit <code>search_documents</code>; this is not a built-in reader.</p>
+<pre><code>{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "tools/call",
+  "params": {
+    "name": "search_documents",
+    "arguments": {"query": "expense receipt rules", "collection": "staff-handbook"}
+  }
+}</code></pre>
+<p>The example illustrates the pinned <a href="https://modelcontextprotocol.io/specification/2025-11-25/server/tools">2025-11-25 tool contract</a>; consult the <a href="https://modelcontextprotocol.io/specification/latest">current specification</a> for a new implementation. Review tool descriptions and input/output shapes rather than exposing everything advertised by a server. Tool annotations and returned text are not trustworthy permission decisions. The client must handle errors, bounded response size, deadlines, malformed output, and unexpected tools.</p>
+<table><thead><tr><th>Check</th><th>What to verify</th></tr></thead><tbody>
+<tr><td>Identity and scope</td><td>The credential is intended for this server; the receiver authorizes the actual user/resource.</td></tr>
+<tr><td>Arguments and outputs</td><td>Reject extra fields, oversized values, unapproved collections, invalid source IDs, and unexpected result shapes.</td></tr>
+<tr><td>Transport</td><td>Review local process permissions or remote TLS/trust; never send an inbound bearer token to arbitrary upstreams.</td></tr>
+<tr><td>Failure and retry</td><td>Deadline and disconnect behavior are defined; retries do not create duplicate consequential effects.</td></tr>
+</tbody></table>
+<p>If the selected version uses session IDs, they are not authorization credentials. Keep local stdio protocol messages separate from diagnostic logging. Follow the applicable <a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization">authorization guidance</a> and <a href="https://modelcontextprotocol.io/docs/2025-11-25/tutorials/security/security_best_practices">security guidance</a> for the version you use. The accompanying offline starter does not run an MCP server or prove live authentication.</p>
+<div class="decision"><strong>Done when:</strong> The approved connection works, forbidden calls/resources fail for the right reason, and untrusted server content cannot expand authority.</div>
+
+<h3 id="dlc-step-5">Step 5 / Test the code and run it locally</h3>
 <div data-diagram="dlc-test-loop"></div>
-<p><strong>Do:</strong> An evaluation compares behavior with expected results. Run the starter's tests, then replace/add cases for your purpose:</p>
-<pre><code>uv run --locked zetra eval build/my-agent --output build/my-agent-evidence.json
-uv run --locked zetra check build/my-agent --evidence build/my-agent-evidence.json</code></pre>
-<table><thead><tr><th>Stable test ID</th><th>When required by the current CLI</th><th>Useful assertion</th></tr></thead><tbody>
-<tr><td><code>schema.contract</code></td><td>All agents.</td><td>Accepted input/output shape; reject extra fields and oversized values.</td></tr>
-<tr><td><code>input.untrusted</code></td><td>All agents.</td><td>Input/retrieved instructions cannot override authority.</td></tr>
-<tr><td><code>capability.denied</code></td><td>All agents.</td><td>Missing permission prevents the call.</td></tr>
-<tr><td><code>budget.enforced</code></td><td>All agents.</td><td>Limit reached prevents further work.</td></tr>
-<tr><td><code>stop.enforced</code></td><td>All agents.</td><td>A stop prevents the next controlled operation.</td></tr>
-<tr><td><code>approval.bound</code></td><td>Recognized write capabilities.</td><td>Reject changed arguments, wrong approver, or expired approval.</td></tr>
-<tr><td><code>idempotency.retry</code></td><td>Recognized write capabilities.</td><td>Repeat the same operation: same receipt, no second effect.</td></tr>
-<tr><td><code>gateway.authorization</code></td><td><code>mcp.read_status</code>.</td><td>Reject missing identity and unreviewed tool; test live proxy separately.</td></tr>
+<p><strong>Do:</strong> Run a complete small request, then test the code around it. A <strong>unit test</strong> checks one component. An <strong>integration test</strong> checks components together. A <strong>smoke test</strong> is a quick check that the application starts and returns a valid result. An <strong>end-to-end test</strong> starts at the request entry point and checks the final outcome. These names describe scope; they do not guarantee useful coverage.</p>
+<p>From the repository root, run the accompanying trusted starter:</p>
+<pre><code>python3 examples/developer-starter/run.py \
+  --question "What receipt is needed for expense reimbursement?" \
+  --document expense-policy
+
+PYTHONPATH=examples/developer-starter/src python3 -m unittest discover \
+  -s examples/developer-starter/tests -v</code></pre>
+<p>The <a href="https://docs.python.org/3/library/unittest.html">Python unittest runner</a> discovers and imports test modules; run it only on code you trust. The starter is offline. A passing fixture test does not establish a live model's quality, remote authentication, or protection against hostile code.</p>
+<table><thead><tr><th>Test</th><th>Example assertion</th></tr></thead><tbody>
+<tr><td>Valid request</td><td>An approved document is read; output has the accepted fields and cites supplied evidence.</td></tr>
+<tr><td>Invalid/boundary input</td><td>Empty question, extra fields, duplicate IDs, oversized question, and too many documents are rejected.</td></tr>
+<tr><td>Access and unsafe content</td><td>Unapproved document ID and path escape fail; instructions inside a document cannot authorize another read.</td></tr>
+<tr><td>Missing evidence/failure</td><td>No supporting evidence produces a review outcome; missing files and malformed service output fail clearly.</td></tr>
+<tr><td>When external services are added</td><td>Timeouts, disconnects, expired credentials, forbidden resources, and response-size limits work on the real connection.</td></tr>
+<tr><td>When actions are added</td><td>Stop prevents new effects; required approval matches the action; repeated attempts return one receipt, not two effects.</td></tr>
 </tbody></table>
-<p>The CLI derives requirements from declarations. It also requests <code>data.redacted</code> for confidential/restricted/unknown data, <code>trajectory.stop</code> for autonomous execution, and <code>workflow.replay</code> for Temporal. Unknown data/autonomy or unclassified capabilities require higher-risk (T3) review; business impact can raise risk further. Static hints are incomplete, so review undeclared behavior too.</p>
-<p>Use positive, negative, and exact-boundary cases. For writes, assert no effect without authority and safe retry. Missing required scenarios or critical failures block review. If using a real model, set aside cases you do not use to adjust prompts, repeat runs, and assess useful answers, correct citations, uncertainty, failures, latency, and usage. A model scoring an answer does not replace exact assertions about security rules.</p>
-<div class="decision"><strong>Done when:</strong> Required tests run with meaningful assertions and current evidence; real-model quality is measured separately when applicable.</div>
+<p>Assert the reason for rejection and the resulting state. “An exception occurred” could mean an unrelated bug; also verify that no forbidden read, write, or message happened. Keep tests fast with controlled substitutes, then separately exercise approved real services. For writes, simulate the receiver completing an action before the response is lost: this catches retries that duplicate effects.</p>
+<p>Retry only failures classified as temporary, with one explicit attempt/time/budget policy. A permission denial or malformed request should not trigger repeated attempts. Check whether a client library already retries: application retries around those retries can multiply calls. Never blindly repeat a consequential operation after an uncertain result.</p>
+<div class="decision"><strong>Done when:</strong> Local startup succeeds, positive and forbidden paths have meaningful assertions, and failures leave the expected state.</div>
 
-<h3 id="dlc-step-5">Step 5 / Optimize measured cost and speed</h3>
+<h3 id="dlc-step-6">Step 6 / Evaluate the agent's results</h3>
+<div data-diagram="dlc-evaluations"></div>
+<p><strong>Do:</strong> Evaluate whether the agent does the intended job, beyond whether its code runs. A case defines a task and expected outcome. A trial is one attempt at that case. A grader scores the outcome. Save enough safe information to understand failures, including tool decisions and final results. The <a href="https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents">agent evaluation guidance</a> distinguishes these parts and emphasizes outcomes rather than the agent's claim that it succeeded.</p>
+<p>Give cases stable IDs so changes remain comparable. This is an illustrative case format; the evaluation program must implement its fields:</p>
+<pre><code>{"id":"documents.supported-answer","question":"What receipts are required?",
+ "document_ids":["expense-policy"],"expected_outcome":"answered",
+ "required_sources":["expense-policy"],"forbidden_effects":["write","send"]}</code></pre>
+<table><thead><tr><th>Case group</th><th>What to measure</th></tr></thead><tbody>
+<tr><td>Useful work</td><td>Typical and difficult questions; relevant, understandable answers; evidence supports each material claim.</td></tr>
+<tr><td>Uncertainty</td><td>Missing, conflicting, or out-of-date sources produce clarification/review rather than invented facts.</td></tr>
+<tr><td>Boundaries</td><td>Unauthorized data, misleading instructions, malformed output, exceeded limits, and stop behavior.</td></tr>
+<tr><td>Conditional features</td><td>Real MCP authorization, workflow recovery, approvals, and safe-repeat behavior only when the agent uses them.</td></tr>
+</tbody></table>
+<p>Separate cases used while improving instructions from a held-out set used for the final comparison. Keep sensitive examples access-controlled or replace them with reviewed synthetic data. Record document revisions, instructions/skills, tool definitions, model/provider version, generation settings, grader version, and environment. Repeat real-model trials because the same task can produce different results. Reset state between independent trials so earlier attempts do not supply answers or approvals.</p>
+<pre><code>python3 examples/developer-starter/evaluate.py \
+  --output build/developer-starter-evaluation.json</code></pre>
+<p>This command evaluates the deterministic offline fixture. It is a reproducible code/behavior check, not a model benchmark. To evaluate an actual model, implement an approved adapter and run reviewed tasks through it; save failures, timeouts, costs, and complete-attempt counts as well as successes.</p>
+<p>Use code to grade contracts, permissions, citations belonging to supplied documents, and actual effects. Use reviewed answer rubrics and human sampling for relevance and correctness; a citation can exist without supporting the claim. If a model grades answers, compare its ratings with humans and investigate disagreement. Do not average a forbidden action away with good writing scores. Include all assigned trials in the reported denominator, and report repeats separately from ordinary one-attempt success.</p>
+<div class="decision"><strong>Done when:</strong> Results are reproducible, useful-work and safety scores are separate, failure cases are understood, and actual-model evidence is distinguished from offline results.</div>
+
+<h3 id="dlc-step-7">Step 7 / Optimize without weakening the task</h3>
 <div data-diagram="dlc-cost-loop"></div>
-<p><strong>Do:</strong> Measure cost per useful task, tokens, calls, retries, latency, and quality. Change one variable at a time—context length, model, or repeated lookups—and compare the same cases.</p>
-<p><strong>Illustration, not a benchmark:</strong> $1 total spend, including failed attempts/retries, divided by ten useful results = $0.10 per useful result. Lower spend with fewer useful results may be worse.</p>
-<p>Cache authorized reads only, with customer/business-unit scope, source version, and a freshness limit. Never reuse another customer's data, approval tokens, or authorization decisions. Keep required human review unchanged. Local budget helpers only work when code calls them; retries may reset counters. They do not measure provider bills or enforce shared spending.</p>
-<div class="decision"><strong>Done when:</strong> Measured improvements preserve required quality, permissions, approval rules, and stop behavior.</div>
+<p><strong>Do:</strong> Measure a baseline, change one thing, and repeat the same evaluation. Start with fewer unnecessary calls and smaller relevant inputs before adding complicated optimization. Compare quality, delay, and total cost together. A cheaper attempt that repeatedly fails may cost more per useful task.</p>
+<table><thead><tr><th>Change</th><th>Check before keeping it</th></tr></thead><tbody>
+<tr><td>Smaller model or fewer calls</td><td>Required quality, difficult cases, refusals, and permission behavior still pass.</td></tr>
+<tr><td>Retrieve fewer passages</td><td>Evidence remains sufficient; conflicting information is not accidentally excluded.</td></tr>
+<tr><td>Shorter instructions/output</td><td>Remove repetition while preserving task, review, citation, and uncertainty requirements.</td></tr>
+<tr><td>Parallel independent reads</td><td>Access scope, load limits, deadlines, and partial-failure behavior remain correct.</td></tr>
+<tr><td>Caching</td><td>Real hit rates and costs improve; freshness, user access, and retention rules are preserved.</td></tr>
+</tbody></table>
+<p>Count all model attempts, automatic retries, tool charges, and relevant cache charges. For illustration, $1 spent on ten useful tasks is $0.10 per useful task; $0.80 spent on only five useful tasks is $0.16. These are arithmetic examples, not observed prices. Token counts are tokenizer units, not words; billing may include generated tokens absent from the final answer. Compare provider-reported charges using the selected model's accounting.</p>
+<p>Choose models by running the same held-out tasks, repeated trials, rubric, and tool setup for each option. Use a smaller development set to narrow choices, then confirm on the held-out set. This table is entirely hypothetical; its costs are not provider prices:</p>
+<table><thead><tr><th>Option</th><th>Task success</th><th>Cost/useful task</th><th>Completed p95</th><th>Decision</th></tr></thead><tbody>
+<tr><td>Model A</td><td>94%</td><td>$0.08</td><td>7 seconds</td><td>Meets illustrative quality/time floors.</td></tr>
+<tr><td>Model B</td><td>92%</td><td>$0.05</td><td>6 seconds</td><td>Lower cost; fails a one-point non-regression gate if Model A is the approved baseline.</td></tr>
+<tr><td>Model C</td><td>84%</td><td>$0.02</td><td>3 seconds</td><td>Reject: below the 90% usefulness floor.</td></tr>
+</tbody></table>
+<p>Choose the cheapest option meeting all agreed gates, with enough trials to support the comparison. Report failure/timeout rates beside latency; faster completed requests alone can hide failures. Recheck model choice after changing tools, instructions, or document handling.</p>
+<p>Implement one shared run-budget policy. Illustrative settings below are not accepted by the starter's TOML loader:</p>
+<pre><code>maximum elapsed time: 30 seconds
+maximum model attempts: 4, including retries
+maximum tool calls: 6, including retries
+maximum input tokens: 6000 per model request, including tool results
+maximum output tokens: 800 per model generation
+maximum estimated run cost: owner-approved limit
+retry policy: 1 initial attempt + at most 2 retries for temporary failures</code></pre>
+<p>Count instructions, tool definitions, conversation history, and tool results in the input budget. Reserve space for output and provider-specific reasoning before reaching the model's context limit. Choose limits from measured typical and difficult cases, then evaluate failures caused by those limits. The retry ceiling is additionally bounded by remaining run attempts/time/spend; it does not grant three attempts for every call indefinitely. Reserve budget before parallel calls and reconcile actual usage afterward. An estimate is not a guaranteed billing cap; use service/account limits where available and handle delayed usage reports.</p>
+<p>For large tool outputs, filter irrelevant fields or summarize passages while retaining document IDs, locations, and links to the original evidence. Preserve exceptions and conflicting evidence. Follow pagination until the relevant result is complete, or mark the result incomplete; never silently treat a truncated response as a complete answer. Evaluate compressed versus original results on cases where small qualifications change the answer.</p>
+<p><strong>Prompt-prefix caching</strong> reuses work for an identical repeated input prefix; it does not cache the final answer or eliminate output generation. Keep stable instructions/tool descriptions unchanged before task-specific data where supported. Enabling behavior, minimum size, lifetime, charges, and privacy terms vary by provider/model: check the applicable <a href="https://platform.claude.com/docs/en/build-with-claude/prompt-caching">prompt caching</a> or <a href="https://ai.google.dev/gemini-api/docs/caching">context caching</a> documentation, then measure hits and misses.</p>
+<p>An answer cache needs a different design: include relevant user/tenant access scope and document/configuration versions, recheck permissions before returning cached data, and expire stale entries. Do not share private results through a broad question-only cache. A per-call output limit does not cap a multi-call run. Track shared attempts, elapsed time, and spend across retries, and stop before starting additional work when limits are exhausted. Keep required human review and safety checks unchanged.</p>
+<div class="decision"><strong>Done when:</strong> A measured improvement survives the same evaluation, its cache/budget behavior is understood, and it preserves required controls.</div>
 
-<h3 id="dlc-step-6">Step 6 / Review the change and pass CI</h3>
-<p><strong>Do:</strong> Run <code>just check</code> and your agent's evaluations. Review code, instructions, dependency lock, permissions, and evidence together. Regenerate evidence after material changes. Prepare a catalog candidate—a record for review:</p>
-<pre><code>uv run --locked zetra catalog build/my-agent \
-  --evidence build/my-agent-evidence.json \
-  --output build/my-agent-catalog.json</code></pre>
-<p>Explain changed behavior, consequences, tests, and remaining risks in the pull request. Continuous integration (CI) means automated checks on changes. The committed GitHub workflow checks dependencies, code/types, tests, docs, and shipped examples on temporary runners without deployment/model credentials. Add your new package to the appropriate CI checks. Inspect the actual GitHub result; local success does not prove it ran.</p>
-<div class="decision"><strong>Done when:</strong> CI passes, reviewers understand changed authority, and evidence matches the package.</div>
-
-<h3 id="dlc-step-7">Step 7 / Hand off a release for controlled rollout</h3>
+<h3 id="dlc-step-8">Step 8 / Release with absolute and relative gates</h3>
 <div data-diagram="dlc-release"></div>
-<p><strong>Do:</strong> Supply the package, exact image version, risk review, evidence, requested connections, and operating instructions. An immutable image reference uses a content digest to identify exact image bytes.</p>
-<pre><code># Current rendered Deployment: a plan that cannot start the agent.
-spec:
-  replicas: 0</code></pre>
-<p>The renderer does not install integrations, grant permission, or publish the catalog. Continuous delivery (CD) is the proposed platform process for verifying approved artifacts and installing them. Production needs identity and isolation tested on the deployed setup, checks that approved rules are active, relevant destination approval/retry controls, and an exercised stop path.</p>
-<p>Platform engineers resolve connections and credentials. Missing mandatory controls block activation. Use a limited reviewed rollout, monitor results, and keep a tested rollback plan.</p>
-<div class="decision"><strong>Done when:</strong> The platform and owner approve the actual release/environment, backed by matching installation and enforcement evidence.</div>
+<p><strong>Do:</strong> Decide the acceptance rules before seeing results. An <strong>absolute gate</strong> is a minimum requirement every release must meet. A <strong>relative gate</strong> limits deterioration compared with the approved baseline. Use both: a release can pass the minimum while making an existing experience worse.</p>
+<table><thead><tr><th>Gate</th><th>Illustrative decision</th></tr></thead><tbody>
+<tr><td>Required safety</td><td>Every listed access/approval/stop case passes; no forbidden effect or secret exposure is observed. Any failure blocks release.</td></tr>
+<tr><td>Absolute usefulness</td><td>At least 90% of all assigned evaluation tasks meet the agreed answer rubric.</td></tr>
+<tr><td>Absolute service limits</td><td>Completed-request p95 within eight seconds; total cost per useful task within the agreed budget; failures reported separately.</td></tr>
+<tr><td>Relative comparison</td><td>No decrease larger than one percentage point in task success, using comparable tasks/settings and sufficient trials.</td></tr>
+</tbody></table>
+<p>For example, moving from 92% to 90% meets the 90% floor but loses two percentage points, failing that illustrative relative gate. It is a 2.17% relative decrease, which is a different calculation. Agree on margins and sample sizes; small differences can be inconclusive. Use same-task comparisons where possible and report uncertainty, following <a href="https://www.anthropic.com/research/statistical-approach-to-model-evals">statistical model-evaluation guidance</a>. Zero observed critical failures does not prove zero real failure probability.</p>
+<p>Build one exact release version with its source, dependencies, model settings, prompts/instructions, skill files, tool definitions, document revisions, test/evaluation datasets, graders, and reports. Record which changes and versions were tested. An automated check passing locally is different from the release pipeline actually executing, and both differ from testing the deployed environment. Require an owner to review unresolved failures, access changes, and any approved exception.</p>
+<p>Give each behavior-changing code, prompt, skill, tool, model, configuration, or document update a new release identifier. For example, record <code>release-1.4</code>, source revision, prompt/skill revisions, model setting digest, and evaluation dataset/report IDs together. Keep the meaning of a version stable; do not quietly replace files beneath an already approved release name.</p>
+<p>Automate checks in continuous integration (CI), then deployment in continuous delivery (CD). The following is pipeline pseudocode, not executable library functions; connect each stage to your chosen build/hosting tools:</p>
+<pre><code>checkout_reviewed_source_revision()
+install_dependencies_from_committed_lockfile()
+run_unit_integration_and_end_to_end_tests()
+run_actual_model_evaluations_on_versioned_cases()
+require_all_absolute_and_relative_gates()
+artifact = build_exact_release_with_its_evidence()
+publish(artifact)
+deploy_to_limited_authorized_audience(artifact)
+verify_live_access_limits_monitoring_and_stop()
+expand_if_healthy_otherwise_restore_previous_release()</code></pre>
+<p>The offline starter tests/evaluation can occupy fast CI checks, but cannot replace the actual-model stage. Publish and deploy the same reviewed artifact rather than rebuilding an unreviewed variation after the gates. Control release credentials and approvals outside model output; record which pipeline stages actually ran.</p>
+<p>Start with a limited rollout appropriate to the job: dry-run proposed effects, read-only operation, or a small authorized audience. Verify real credentials, permissions, monitoring, timeouts, and stop behavior before expanding. Compare actual results with evaluation expectations. Keep the previous version and its compatible configuration available; decide in advance what triggers rollback. Rollback does not undo completed effects. Preserve receipts and reconcile pending operations so restarting or changing versions does not duplicate them.</p>
+<div class="decision"><strong>Done when:</strong> Both gates pass, evidence names the exact release, the deployed boundaries have been tested, and the owner can pause or roll back safely.</div>
 
-<h3 id="dlc-step-8">Step 8 / Monitor, stop, reconcile, and update</h3>
+<h3 id="dlc-step-9">Step 9 / Observe, diagnose, and maintain</h3>
 <div data-diagram="dlc-operate"></div>
-<p><strong>Do:</strong> Monitor useful outcomes, refusals, failures, pending reviews, retries, latency, and spend. Record safe release/run/operation identifiers; avoid raw credentials and sensitive prompts. Arrange daily review and owner-defined error/cost/latency alerts. Unauthorized effects or suspected secret leaks need immediate pause/escalation. The toolkit does not supply an alert service.</p>
-<p>Before retrying an uncertain action, check what happened and its receipt. Reconciliation means establishing the actual outcome. Reuse the same operation safely rather than creating another effect. Use the approved stop procedure; local STOP files only work when code checks them, and stopping compute does not undo committed effects.</p>
-<p>After fixing a failure, add a test for that failure (a regression test), refresh evidence, and repeat review/release. Retest changes to prompts, models, dependencies, tools, permissions, and runtime integrations.</p>
-<p>See <a href="integration-deep-dive.html">platform integration details</a> and <a href="../SECURITY.md">security boundaries</a>. For a longer worked example involving approved actions, read <a href="use-case-walkthrough.html">the incident-triage walkthrough</a>.</p>
-<div class="decision"><strong>Done when:</strong> Operators can diagnose failures, stop new effects, reconcile outcomes, and release tested corrections.</div>
+<p><strong>Do:</strong> Make each run explainable enough to diagnose without collecting unnecessary private content. Logs record events; metrics show rates/distributions; a trace connects stages of one request. <a href="https://opentelemetry.io/docs/concepts/signals/traces/">Tracing</a> requires instrumentation and passing context between components; merely configuring an export endpoint does not create useful spans.</p>
+<pre><code>{"event":"answer.completed","release_id":"release-2026-10-09",
+ "run_id":"generated-run-id","outcome":"answered","source_count":1,
+ "elapsed_ms":820,"model_calls":1,"retry_count":0}</code></pre>
+<p>This is an illustrative safe event shape, not proof that monitoring exists. A production implementation must emit, export, retain, and control access to it. Use opaque generated run/operation IDs to join events; they are not authentication credentials. Avoid raw prompts, document passages, answers, bearer tokens, and personal data by default. If content is needed for a reviewed investigation, restrict collection, access, and retention. Follow <a href="https://opentelemetry.io/docs/security/handling-sensitive-data/">sensitive telemetry guidance</a>; a hash of a predictable identifier is not reliable anonymization.</p>
+<table><thead><tr><th>Observe</th><th>Question it answers</th></tr></thead><tbody>
+<tr><td>Success/review/failure counts</td><td>How many assigned requests produced useful results? Keep failures and timeouts in the denominator.</td></tr>
+<tr><td>Latency and attempts</td><td>Where is time spent? Report completed-request latency and timeout rate separately.</td></tr>
+<tr><td>Cost and cache outcomes</td><td>What is total spend per useful task, including retries and cache costs?</td></tr>
+<tr><td>Tool decisions and effects</td><td>Which authorized operation happened, was denied, or has an uncertain receipt?</td></tr>
+<tr><td>Quality feedback</td><td>Are sources stale, answers unsupported, or users repeatedly correcting the same behavior?</td></tr>
+</tbody></table>
+<p>Keep metric labels bounded: outcome, tool name, and approved release category can be useful. Do not put every run ID, question, document path, or user into metric labels; this creates unbounded series and may expose data. Keep per-run detail in access-controlled events/traces. Document metric numerators, denominators, windows, and exclusions so dashboards do not silently drop unsuccessful requests.</p>
+<p>Assign daily review of failed calls, answer feedback, cost changes, and pending human reviews. Define owner-approved latency, error, cost, and backlog alerts. Suspected secret exposure or an unauthorized consequential effect requires immediate pause and escalation. Diagnose with release/configuration versions, caller permission scope, tool outcome, timing, and safe error details; do not copy secrets into tickets.</p>
+<p>The stop procedure should prevent new work, revoke relevant access, and handle running operations according to their safety requirements. Confirm at the receiving service that further effects are blocked; a stop flag only works if the code checks it. For uncertain writes, inspect receipts and reconcile before retrying. Keep an incident record of known effects and recovery decisions. Turn fixes and new document/tool/model changes into regression cases, rerun evaluation and release gates, and update the runbook before expanding use again.</p>
+<div class="decision"><strong>Done when:</strong> An owner sees meaningful failures, can trace a request safely, can stop new effects, and repeats the evaluation/release process for each behavior-changing update.</div>
 </section>

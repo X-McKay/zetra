@@ -80,6 +80,12 @@ def main():
         )
         assert not any("alt" not in im for im in d.images), f"{p.name}: missing image alternative"
         assert d.svgs >= 1, f"{p.name}: missing visual"
+        if p.name == "lifecycle-guide.html":
+            assert "zetra" not in source.lower(), "Developer guide must remain platform neutral"
+            step_ids = [ident for ident in d.ids if re.fullmatch(r"dlc-step-\d+", ident)]
+            assert step_ids == [f"dlc-step-{i}" for i in range(1, 10)], (
+                "Developer guide must contain the nine steps in order"
+            )
     for p, d in parsed.items():
         for link in d.links:
             u = urlsplit(link)

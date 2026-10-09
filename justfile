@@ -69,6 +69,13 @@ examples:
     uv run --locked zetra eval examples/incident-triage --output .tools/triage-evidence.json
     uv run --locked zetra check examples/incident-triage --evidence .tools/triage-evidence.json
     just incident-triage
+    just developer-starter
+
+# Run the neutral document-assistant fixture, tests and scored example cases.
+developer-starter:
+    uv run --locked python examples/developer-starter/run.py --question 'What should I do before submitting expenses?' --document expense-policy
+    PYTHONPATH=examples/developer-starter/src uv run --locked python -m unittest discover -s examples/developer-starter/tests -v
+    uv run --locked python examples/developer-starter/evaluate.py --output build/developer-starter-evaluation.json
 
 # Follow one incident through proposal, local approval, ticket receipt and retries.
 incident-triage:

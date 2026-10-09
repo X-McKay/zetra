@@ -44,8 +44,8 @@ CHAPTERS = [
     ),
     (
         "lifecycle-guide",
-        "Agent Development Walkthrough",
-        "A practical guide from the first files to release, monitoring and updates",
+        "Agent Developer Guide",
+        "A practical playbook for building, testing, improving and operating an agent",
     ),
 ]
 COLORS = {
@@ -551,6 +551,16 @@ def augment(fragment):
     return re.sub(r"<h3([^>]*)>(.*?)</h3>", heading, fragment, flags=re.S)
 
 
+def developer_guide_shell(title, lead, fragment):
+    body = augment(fragment)
+    steps = re.findall(r'<h3[^>]*id="(dlc-step-\d+)"[^>]*>(.*?)</h3>', body, re.S)
+    nav = "".join(
+        f'<a href="#{ident}">{escape(re.sub("<[^>]+>", "", heading))}</a>'
+        for ident, heading in steps
+    )
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{escape(lead, quote=True)}"><title>{escape(title)}</title><style>{CSS}</style></head><body><a href="#main" style="position:absolute;left:-9999px" onfocus="this.style.left='10px'" onblur="this.style.left='-9999px'">Skip to content</a><button class="mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">Contents</button><aside class="sidebar guide-nav" aria-label="Developer guide navigation"><a class="brand" href="#lifecycle-guide">AGENT GUIDE</a><p class="brand-sub">From idea to operation</p><div class="edition">Developer playbook<br><strong>Python examples · framework neutral</strong><br>09 October 2026</div><label class="nav-label" for="nav-search">Find a step</label><input id="nav-search" type="search" placeholder="Filter steps"><nav>{nav}</nav><button class="print">Print / Save as PDF</button><p class="note">Standalone HTML. Diagrams, code and styling work offline.</p></aside><main id="main"><header class="hero guide-hero"><p class="eyebrow">A guide for new agent developers</p><h1>{escape(title)}</h1><p class="lead">{escape(lead)}</p><p class="guide-scope">Nine steps · Practical examples · Local starter</p></header><article class="content guide-content"><details class="toc"><summary>Jump to a step</summary>{nav}</details>{body}</article><footer class="foot"><strong>Agent Developer Guide</strong> · 09 October 2026<br>Use the examples as a starting point. Choose checks and limits that match your task, data and connected services.</footer></main><script>{JS}</script></body></html>'''
+
+
 def shell(title, lead, fragments, combined=False):
     current = set()
     for fragment in fragments:
@@ -558,10 +568,11 @@ def shell(title, lead, fragments, combined=False):
         if match is None:
             raise ValueError("Chapter fragment lacks a root section ID")
         current.add(match.group(1))
-    compact = current == {"lifecycle-guide"}
+    if current == {"lifecycle-guide"}:
+        return developer_guide_shell(title, lead, fragments[0])
     start_href = "#lifecycle-guide" if "lifecycle-guide" in current else "lifecycle-guide.html"
     nav = (
-        f'<a class="start-here" href="{start_href}">Start here: Developer walkthrough</a>'
+        f'<a class="start-here" href="{start_href}">Start here: Agent developer guide</a>'
         + "".join(
             f'<a href="{"#" + key if key in current else key + ".html"}"><small>{i + 1:02}</small>{escape(t)}</a>'
             for i, (key, t, _description) in enumerate(CHAPTERS)
@@ -582,18 +593,11 @@ def shell(title, lead, fragments, combined=False):
         for id, label in re.findall(r'<h3[^>]*id="([^"]+)"[^>]*>(.*?)</h3>', body, re.S)
     )
     header = f"""<header class="hero"><p class="eyebrow">Bounded authority. Verifiable evidence.</p><div class="hero-grid"><div><h1>{escape(title)}</h1><p class="lead">{escape(lead)}</p><span class="badge">STRATEGY → DEVELOPMENT → DEPLOYMENT → OVERSIGHT</span><span class="badge">ZERO TRUST BY CONSTRUCTION</span></div>{hero_svg()}</div><p class="strap">A governed software package, a consistent lifecycle, and independent enforcement at every consequential boundary.</p></header>"""
-    reading = f'''<div class="reading-guide"><p class="guide-entry">New to the project? <a href="{start_href}">Follow the developer walkthrough</a>.</p><p class="eyebrow">Choose your lens</p><div class="guide-grid">{guide}</div><p class="technical-route"><strong>Technical leader review:</strong> {technical_routes}</p></div>'''
+    reading = f'''<div class="reading-guide"><p class="guide-entry">New to agent development? <a href="{start_href}">Follow the agent developer guide</a>.</p><p class="eyebrow">Choose your lens</p><div class="guide-grid">{guide}</div><p class="technical-route"><strong>Technical leader review:</strong> {technical_routes}</p></div>'''
     status_note = '<div class="callout"><strong>Status and reading convention.</strong> This is a proposed enterprise standard with a working initial toolkit. Upstream documentation checks, local tests and live enforcement evidence are different validation levels. See the toolkit chapter and integration report before treating a control as qualified.</div>'
     footer = '<footer class="foot"><strong>ZETRA / ZEro-TRust Agents</strong> · Design draft · 08 October 2026<br>Source chapters and build script live in the repository. Vendor integrations require a version-pinned qualification report; policy intent is never proof of runtime enforcement.</footer>'
     publication_date = "08 October 2026"
     toc_label = "In this document · detailed contents"
-    if compact:
-        header = f"""<header class="hero guide-hero"><p class="eyebrow">Developer walkthrough</p><h1>{escape(title)}</h1><p class="lead">{escape(lead)}</p><p class="guide-scope">Eight steps · Six diagrams · Examples you can run</p></header>"""
-        reading = ""
-        status_note = ""
-        footer = '<footer class="foot"><strong>ZETRA / Developer walkthrough</strong> · 09 October 2026<br>Edit docs/chapters/lifecycle-guide.html, then run just docs.</footer>'
-        publication_date = "09 October 2026"
-        toc_label = "Jump to a step"
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{escape(lead, quote=True)}"><title>{escape(title)} | Zetra</title><style>{CSS}</style></head><body><a href="#main" style="position:absolute;left:-9999px" onfocus="this.style.left='10px'" onblur="this.style.left='-9999px'">Skip to content</a><button class="mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">Contents</button><aside class="sidebar" aria-label="Playbook navigation"><a class="brand" href="index.html">ZETRA</a><p class="brand-sub">ZEro-TRust Agents</p><div class="edition">Agent Playbook<br><strong>Design draft / toolkit v0.1</strong><br>{publication_date}</div><label class="nav-label" for="nav-search">Find a playbook</label><input id="nav-search" type="search" placeholder="Filter navigation"><p class="nav-label">Audience tracks</p><nav>{nav}<a href="index.html">Complete playbook</a></nav><p class="note">Framework-neutral Python<br>Temporal · Kubernetes<br>General enterprise baseline</p><button class="print">Print / Save as PDF</button><p class="note">Standalone HTML. Diagrams, code and styling work offline.</p></aside><main id="main">{header}{reading}<article class="content">{status_note}<details class="toc"><summary>{toc_label}</summary>{toc}</details>{body}</article>{footer}</main><script>{JS}</script></body></html>'''
 
 
