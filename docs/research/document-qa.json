@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-09T12:11:28.953Z",
+  "checkedAt": "2026-10-09T12:32:49.116Z",
   "status": "passed",
   "checks": [
     "desktop/mobile rendered pages",
@@ -12,7 +12,9 @@
     "guide figure rendering and reading navigation",
     "optional examples with keyboard",
     "expand/collapse all details",
-    "repository and figure disclosures"
+    "repository and figure disclosures",
+    "brief selection with keyboard",
+    "guide starts at step 1"
   ],
   "results": [
     {
@@ -51,7 +53,7 @@
       "width": 1440,
       "scrollWidth": 1440,
       "title": "The Agent Playbook | Zetra",
-      "figures": 21,
+      "figures": 20,
       "codeBlocks": 56,
       "brokenImages": 0
     },
@@ -71,7 +73,7 @@
       "width": 1440,
       "scrollWidth": 1440,
       "title": "Agent Developer Guide",
-      "figures": 7,
+      "figures": 6,
       "codeBlocks": 11,
       "brokenImages": 0
     },
@@ -151,7 +153,7 @@
       "width": 390,
       "scrollWidth": 390,
       "title": "The Agent Playbook | Zetra",
-      "figures": 21,
+      "figures": 20,
       "codeBlocks": 56,
       "brokenImages": 0
     },
@@ -171,7 +173,7 @@
       "width": 390,
       "scrollWidth": 390,
       "title": "Agent Developer Guide",
-      "figures": 7,
+      "figures": 6,
       "codeBlocks": 11,
       "brokenImages": 0
     },

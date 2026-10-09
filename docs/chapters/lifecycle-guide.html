@@ -1,23 +1,34 @@
 <section id="lifecycle-guide" class="chapter">
-<p class="eyebrow">A practical guide for developers</p>
-<h2>From a useful idea to a reliable agent</h2>
-<p>An agent uses a model and tools to complete a task. Start with a clear job, check its results, and give it only the access it needs. Follow these nine steps; choose examples and checks that fit your use case.</p>
-<div data-diagram="dlc-overview"></div>
-<details class="guide-detail diagram-explanation"><summary>How to use this path</summary><div class="detail-body"><p>Build defines the job and its allowed connections. Validate checks software behavior and task results. Operate releases a reviewed version and follows its real outcomes.</p><p><strong>Try it:</strong> Choose a numbered step to jump to it. Return to tests and evaluations whenever behavior changes.</p></div></details>
-<div class="guide-note"><strong>Keep these three questions in view:</strong> Does it do the job well? Does it stay within its permissions? Can someone operate and troubleshoot it?</div>
-
-<h3 id="dlc-step-1">1. Define the problem and success</h3>
-<p>Before writing code, agree on what the agent should accomplish and where its responsibilities end.</p>
-<table><thead><tr><th>Define</th><th>Questions to answer</th></tr></thead><tbody>
-<tr><td>Purpose and owner</td><td>Who uses it? What problem does it solve? Who is responsible for it?</td></tr>
-<tr><td>Success</td><td>What makes a result useful and correct? What response time and cost are acceptable?</td></tr>
-<tr><td>Data and connections</td><td>Which documents, systems and services does it need? Is the data current? What may be sent to the model? Where may it be stored, and for how long?</td></tr>
-<tr><td>Permissions</td><td>What may it read or change? Which actions require approval? What is prohibited?</td></tr>
-<tr><td>Failure behavior</td><td>When should it ask a question, request help, or stop?</td></tr>
-</tbody></table>
-<div class="example-card"><strong>Example objective</strong><p>“Answer employee policy questions from approved documents, cite the sources, and ask for help when the evidence is missing.”</p><p>Measure answer correctness, supported citations, response time, and cost per successful task.</p></div>
-<p>For tasks that change records, send messages or spend money, also define how approval and recovery work. Choose a simple workflow instead of an agent if the steps never require judgment.</p>
-<div class="step-done"><strong>Ready to move on:</strong> You can explain the job, success measures, required access, and limits on one page.</div>
+<h3 id="dlc-step-1">1. Defining the problem before you build</h3>
+<p>Describe the job, who it helps, and what should improve. Agree on what a good result looks like and what the agent must never do.</p>
+<section class="agent-brief" aria-labelledby="brief-heading">
+<p class="brief-label" id="brief-heading">Example brief · Select a phrase to explore it</p>
+<div class="brief-sentence">
+<button type="button" data-brief="purpose" aria-pressed="true" aria-controls="brief-purpose">Help employees understand company policies</button><br>
+<span>using </span><button type="button" data-brief="information" aria-pressed="false" aria-controls="brief-information">approved documents</button><br>
+<button type="button" data-brief="result" aria-pressed="false" aria-controls="brief-result">Show the source for each answer</button><br>
+<button type="button" data-brief="limits" aria-pressed="false" aria-controls="brief-limits">Ask for help when information is missing</button>
+</div>
+<div class="brief-explanations" aria-live="polite">
+<div class="brief-reading" data-brief-panel="purpose" id="brief-purpose"><strong>Purpose & people</strong><p>Name the users and the task they need done. Describe the current problem, such as time spent searching for policies, and the improvement you expect.</p></div>
+<div class="brief-reading" data-brief-panel="information" id="brief-information"><strong>Information & access</strong><p>List the documents, systems and connections needed. Check who owns them, how current they are, and what the actual user is permitted to read.</p></div>
+<div class="brief-reading" data-brief-panel="result" id="brief-result"><strong>A good result</strong><p>Collect example questions and define an acceptable answer. Here, the answer must be correct, understandable and supported by an approved, current source.</p></div>
+<div class="brief-reading" data-brief-panel="limits" id="brief-limits"><strong>Limits & help</strong><p>Define prohibited actions and when to ask for help. Here, the agent must not guess when evidence is missing, read restricted documents, or change employee records.</p></div>
+</div>
+</section>
+<h4>Define success and readiness</h4>
+<p>Choose measures and acceptance criteria before testing. Compare with today’s process: does the agent improve the outcome enough to justify its cost? Include difficult tasks and failures, not just good examples.</p>
+<div class="readiness-comparison" aria-label="Different decisions for user testing and production">
+<section><p class="readiness-label">First decision</p><h4>Ready to test with users?</h4><p><strong>User acceptance testing (UAT)</strong> checks whether representative users can complete real tasks.</p><ul><li>Basic tests and evaluations meet the agreed entry criteria.</li><li>Important access and safety checks pass; no known serious issue makes the trial unsafe.</li><li>Use an approved test environment and data. Users know the limits, how to report problems, and who can stop the trial.</li></ul></section>
+<section><p class="readiness-label">Later decision</p><h4>Ready for production?</h4><p>The agent must be useful to users and safe to operate in its real environment.</p><ul><li>The business owner accepts the UAT results; required quality, cost, response-time and safety criteria pass.</li><li>Required access and protections are verified in the deployment environment.</li><li>Monitoring, support, stop and recovery procedures are ready. Begin with limited use and watch the results.</li></ul></section>
+</div>
+<details class="guide-detail"><summary>How do you choose “good enough”?</summary><div class="detail-body"><p>Start with the consequences of a wrong answer or action. Agree with users and the owner on acceptable task results, maximum wait time and cost, and any checks that every release must pass.</p><p><strong>Example:</strong> A policy answer needs a valid supporting source. Restricted information must stay restricted. Speed and cost targets depend on the user’s task and expected usage; there is no universal pass score.</p><p>Use representative cases, repeated trials and human review where judgment is needed. Record failures and uncertainty. A high average does not cancel a failed required safety check. See <a href="#dlc-step-8">step 8</a> for minimum and baseline comparison thresholds.</p></div></details>
+<details class="guide-detail"><summary>Understand constraints: cost, response time and volume</summary><div class="detail-body"><p>How long can users wait? What is the budget per successful task and per month? How many requests and simultaneous users do you expect?</p><p>Include model calls, tools, infrastructure, repeated attempts and human review in the cost. Measure time for the complete task, including slow dependencies and failures. Set limits and decide what the user sees when a limit is reached.</p></div></details>
+<details class="guide-detail"><summary>Identify the data, information and connections needed</summary><div class="detail-body"><p>List required documents, records and services, their owners, and how the agent will reach them. Check access, data quality, freshness, availability and connection limits.</p><p>Decide what information may be sent to the model, stored, or logged, and for how long. Identify missing data and test access early. More data or broader access does not automatically improve the result.</p></div></details>
+<details class="guide-detail"><summary>Understand risks and decide what needs approval</summary><div class="detail-body"><p>What could go wrong, who could be affected, and could it be undone? Consider incorrect advice, private information being exposed, misleading instructions in documents, unwanted changes and repeated actions.</p><p>Limit allowed actions. Require review where an error could cause serious harm; define prohibited actions and stopping conditions. For each important risk, name a prevention or detection measure and the person responsible for responding.</p></div></details>
+<details class="guide-detail"><summary>Assign responsibility for results and operation</summary><div class="detail-body"><p>Name a business owner who accepts the outcome, a developer responsible for changes, and an operating owner who handles alerts, support and stopping the agent. One person may hold more than one role.</p><p>Agree who approves access, maintains source information, reviews uncertain cases, and accepts remaining risks. Confirm that these people have the time and authority to act.</p></div></details>
+<details class="guide-detail"><summary>Map upstream and downstream dependencies and impacts</summary><div class="detail-body"><p><strong>Upstream</strong> means what the agent relies on. <strong>Downstream</strong> means who or what relies on its output.</p><div class="dependency-notes"><div><strong>What it relies on</strong><p>Policies, document search and access services. A stale policy or unavailable search can prevent a reliable answer.</p></div><div><strong>Who relies on the answer</strong><p>An employee may submit an expense using the advice. A wrong answer can create rejected claims or extra work.</p></div></div><p>For each dependency, record its owner, failure behavior and change notifications. For each output, identify the recipient, possible effect, required review and recovery options. Decide how to communicate missing or uncertain results before they affect another process.</p></div></details>
+<div class="step-done"><strong>Ready to move on:</strong> The owner and developer agree on a brief covering the job, success criteria, constraints, information and connections, risks, responsibilities and dependencies.</div>
 
 <h3 id="dlc-step-2">2. Organize the repository</h3>
 <p>Keep code, instructions, tests and operating notes easy to find. This is a typical layout; add files as the project needs them.</p>

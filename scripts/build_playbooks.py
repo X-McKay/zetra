@@ -569,10 +569,6 @@ def developer_guide_shell(title, lead, fragment):
         + "</div>"
         for label, start, end in (("Build", 0, 4), ("Validate", 4, 7), ("Operate", 7, 9))
     )
-    toc = "".join(
-        f'<a href="#{ident}">{escape(re.sub("<[^>]+>", "", heading))}</a>'
-        for ident, heading in steps
-    )
     # Give each reading step a semantic section without changing source prose.
     matches = list(re.finditer(r'<h3[^>]*id="(dlc-step-\d+)"[^>]*>', body))
     if matches:
@@ -588,15 +584,6 @@ def developer_guide_shell(title, lead, fragment):
             )
         pieces.append(body[body.rfind("</section>") :])
         body = "".join(pieces)
-    route = "".join(
-        f'<a href="#dlc-step-{step}"><span class="route-number">{number}</span>'
-        f'<span><span class="route-text">{label}</span><span class="route-range">{detail}</span></span></a>'
-        for number, label, detail, step in (
-            ("01", "Build", "Define & connect", 1),
-            ("02", "Validate", "Test & improve", 5),
-            ("03", "Operate", "Release & learn", 8),
-        )
-    )
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="{escape(lead, quote=True)}"><title>{escape(title)}</title>
@@ -614,11 +601,8 @@ def developer_guide_shell(title, lead, fragment):
 <button class="detail-toggle" aria-expanded="false">Expand all details</button>
 <button class="print">Print / Save as PDF</button>
 <p class="note">Select a step to navigate. Expand examples and figure notes for more detail. Works offline.</p></aside>
-<main id="main"><header class="hero guide-hero"><p class="eyebrow">A practical playbook</p>
-<h1>{escape(title)}</h1><p class="lead">{escape(lead)}</p>
-<p class="guide-scope">Nine steps · Checklists · Examples</p>
-<nav class="hero-route" aria-label="Development phases">{route}</nav></header>
-<article class="content guide-content"><details class="toc"><summary>Jump to a step</summary>{toc}</details>{body}</article>
+<main id="main"><h1 class="guide-document-title">{escape(title)}</h1>
+<article class="content guide-content">{body}</article>
 <footer class="foot"><strong>Agent Developer Guide</strong> · 09 October 2026<br>
 Use the examples as a starting point. Choose checks and limits that match your task, data and connected services.</footer></main>
 <script>{JS}\n{GUIDE_JS}</script></body></html>'''

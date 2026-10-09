@@ -21,10 +21,10 @@
     {
       "component": "document-rendering",
       "report": "docs/research/document-qa.json",
-      "sha256": "1d257d827ecabc793a2d65f333adb7ffb948d84c1c37fdeeaed20c2969dde3e6",
+      "sha256": "918748c067d62e95e7e0963c099d1ef9c116aa01aecf55e0c752cfdeba6483cd",
       "status": "passed",
       "scope": [],
-      "checkCount": 11,
+      "checkCount": 13,
       "openControls": []
     },
     {
