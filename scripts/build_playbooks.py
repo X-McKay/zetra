@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 CSS = (DOCS / "assets/playbook.css").read_text()
 JS = (DOCS / "assets/playbook.js").read_text()
+GUIDE_CSS = (DOCS / "assets/developer-guide.css").read_text()
+GUIDE_JS = (DOCS / "assets/developer-guide.js").read_text()
 CHAPTERS = [
     ("strategy", "Agent Strategy", "Purpose, outcomes and the platform operating model"),
     (
@@ -554,11 +556,72 @@ def augment(fragment):
 def developer_guide_shell(title, lead, fragment):
     body = augment(fragment)
     steps = re.findall(r'<h3[^>]*id="(dlc-step-\d+)"[^>]*>(.*?)</h3>', body, re.S)
+    links = []
+    for index, (ident, heading) in enumerate(steps, 1):
+        text = re.sub(r"^\d+\.\s*", "", re.sub("<[^>]+>", "", heading))
+        links.append(
+            f'<a href="#{ident}"><span class="nav-number">{index:02}</span>'
+            f"<span>{escape(text)}</span></a>"
+        )
     nav = "".join(
+        f'<div class="nav-section"><p class="nav-group">{label}</p>'
+        + "".join(links[start:end])
+        + "</div>"
+        for label, start, end in (("Build", 0, 4), ("Validate", 4, 7), ("Operate", 7, 9))
+    )
+    toc = "".join(
         f'<a href="#{ident}">{escape(re.sub("<[^>]+>", "", heading))}</a>'
         for ident, heading in steps
     )
-    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{escape(lead, quote=True)}"><title>{escape(title)}</title><style>{CSS}</style></head><body><a href="#main" style="position:absolute;left:-9999px" onfocus="this.style.left='10px'" onblur="this.style.left='-9999px'">Skip to content</a><button class="mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">Contents</button><aside class="sidebar guide-nav" aria-label="Developer guide navigation"><a class="brand" href="#lifecycle-guide">AGENT GUIDE</a><p class="brand-sub">From idea to operation</p><div class="edition">Developer playbook<br><strong>Practical steps · framework neutral</strong><br>09 October 2026</div><label class="nav-label" for="nav-search">Find a step</label><input id="nav-search" type="search" placeholder="Filter steps"><nav>{nav}</nav><button class="print">Print / Save as PDF</button><p class="note">Standalone HTML. Diagrams, code and styling work offline.</p></aside><main id="main"><header class="hero guide-hero"><p class="eyebrow">A guide for new agent developers</p><h1>{escape(title)}</h1><p class="lead">{escape(lead)}</p><p class="guide-scope">Nine steps · Checklists · Examples</p></header><article class="content guide-content"><details class="toc"><summary>Jump to a step</summary>{nav}</details>{body}</article><footer class="foot"><strong>Agent Developer Guide</strong> · 09 October 2026<br>Use the examples as a starting point. Choose checks and limits that match your task, data and connected services.</footer></main><script>{JS}</script></body></html>'''
+    # Give each reading step a semantic section without changing source prose.
+    matches = list(re.finditer(r'<h3[^>]*id="(dlc-step-\d+)"[^>]*>', body))
+    if matches:
+        pieces = [body[: matches[0].start()]]
+        for index, match in enumerate(matches):
+            end = (
+                matches[index + 1].start() if index + 1 < len(matches) else body.rfind("</section>")
+            )
+            pieces.append(
+                f'<section class="guide-step" aria-labelledby="{match.group(1)}">'
+                + body[match.start() : end]
+                + "</section>"
+            )
+        pieces.append(body[body.rfind("</section>") :])
+        body = "".join(pieces)
+    route = "".join(
+        f'<a href="#dlc-step-{step}"><span class="route-number">{number}</span>'
+        f'<span><span class="route-text">{label}</span><span class="route-range">{detail}</span></span></a>'
+        for number, label, detail, step in (
+            ("01", "Build", "Define & connect", 1),
+            ("02", "Validate", "Test & improve", 5),
+            ("03", "Operate", "Release & learn", 8),
+        )
+    )
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{escape(lead, quote=True)}"><title>{escape(title)}</title>
+<style>{CSS}\n{GUIDE_CSS}</style></head><body class="guide-theme">
+<a href="#main" class="guide-skip">Skip to content</a>
+<div class="reading-progress" aria-hidden="true"><span></span></div>
+<button class="mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">Contents</button>
+<aside class="sidebar guide-nav" aria-label="Developer guide navigation">
+<a class="brand" href="#lifecycle-guide">AGENT<br>DEVELOPER GUIDE</a>
+<p class="brand-sub">From idea to operation</p>
+<div class="edition">Developer playbook<br><strong>Practical steps · framework neutral</strong><br>09 October 2026</div>
+<label class="nav-label" for="nav-search">Find a step</label>
+<input id="nav-search" type="search" placeholder="Filter steps"><nav>{nav}</nav>
+<p id="reading-position" class="reading-position">STEP 01 / 09</p>
+<button class="detail-toggle" aria-expanded="false">Expand all details</button>
+<button class="print">Print / Save as PDF</button>
+<p class="note">Select a step to navigate. Expand examples and figure notes for more detail. Works offline.</p></aside>
+<main id="main"><header class="hero guide-hero"><p class="eyebrow">A practical playbook</p>
+<h1>{escape(title)}</h1><p class="lead">{escape(lead)}</p>
+<p class="guide-scope">Nine steps · Checklists · Examples</p>
+<nav class="hero-route" aria-label="Development phases">{route}</nav></header>
+<article class="content guide-content"><details class="toc"><summary>Jump to a step</summary>{toc}</details>{body}</article>
+<footer class="foot"><strong>Agent Developer Guide</strong> · 09 October 2026<br>
+Use the examples as a starting point. Choose checks and limits that match your task, data and connected services.</footer></main>
+<script>{JS}\n{GUIDE_JS}</script></body></html>'''
 
 
 def shell(title, lead, fragments, combined=False):
