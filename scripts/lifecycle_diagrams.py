@@ -83,8 +83,8 @@ def lifecycle_diagram(key):
                 ),
             ],
             (
-                "Choose the transport and credentials deliberately",
-                "Local: stdio starts a process. Remote: Streamable HTTP connects to a service. Neither makes code or output trustworthy.",
+                "Connect only what the task needs",
+                "Choose the server, enable only needed tools, and verify user access. Check failures as well as successful requests.",
             ),
             "Requests go left to right; results return through the connection. Retrieved text must not grant new authority.",
         ),
@@ -121,7 +121,7 @@ def lifecycle_diagram(key):
             ],
             (
                 "Choose scoring that fits the output",
-                "Schema checks for structure; exact assertions for actions; evidence checks for claims; calibrated review for subjective usefulness.",
+                "Check output fields and actual actions with code. Review answer quality against evidence and a clear scoring guide.",
             ),
             "An average can hide failures in an important category. Inspect those categories and critical cases separately.",
         ),
@@ -131,7 +131,7 @@ def lifecycle_diagram(key):
                 (
                     "CI: verify the change",
                     [
-                        "Locked tools, lint, types and tests",
+                        "Run the automated tests",
                         "Run versioned evaluations",
                         "Record code, model and settings",
                     ],
