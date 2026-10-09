@@ -20,7 +20,7 @@
   if(!step)return;
   const id=step.getAttribute('aria-labelledby'),index=steps.indexOf(step);
   links.forEach(a=>{const active=a.getAttribute('href')==='#'+id;a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','step');else a.removeAttribute('aria-current');});
-  if(label)label.textContent=`STEP ${String(index+1).padStart(2,'0')} / 09`;
+  if(label)label.textContent=`STEP ${String(index+1).padStart(2,'0')} / ${String(steps.length).padStart(2,'0')}`;
  }
  function track(){
   const line=innerHeight*.25;

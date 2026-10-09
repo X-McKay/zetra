@@ -14,3 +14,6 @@
 
 /* Start at the first step, while retaining a document title for screen readers. */
 .guide-theme .guide-document-title{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}.guide-theme .guide-content{padding-top:0}.guide-theme .guide-step:first-of-type{padding-top:0}.guide-theme .guide-step:first-of-type h3{border-top:0;padding-top:20px}.guide-theme .guide-step>h4{font:600 23px/1.3 Arial,Helvetica,sans-serif;letter-spacing:-.4px;margin:34px 0 14px}.guide-theme .brief-reading p{margin:0}.guide-theme .readiness-comparison h4{margin:8px 0 15px}@media(max-width:760px){.guide-theme .guide-content{padding-top:45px}.guide-theme .guide-step:first-of-type h3{padding-top:0}.guide-theme .guide-step>h4{font-size:21px}}
+.guide-theme #deployment-guide h3{font-size:clamp(25px,2.5vw,32px);line-height:1.25;margin-top:0;padding-top:25px;border-top:2px solid #222}
+.guide-theme #deployment-guide .guide-step:first-of-type h3{border-top:0;padding-top:20px}
+@media(max-width:760px){.guide-theme #deployment-guide h3{scroll-margin-top:80px;font-size:25px}.guide-theme #deployment-guide .diagram-title:after{display:inline}}

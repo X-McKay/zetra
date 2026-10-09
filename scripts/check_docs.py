@@ -62,6 +62,7 @@ def main():
             "integration-deep-dive",
             "use-case-walkthrough",
             "lifecycle-guide",
+            "deployment-guide",
         )
     ]
     parsed = {}

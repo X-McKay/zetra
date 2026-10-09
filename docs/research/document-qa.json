@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-09T12:32:49.116Z",
+  "checkedAt": "2026-10-09T14:23:47.455Z",
   "status": "passed",
   "checks": [
     "desktop/mobile rendered pages",
@@ -14,7 +14,8 @@
     "expand/collapse all details",
     "repository and figure disclosures",
     "brief selection with keyboard",
-    "guide starts at step 1"
+    "guide starts at step 1",
+    "deployment guide navigation and keyboard disclosures"
   ],
   "results": [
     {
@@ -25,6 +26,16 @@
       "title": "Agent Deployment Playbook | Zetra",
       "figures": 3,
       "codeBlocks": 8,
+      "brokenImages": 0
+    },
+    {
+      "document": "deployment-guide",
+      "viewport": "desktop",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "title": "Agent Deployment Guide",
+      "figures": 3,
+      "codeBlocks": 5,
       "brokenImages": 0
     },
     {
@@ -53,8 +64,8 @@
       "width": 1440,
       "scrollWidth": 1440,
       "title": "The Agent Playbook | Zetra",
-      "figures": 20,
-      "codeBlocks": 56,
+      "figures": 23,
+      "codeBlocks": 61,
       "brokenImages": 0
     },
     {
@@ -128,6 +139,16 @@
       "brokenImages": 0
     },
     {
+      "document": "deployment-guide",
+      "viewport": "mobile",
+      "width": 390,
+      "scrollWidth": 390,
+      "title": "Agent Deployment Guide",
+      "figures": 3,
+      "codeBlocks": 5,
+      "brokenImages": 0
+    },
+    {
       "document": "developer",
       "viewport": "mobile",
       "width": 390,
@@ -153,8 +174,8 @@
       "width": 390,
       "scrollWidth": 390,
       "title": "The Agent Playbook | Zetra",
-      "figures": 20,
-      "codeBlocks": 56,
+      "figures": 23,
+      "codeBlocks": 61,
       "brokenImages": 0
     },
     {

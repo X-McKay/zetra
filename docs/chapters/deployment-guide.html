@@ -1,0 +1,188 @@
+<section id="deployment-guide" class="chapter">
+<h3 id="deploy-step-1">1. From an agent repository to a running service</h3>
+<p>This guide explains what happens between building an agent and operating it safely. Developers provide the package, its intended capabilities, and meaningful tests. The platform turns those inputs into a reviewed deployment with restricted access, release evidence, and operational controls.</p>
+<p><strong>Audience:</strong> platform engineers, deployment owners, security reviewers, and developers who want to understand the handoff. This is a proposed enterprise workflow. The repository’s local integration tests qualify individual controls; they do not establish that the complete architecture is ready for production.</p>
+<div data-diagram="deploy-lifecycle"></div>
+<p>The two paths meet at the <strong>release bundle</strong>: the exact agent image, approved policies, evidence, and environment settings deployed together. Findings from production return to the development path as new test cases or changed requirements.</p>
+<details class="guide-detail"><summary>What carries forward from development?</summary><p>The problem statement, owner, success criteria, data classification, tool definitions, instruction and skill files, dependency lock, tests, evaluations, and requested connectivity. The platform should not ask every developer to design kernel probes or manage production credentials.</p><p>Azure DevOps Pipelines is the CI example in this guide; Argo CD is the deployment example. These are platform choices, not dependencies in the agent’s business logic. No particular agent development library is required.</p></details>
+
+<h3 id="deploy-step-2">2. Agree on the deployment contract</h3>
+<p>Before profiling, agree on what the agent may do. Describe capabilities in business terms and identify the resources they apply to. “Create a ticket in the operations project after approval” is a useful request. “Allow internet access” is not specific enough.</p>
+<table><thead><tr><th>Input</th><th>What it answers</th><th>Owner</th></tr></thead><tbody>
+<tr><td>Agent manifest</td><td>Which agent, entrypoint, inputs, outputs, tools, and instructions?</td><td>Developer</td></tr>
+<tr><td>Capability request</td><td>Which actions, data, users, projects, and approvals are needed?</td><td>Business owner + developer</td></tr>
+<tr><td>Environment binding</td><td>Which actual services, identities, routes, and credentials satisfy that request?</td><td>Platform + service owners</td></tr>
+<tr><td>Platform profile</td><td>Which supported runtime, kernel, sandbox, gateway, and policy versions?</td><td>Platform + security</td></tr>
+<tr><td>Acceptance criteria</td><td>Which quality, safety, cost, latency, and operational checks must pass?</td><td>Business + engineering owners</td></tr>
+</tbody></table>
+<p>Classify risk from data sensitivity, action consequences, external exposure, autonomy, reversibility, and uncertainty. Automated analysis can flag missing reviews; an unknown must not silently become low risk. Higher-consequence actions need stronger isolation, approval, testing, and incident response.</p>
+<details class="guide-example"><summary>Example: a small deployment request</summary><pre><code># Illustrative organization contract; not a vendor API or executable schema.
+agent: incident-assistant
+owner: operations
+business_function: service-management
+data_classification: internal
+capabilities:
+  - action: runbooks.read
+    scope: approved-operations-library
+  - action: service_status.read
+    scope: owned-services
+  - action: tickets.create
+    scope: operations-project
+    approval: required
+limits:
+  task_deadline_seconds: 60
+  model_calls_per_task: 4
+  tool_calls_per_task: 8
+  monthly_budget: owner-approved
+</code></pre><p>These are example limits, not universal defaults. Bind each capability to an approved endpoint and resource authorization rule. Credentials, private endpoints, and signing keys belong in the environment’s protected configuration.</p></details>
+
+<h3 id="deploy-step-3">3. Build and evaluate the release candidate</h3>
+<p>CI builds an immutable container image and tests that exact image in a representative staging environment. A source commit alone is insufficient: instructions, model settings, dependencies, tool schemas, and policies can also change behavior.</p>
+<p>Run unit and contract tests first, then integration tests and agent evaluations. Include realistic success cases, incomplete data, unavailable services, adversarial content, unauthorized actions, and recovery. Record quality, cost per completed task, latency distributions, and critical failures separately.</p>
+<details class="guide-detail"><summary>What evidence should CI retain?</summary><ul><li>Image digest, source revision, dependency and instruction digests.</li><li>Model configuration, dataset and evaluator revisions, scenario IDs, sample counts, and repeated-run results.</li><li>Environment and platform versions, allowed and forbidden path results, collection gaps, and outstanding exceptions.</li><li>Build provenance, dependency/security scan results, and the identity of the trusted pipeline that produced them.</li></ul><p>Protect required checks and evaluation datasets from unilateral changes by the agent author. Use deterministic assertions for access denial, approval, duplicate prevention, and schema validity. A model judge can help assess answer quality; it cannot replace those assertions.</p></details>
+<p><strong>Release gate:</strong> meet the agreed absolute targets and the allowed change from the approved baseline. A strong average score cannot cancel a failed mandatory safety check. UAT confirms that the agent fits real work; production release additionally requires verified controls, support, monitoring, and recovery.</p>
+
+<h3 id="deploy-step-4">4. Profile the agent while tests and evaluations run</h3>
+<p>Profiling records what the agent actually attempts: processes it starts, files it accesses, destinations it contacts, models it uses, and tools it calls. Run it in a dedicated Linux test environment with test data and restricted credentials.</p>
+<div data-diagram="deploy-evidence"></div>
+<table><thead><tr><th>Evidence source</th><th>What it contributes</th><th>What it cannot establish</th></tr></thead><tbody>
+<tr><td>Tetragon / eBPF</td><td>Selected process, file, and network events at kernel hooks.</td><td>Every possible execution path, answer quality, or business permission.</td></tr>
+<tr><td>OpenShell</td><td>Sandbox access decisions, denied requests, and effective policy.</td><td>That all allowed operations are appropriate for the business.</td></tr>
+<tr><td>AgentGateway</td><td>Visible model/MCP requests, route decisions, and available usage data.</td><td>Requests that bypass it or protocols it cannot inspect.</td></tr>
+<tr><td>Application / workflow traces</td><td>Task, scenario, tool arguments, results, retries, and approvals.</td><td>Independent confinement of compromised agent code.</td></tr>
+</tbody></table>
+<p>Associate events with the run, scenario, image digest, pod/container identity, and process descendants. Keep evaluator and platform processes out of the agent profile. Record collector health and event loss. A profile with unexplained gaps cannot support a claim that the workload stayed within its boundary.</p>
+<details class="guide-detail"><summary>How much coverage is enough?</summary><p>Exercise startup, normal tasks, each capability, rare error paths, retries, timeouts, cancellation, and malicious inputs. Include the production adapters and representative node types. Unit tests alone often miss real network and filesystem behavior. A finite suite still cannot demonstrate every possible behavior; document coverage and remaining uncertainty.</p><p>Retain raw events in restricted storage. Normalize them with a parser tested against the selected product versions. Avoid putting prompts, documents, secrets, or sensitive arguments into general-purpose logs.</p></details>
+
+<h3 id="deploy-step-5">5. Turn the profile into reviewed policy candidates</h3>
+<p>Compare the profile with the capability request. Automation prepares a narrow policy proposal and highlights differences. It does not decide that every observed operation should be allowed.</p>
+<table><thead><tr><th>Comparison</th><th>Next step</th></tr></thead><tbody>
+<tr><td>Requested and exercised</td><td>Check necessity, scope, and the control that will enforce it.</td></tr>
+<tr><td>Requested but not exercised</td><td>Add coverage or remove unused authority.</td></tr>
+<tr><td>Exercised but not requested</td><td>Investigate an undeclared dependency, defect, or compromise.</td></tr>
+<tr><td>Denied or unclassified</td><td>Keep separate from permission candidates; confirm the intended denial or resolve uncertainty.</td></tr>
+</tbody></table>
+<p><strong>Approved access = business-approved request constrained by organization policy and environment restrictions.</strong> Observations help check that access is sufficient. They never grant it. A blocked request triggered by malicious test input must remain blocked.</p>
+<details class="guide-example"><summary>Example: one profile produces several different artifacts</summary><pre><code># Proposed release layout; filenames are illustrative.
+release/
+  agent-image-digest.txt
+  agent-manifest.yaml
+  evidence/
+    evaluations.json
+    behavior-profile.json
+    policy-diff.json
+    boundary-tests.json
+  policies/
+    tetragon-tracing-policy.yaml
+    openshell-policy.yaml
+    gateway-routes-and-policies.yaml
+    kubernetes-network-policy.yaml
+  deployment/
+    workload.yaml
+    environment-binding.yaml
+  approvals.json
+  release-envelope.json</code></pre><p>The <code>cilium.io</code> API group in a Tetragon policy identifies its Kubernetes resource type. It is not a universal “Cilium file” that also configures OpenShell or AgentGateway. Each product receives its own native configuration from the reviewed permission plan.</p></details>
+<p>Review permission additions more strictly than removals. Do not widen a file into its parent directory, an IP into unrestricted internet access, or a tool name into all tools on the same server. If a required control has no supported implementation, hold the release or select a separately approved alternative.</p>
+
+<h3 id="deploy-step-6">6. Assign each control a clear job</h3>
+<p>The controls protect different parts of execution. The platform owns their installation, compatibility, and effective configuration. Business services retain responsibility for checking which resources and actions the caller may use.</p>
+<div data-diagram="deploy-runtime"></div>
+<details class="guide-detail"><summary>Tetragon: selected kernel observations and tested responses</summary><p>Tetragon uses eBPF to observe selected kernel activity and can enforce through supported hooks/actions. Generate scoped <code>TracingPolicyNamespaced</code> resources from maintained templates, then validate them against the installed CRD and kernel. A generic “kill everything unobserved” rule is not a reliable policy compiler.</p><p>Hook arguments have hook-specific meaning; they are not automatically interpreter command-line arguments. A post-event process kill may occur after a side effect. Where prevention is mandatory, qualify a pre-operation control rather than assuming detection is prevention. Test policy loading and startup behavior on every supported node class.</p><pre><code># Illustrative native observation policy; not an access grant or a blocking rule.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: incident-assistant-connect
+  namespace: agent-staging
+spec:
+  podSelector:
+    matchLabels:
+      platform.example/agent: incident-assistant
+  kprobes:
+    - call: tcp_connect
+      syscall: false
+      args:
+        - index: 0
+          type: sock</code></pre><p>Confirm that this hook exists and that emitted events identify the intended workload. See the <a href="https://tetragon.io/docs/reference/tracing-policy/">Tetragon policy reference</a> and <a href="https://tetragon.io/docs/concepts/runtime-hooks/">runtime-hook documentation</a>.</p></details>
+<details class="guide-detail"><summary>OpenShell: restrict the execution environment</summary><p>OpenShell supplies a supervised sandbox with filesystem and network policy. Resolve the actual runtime paths and supported compute driver. Check the effective policy, including platform and provider contributions, instead of assuming separate configuration files intersect automatically.</p><pre><code># Native policy shape; partial example, not a complete runnable sandbox policy.
+version: 1
+filesystem_policy:
+  include_workdir: false
+  read_only: [/app, /usr, /lib]
+  read_write: [/tmp/agent-scratch]
+network_policies:
+  gateway:
+    endpoints:
+      - host: gateway.internal.example
+        port: 443
+        protocol: tcp
+    binaries:
+      - path: /usr/local/bin/python</code></pre><p>Use the actual interpreter path in the image. Sharing an interpreter does not establish code identity. Qualify filesystem enforcement and network bypass tests; block startup if required kernel protections are unavailable. Startup filesystem settings and live network settings have different update behavior, so test the selected version’s lifecycle.</p><p>Where a policy prover is used, require the relevant modeled domains and a conclusive result. Containment analysis does not prove business correctness or replace live denial tests. Kubernetes support and product maturity need a version-specific adoption decision; earlier repository tests used an experimental deployment path. See the current <a href="https://docs.nvidia.com/openshell/latest/how-it-works/policies/schema">policy schema</a> and <a href="https://docs.nvidia.com/openshell/latest/kubernetes/setup">Kubernetes setup</a>.</p></details>
+<details class="guide-detail"><summary>AgentGateway: authenticate and authorize model and tool traffic</summary><p>Route supported model and MCP requests explicitly through AgentGateway. Configure TLS, authenticated workload identity, permitted models/tools, and backend credentials. A reachable MCP server does not mean every tool it exposes is permitted.</p><p>The native Kubernetes integration uses Gateway API resources plus <code>AgentgatewayPolicy</code> and <code>AgentgatewayBackend</code>. Use their installed schemas; conceptual resource names from early design proposals are not deployable APIs. Test invalid identities, forbidden tools, route bypass, and cross-tenant access.</p><p>Tool-name authorization is one layer. The tool receiver must also validate arguments, resource scope, user delegation, and approvals. Rate limits, model allowlists, content filters, and usage accounting should be enabled only where supported and qualified. A distributed budget service may be needed for hard financial caps. See the <a href="https://agentgateway.dev/docs/kubernetes/latest/reference/api/">AgentGateway API reference</a>.</p></details>
+<details class="guide-detail"><summary>Kubernetes: isolate the workload and block bypass</summary><p>Use nonroot containers, a read-only root filesystem, bounded scratch storage, dropped capabilities, resource limits, and an approved seccomp profile. Deny privileged containers, host mounts, host networking, and unnecessary Kubernetes API access. Platform node agents have a separate administrative trust boundary.</p><p>Apply default-deny networking and narrowly permit the gateway, approved DNS, workflow service, and telemetry collector. The CNI must enforce the policy. Network policies combine additively; review the effective union and test direct IP, DNS, IPv6, and alternate-route bypasses. Network reachability cannot authorize a tool or business resource.</p><p>A separate validating admission service should reject missing controls, untrusted images, wrong policy bindings, and revoked releases. Labels are selectors, not authenticated release identities. Restrict who can edit workload labels and verify the complete binding. See <a href="https://kubernetes.io/docs/concepts/services-networking/network-policies/">Kubernetes network policies</a> and <a href="https://kubernetes.io/docs/concepts/security/pod-security-standards/">Pod Security Standards</a>.</p></details>
+
+<h3 id="deploy-step-7">7. Bind identity, credentials, approvals, and durable execution</h3>
+<p>Give each workload a restricted identity. Validate issuer, audience, expiry, and agent/release scope at the receiving boundary. Carry user identity separately when access depends on the person requesting the task. Never trust identity supplied only in a prompt or editable request field.</p>
+<p>Keep backend credentials outside the agent process where the integration supports it. Assign one credential owner per connection, document any exceptions, and test credential rotation and leakage. A Kubernetes token does not automatically provide a safe exchange for every backend.</p>
+<details class="guide-detail"><summary>Human approval must authorize a specific action</summary><p>Bind approval to the requester, tenant, agent release, policy version, tool, resource, normalized arguments, and expiry. Changed arguments require new approval. The receiver checks authentication, revocation, and one-time consumption before making the change. “The model says approval was granted” is never sufficient.</p></details>
+<details class="guide-detail"><summary>Temporal: resume work without repeating unsafe effects</summary><p>Use Temporal for tasks that need durable progress, waiting for approval, scheduled work, or recovery. Keep external calls in activities and orchestration deterministic. A failed activity may retry and repeat a call; recovery does not guarantee that the external service performed an effect exactly once.</p><p>Use receiver-enforced idempotency keys, bounded retries, timeouts, and explicit cancellation behavior. Authenticate approvals before they reach the workflow. Store large or sensitive payloads in protected storage with controlled references. Replay representative histories before changing workflow behavior, and define which worker release may resume existing runs. See <a href="https://docs.temporal.io/activities">Temporal activity semantics</a>.</p></details>
+
+<h3 id="deploy-step-8">8. Qualify the controls before approving release</h3>
+<p>Run allowed and forbidden paths against the candidate image and policies together. Check the actual effect at the destination and the observed denial at the boundary. An installed resource, green dashboard, or successful policy parse is not sufficient.</p>
+<table><thead><tr><th>Probe</th><th>Required outcome</th></tr></thead><tbody>
+<tr><td>Read an approved runbook / service status</td><td>Succeeds through the approved route with the correct identity.</td></tr>
+<tr><td>Contact a backend directly</td><td>Fails; no backend effect or credential exposure.</td></tr>
+<tr><td>Use a forbidden tool or another tenant’s resource</td><td>Denied by the applicable gateway/receiver controls.</td></tr>
+<tr><td>Read a protected file or write outside scratch space</td><td>Denied by the qualified sandbox boundary.</td></tr>
+<tr><td>Create a ticket without approval, then reuse approval</td><td>No unapproved or duplicate ticket is created.</td></tr>
+<tr><td>Start with a missing mandatory control</td><td>No execution authority or live task intake is granted.</td></tr>
+<tr><td>Revoke a release during a task</td><td>New effects stop within the agreed interval; in-flight outcomes are reconciled.</td></tr>
+</tbody></table>
+<p>Record exact versions and environment details: kernel, node architecture, container runtime, CNI, Tetragon, OpenShell driver, AgentGateway/controller, Temporal, and admission configuration. Include initial failures and retest outcomes. A passing isolated fixture is evidence for that fixture, not for every agent or the full composed system.</p>
+
+<h3 id="deploy-step-9">9. Release through CI and GitOps</h3>
+<p>Azure DevOps Pipelines creates and checks the candidate. Independent reviewers approve the release bundle and any permission changes. Argo CD reconciles the approved desired state from the deployment repository. Keep deployment authority separate from the agent author’s ability to change source.</p>
+<ol><li><strong>Build:</strong> immutable image, provenance, scans, tests, evaluations.</li><li><strong>Profile and propose:</strong> scoped observations, coverage gaps, native policy candidates, readable permission diff.</li><li><strong>Qualify and approve:</strong> policy validation, live boundary tests, UAT, operational readiness, and risk approval.</li><li><strong>Publish:</strong> trusted signed release envelope and reviewed GitOps change, bound to the target environment.</li><li><strong>Establish controls:</strong> routes, identity, sandbox, network and kernel policies; verify effective versions and readiness.</li><li><strong>Activate gradually:</strong> limited task intake, observed canary, then expansion if release criteria remain satisfied.</li></ol>
+<details class="guide-detail"><summary>Ordering helps; independent readiness checks make it safe</summary><p>Argo CD sync waves can order resources. A synced or healthy Kubernetes object does not prove that every node loaded its policy or that a gateway is enforcing it. Keep the workload inactive or unable to receive live tasks until the release controller verifies mandatory controls and the matching policy version.</p><p>Azure resource approvals/checks should be administered outside the editable pipeline YAML. Verify signer identity, artifact digests, evidence freshness, environment, approval scope, and revocation status. Hashes alone are not trusted signatures. See <a href="https://learn.microsoft.com/en-us/azure/devops/pipelines/process/approvals?view=azure-devops">Azure Pipelines approvals and checks</a> and <a href="https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/">Argo CD sync waves</a>.</p></details>
+<details class="guide-example"><summary>What is approved and promoted together?</summary><pre><code># Proposed release envelope; placeholders are not valid signatures/digests.
+release: incident-assistant/release-42
+image_digest: sha256:IMAGE
+manifest_digest: sha256:MANIFEST
+policy_set_digest: sha256:POLICIES
+evidence_digest: sha256:EVIDENCE
+platform_profile: qualified-profile-id
+environment: production
+policy_epoch: 42
+approvals: [business-owner, platform-owner, risk-reviewer]
+activation: withheld-until-controls-verified</code></pre><p>Promote the evaluated image rather than rebuilding it for production. Environment bindings may change; validate those changes and rerun affected qualifications. Model, prompt, tool schema, policy, and runtime changes can all invalidate relevant evidence.</p></details>
+
+<h3 id="deploy-step-10">10. Monitor outcomes and the effective controls</h3>
+<p>Use OpenTelemetry to connect task, workflow, gateway, and tool spans. Correlate kernel/sandbox events using release and workload identity; do not assume they share a trace automatically. Central teams need fleet and boundary health; business teams need outcomes and impacts for their own agents.</p>
+<table><thead><tr><th>View</th><th>Useful signals</th><th>Response owner</th></tr></thead><tbody>
+<tr><td>Business outcome</td><td>Completion, human corrections, approval wait, bad advice/action reports.</td><td>Business + agent owner</td></tr>
+<tr><td>Service health</td><td>Latency percentiles, failed tasks, queue age, retries, dependency outages.</td><td>Operations</td></tr>
+<tr><td>Cost</td><td>Spend per successful task, tokens, tool calls, budget consumption.</td><td>Business + platform</td></tr>
+<tr><td>Control health</td><td>Policy version mismatch, collector loss, rejected identities, unexpected access, revocation lag.</td><td>Platform + security</td></tr>
+</tbody></table>
+<p>Every alert needs an owner, threshold, and next action. Expected denials in adversarial tests should be identifiable; unusual production denials require investigation. Never relax permissions automatically to reduce alert volume.</p>
+<details class="guide-detail"><summary>Catalog, privacy, and feedback</summary><p>Publish agent owner, business function, risk tier, release/image/policy identifiers, evidence links, approvals, data classification, runbook, and active/revoked state in a central catalog. Keep desired and observed state separate. Restrict business views by tenant/function and protect sensitive evidence.</p><p>Redact secrets and personal data before export. Define retention, access, sampling, and deletion. Keep reliable audit records for approvals and effects even if ordinary traces are sampled. Turn production failures into regression cases; run periodic holdout evaluations and requalify controls after relevant platform changes.</p><p><a href="https://opentelemetry.io/docs/concepts/signals/">OpenTelemetry signals</a> provide the observability building blocks; the correlation and governance design belongs to the platform.</p></details>
+
+<h3 id="deploy-step-11">11. Stop, recover, and retire the agent</h3>
+<p>A kill switch withdraws authority to act, not just the running process. Scope it to a task, agent release, tenant, or wider service. Define who may use it and how quickly every relevant boundary must acknowledge revocation.</p>
+<ol><li>Stop new task intake and revoke action/approval authority at gateways and receivers.</li><li>Cancel workflow work and stop or isolate sandboxes/workloads as appropriate.</li><li>Reconcile in-flight requests and effects; record what succeeded, failed, or remains uncertain.</li><li>Recover only to a still-approved release and policy set. Confirm resumed workflows remain compatible.</li><li>Preserve evidence and add regression cases before reactivation.</li></ol>
+<p>Process termination cannot undo a ticket, payment, or message already sent. Define compensation and manual recovery for each meaningful effect. If a revocation service is unavailable, high-consequence receivers should reject new effects rather than accept stale authority indefinitely.</p>
+<details class="guide-detail"><summary>Retirement checklist</summary><p>Drain or cancel workflows; revoke identities and approvals; remove routes, credentials, and scheduled triggers; retire catalog state; retain required audit evidence; delete data according to retention policy. Verify that the retired agent cannot still reach a backend through an old worker, token, or route.</p></details>
+
+<h3 id="deploy-step-12">12. Walkthrough: read status and create an approved ticket</h3>
+<p><strong>Task:</strong> read the approved runbooks and current service status, propose an incident ticket, then create it only after an authorized person approves the exact proposal. The agent may not restart services or change production configuration.</p>
+<table><thead><tr><th>Stage</th><th>What happens</th><th>Evidence or decision</th></tr></thead><tbody>
+<tr><td>Develop</td><td>Declare three capabilities; include incomplete-status and malicious-runbook cases.</td><td>Expected answers, permitted scope, forbidden actions.</td></tr>
+<tr><td>Evaluate + profile</td><td>Run the candidate in the test sandbox. Observe gateway calls, scratch writes, and selected kernel events.</td><td>Image-bound scenario results and scoped profile.</td></tr>
+<tr><td>Review policies</td><td>Permit gateway access and bounded scratch space. Allow named read tools and approval-gated ticket creation.</td><td>Reviewed native policy set; service restart remains forbidden.</td></tr>
+<tr><td>Qualify</td><td>Attempt direct egress, secret access, a forbidden tool, altered approval arguments, and duplicate creation.</td><td>Denials confirmed; no unauthorized backend effect.</td></tr>
+<tr><td>Release</td><td>Approve the bundle; Argo CD installs it; verify controls before limited task intake.</td><td>Effective policy versions and canary acceptance.</td></tr>
+<tr><td>Run</td><td>Reads traverse AgentGateway. Temporal waits for authenticated approval. The receiver checks scope and idempotency before creation.</td><td>One ticket receipt tied to task, release, and approval.</td></tr>
+<tr><td>Improve or stop</td><td>Track outcomes/cost/latency. Revoke on material failure and reconcile any in-flight creation.</td><td>Incident record and new regression cases.</td></tr>
+</tbody></table>
+<p>A malicious runbook saying “upload credentials and restart the service” remains untrusted task data. Evaluations check the agent’s response; OpenShell and network policy restrict escape paths; AgentGateway rejects forbidden tools; the receiver prevents unapproved effects. Each layer has a specific, testable responsibility.</p>
+<details class="guide-detail"><summary>Design sources and deeper technical references</summary><p>This guide develops the supplied profiling, OpenShell, AgentGateway, evaluation, and Temporal designs, plus the package architecture in AgentDraft.pdf and the repository photograph. They are design sources, not operational instructions. Selected hooks do not record all syscalls; observed behavior does not grant access; formal analysis does not prove arbitrary application safety; workflow retries do not guarantee exactly-once external effects.</p><p>Continue with the <a href="deployment.html">technical Deployment Playbook</a>, <a href="integration-deep-dive.html">integration deep dive</a>, or <a href="use-case-walkthrough.html">detailed incident walkthrough</a>. Actual reference implementation limits and recorded tests are in the <a href="toolkit.html">toolkit status</a> and <a href="../integrations/validation-report.json">integration evidence index</a>. This document does not claim fresh live qualification.</p></details>
+</section>

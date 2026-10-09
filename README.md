@@ -8,6 +8,7 @@ For more detail, read the [complete HTML playbook](docs/index.html), or choose a
 
 - [Agent Strategy](docs/strategy.html) — business outcomes, success measures, a unified lifecycle and platform operating model.
 - [Agent Developer Playbook](docs/developer.html) — package structure, typed factories, evaluations, security and developer tools.
+- [Agent Deployment Guide](docs/deployment-guide.html) — a guided draft from development evidence and profiling to reviewed policies, CI/CD, monitoring and revocation.
 - [Agent Deployment Playbook](docs/deployment.html) — Kubernetes, Temporal, Tetragon/eBPF, OpenShell, agentgateway and telemetry.
 - [Risk, Governance & Oversight](docs/governance.html) — risk tiers, evidence, catalog/CD, kill switches and federated monitoring.
 - [Toolkit guide](docs/toolkit.html) — runnable commands, examples and implementation boundaries.

@@ -6,6 +6,7 @@ import re
 from html import escape
 from pathlib import Path
 
+from deployment_diagrams import diagram as deployment_diagram
 from lifecycle_diagrams import lifecycle_diagram
 from technical_diagrams import technical_diagram
 
@@ -48,6 +49,11 @@ CHAPTERS = [
         "lifecycle-guide",
         "Agent Developer Guide",
         "A practical playbook for building, testing, improving and operating an agent",
+    ),
+    (
+        "deployment-guide",
+        "Agent Deployment Guide",
+        "From development evidence to reviewed policies, release and operation",
     ),
 ]
 COLORS = {
@@ -534,7 +540,13 @@ def hero_svg():
 
 def augment(fragment):
     fragment = re.sub(
-        r'<div data-diagram="([^"]+)"></div>', lambda m: diagram(m.group(1)), fragment
+        r'<div data-diagram="([^"]+)"></div>',
+        lambda m: (
+            deployment_diagram(m.group(1))
+            if m.group(1).startswith("deploy-")
+            else diagram(m.group(1))
+        ),
+        fragment,
     )
     fragment = re.sub(
         r"<table>(.*?)</table>",
@@ -553,9 +565,29 @@ def augment(fragment):
     return re.sub(r"<h3([^>]*)>(.*?)</h3>", heading, fragment, flags=re.S)
 
 
-def developer_guide_shell(title, lead, fragment):
+def developer_guide_shell(title, lead, fragment, deployment=False):
     body = augment(fragment)
-    steps = re.findall(r'<h3[^>]*id="(dlc-step-\d+)"[^>]*>(.*?)</h3>', body, re.S)
+    prefix = "deploy-step" if deployment else "dlc-step"
+    groups = (
+        (("Prepare", 0, 3), ("Profile + protect", 3, 8), ("Release + operate", 8, 12))
+        if deployment
+        else (("Build", 0, 4), ("Validate", 4, 7), ("Operate", 7, 9))
+    )
+    root = "deployment-guide" if deployment else "lifecycle-guide"
+    brand = "DEPLOYMENT" if deployment else "DEVELOPER"
+    subtitle = "From evidence to operation" if deployment else "From idea to operation"
+    audience = "Platform playbook" if deployment else "Developer playbook"
+    note = (
+        "Reviewed policies · verified controls"
+        if deployment
+        else "Practical steps · framework neutral"
+    )
+    footer_note = (
+        "Draft for review. Native configuration examples need version-specific qualification before production use."
+        if deployment
+        else "Use the examples as a starting point. Choose checks and limits that match your task, data and connected services."
+    )
+    steps = re.findall(rf'<h3[^>]*id="({prefix}-\d+)"[^>]*>(.*?)</h3>', body, re.S)
     links = []
     for index, (ident, heading) in enumerate(steps, 1):
         text = re.sub(r"^\d+\.\s*", "", re.sub("<[^>]+>", "", heading))
@@ -567,10 +599,10 @@ def developer_guide_shell(title, lead, fragment):
         f'<div class="nav-section"><p class="nav-group">{label}</p>'
         + "".join(links[start:end])
         + "</div>"
-        for label, start, end in (("Build", 0, 4), ("Validate", 4, 7), ("Operate", 7, 9))
+        for label, start, end in groups
     )
     # Give each reading step a semantic section without changing source prose.
-    matches = list(re.finditer(r'<h3[^>]*id="(dlc-step-\d+)"[^>]*>', body))
+    matches = list(re.finditer(rf'<h3[^>]*id="({prefix}-\d+)"[^>]*>', body))
     if matches:
         pieces = [body[: matches[0].start()]]
         for index, match in enumerate(matches):
@@ -591,20 +623,20 @@ def developer_guide_shell(title, lead, fragment):
 <a href="#main" class="guide-skip">Skip to content</a>
 <div class="reading-progress" aria-hidden="true"><span></span></div>
 <button class="mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">Contents</button>
-<aside class="sidebar guide-nav" aria-label="Developer guide navigation">
-<a class="brand" href="#lifecycle-guide">AGENT<br>DEVELOPER GUIDE</a>
-<p class="brand-sub">From idea to operation</p>
-<div class="edition">Developer playbook<br><strong>Practical steps · framework neutral</strong><br>09 October 2026</div>
+<aside class="sidebar guide-nav" aria-label="{brand.title()} guide navigation">
+<a class="brand" href="#{root}">AGENT<br>{brand} GUIDE</a>
+<p class="brand-sub">{subtitle}</p>
+<div class="edition">{audience}<br><strong>{note}</strong><br>09 October 2026</div>
 <label class="nav-label" for="nav-search">Find a step</label>
 <input id="nav-search" type="search" placeholder="Filter steps"><nav>{nav}</nav>
-<p id="reading-position" class="reading-position">STEP 01 / 09</p>
+<p id="reading-position" class="reading-position">STEP 01 / {len(steps):02}</p>
 <button class="detail-toggle" aria-expanded="false">Expand all details</button>
 <button class="print">Print / Save as PDF</button>
 <p class="note">Select a step to navigate. Expand examples and figure notes for more detail. Works offline.</p></aside>
 <main id="main"><h1 class="guide-document-title">{escape(title)}</h1>
 <article class="content guide-content">{body}</article>
-<footer class="foot"><strong>Agent Developer Guide</strong> · 09 October 2026<br>
-Use the examples as a starting point. Choose checks and limits that match your task, data and connected services.</footer></main>
+<footer class="foot"><strong>{escape(title)}</strong> · 09 October 2026<br>
+{footer_note}</footer></main>
 <script>{JS}\n{GUIDE_JS}</script></body></html>'''
 
 
@@ -617,6 +649,8 @@ def shell(title, lead, fragments, combined=False):
         current.add(match.group(1))
     if current == {"lifecycle-guide"}:
         return developer_guide_shell(title, lead, fragments[0])
+    if current == {"deployment-guide"}:
+        return developer_guide_shell(title, lead, fragments[0], deployment=True)
     start_href = "#lifecycle-guide" if "lifecycle-guide" in current else "lifecycle-guide.html"
     nav = (
         f'<a class="start-here" href="{start_href}">Start here: Agent developer guide</a>'

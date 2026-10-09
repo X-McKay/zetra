@@ -27,6 +27,26 @@ const root=path.resolve(__dirname,'..');
     await page.locator('.boundary-widget').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(out,'boundary-desktop.png')});
     await page.locator('.boundary-widget button').nth(2).click();const msg=await page.locator('.boundary-detail').innerText();if(!msg.includes('gateway authenticates'))failures.push('Boundary controls not responding');
    }
+   if(name==='deployment-guide'){
+    if(await page.locator('.guide-step').count()!==12)failures.push('Deployment guide must have twelve steps');
+    if(size.name==='mobile')await page.locator('.mobile-toggle').click();
+    await page.locator('#nav-search').fill('profile');
+    if(await page.locator('.guide-nav nav a:visible').count()!==2)failures.push('Deployment guide navigation filter failed');
+    await page.locator('#nav-search').fill('');
+    await page.locator('.detail-toggle').click();
+    if(await page.locator('.guide-detail:not([open]),.guide-example:not([open])').count())failures.push('Deployment guide expand-all failed');
+    await page.locator('.detail-toggle').click();
+    await page.locator('.guide-nav a[href="#deploy-step-6"]').click();
+    await page.waitForFunction(()=>document.querySelector('.guide-nav a[href="#deploy-step-6"]')?.getAttribute('aria-current')==='step');
+    if(!await page.locator('#reading-position').innerText().then(t=>t.endsWith('/ 12')))failures.push('Deployment guide step count incorrect');
+    const first=page.locator('.guide-step[aria-labelledby="deploy-step-6"] details').first();
+    await first.locator('summary').press('Enter');
+    if(!await first.evaluate(e=>e.open))failures.push('Deployment guide keyboard disclosure failed');
+    await first.locator('summary').press('Enter');
+    await page.screenshot({path:path.join(out,`deployment-runtime-${size.name}.png`)});
+    await page.evaluate(()=>{window.scrollTo({top:0,behavior:'instant'});document.querySelector('.sidebar').scrollTop=0;});
+    await page.screenshot({path:path.join(out,`deployment-guide-${size.name}.png`)});
+   }
    if(name==='lifecycle-guide'){
     if(await page.locator('.guide-hero,.guide-content>.toc').count())failures.push('Guide still has introductory content above step 1');
     if(!await page.locator('#dlc-step-1').innerText().then(t=>t.includes('Defining the problem before you build')))failures.push('Guide first-step title is incorrect');
@@ -82,7 +102,7 @@ const root=path.resolve(__dirname,'..');
   await page.close();
  }
  await browser.close();
- const report={checkedAt:new Date().toISOString(),status:failures.length?'failed':'passed',checks:['desktop/mobile rendered pages','body overflow','SVG text bounds','browser errors','inline assets','boundary interaction','mobile navigation','guide figure rendering and reading navigation','optional examples with keyboard','expand/collapse all details','repository and figure disclosures','brief selection with keyboard','guide starts at step 1'],results,failures};
+ const report={checkedAt:new Date().toISOString(),status:failures.length?'failed':'passed',checks:['desktop/mobile rendered pages','body overflow','SVG text bounds','browser errors','inline assets','boundary interaction','mobile navigation','guide figure rendering and reading navigation','optional examples with keyboard','expand/collapse all details','repository and figure disclosures','brief selection with keyboard','guide starts at step 1','deployment guide navigation and keyboard disclosures'],results,failures};
  fs.writeFileSync(path.join(root,'docs/research/document-qa.json'),JSON.stringify(report,null,2)+'\n');
  console.log(JSON.stringify({status:report.status,pages:results.length,failures}));if(failures.length)process.exitCode=1;
 })().catch(e=>{console.error(e);process.exitCode=1});
