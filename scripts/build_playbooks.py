@@ -52,8 +52,8 @@ CHAPTERS = [
     ),
     (
         "deployment-guide",
-        "Agent Deployment Guide",
-        "From development evidence to reviewed policies, release and operation",
+        "Zero-Trust Agent Deployment Specification",
+        "Automated CI, policy generation, artifact binding and verified Kubernetes activation",
     ),
 ]
 COLORS = {
@@ -569,19 +569,16 @@ def developer_guide_shell(title, lead, fragment, deployment=False):
     body = augment(fragment)
     prefix = "deploy-step" if deployment else "dlc-step"
     groups = (
-        (("Prepare", 0, 3), ("Profile + protect", 3, 8), ("Release + operate", 8, 12))
+        (("Build + qualify", 0, 5), ("Publish + deploy", 5, 9), ("Operate + verify", 9, 12))
         if deployment
         else (("Build", 0, 4), ("Validate", 4, 7), ("Operate", 7, 9))
     )
     root = "deployment-guide" if deployment else "lifecycle-guide"
     brand = "DEPLOYMENT" if deployment else "DEVELOPER"
-    subtitle = "From evidence to operation" if deployment else "From idea to operation"
-    audience = "Platform playbook" if deployment else "Developer playbook"
-    note = (
-        "Reviewed policies · verified controls"
-        if deployment
-        else "Practical steps · framework neutral"
-    )
+    brand_title = "DEPLOYMENT<br>SPECIFICATION" if deployment else "DEVELOPER GUIDE"
+    subtitle = "Automated zero-trust lifecycle" if deployment else "From idea to operation"
+    audience = "Architecture specification" if deployment else "Developer playbook"
+    note = "Draft for technical review" if deployment else "Practical steps · framework neutral"
     footer_note = (
         "Draft for review. Native configuration examples need version-specific qualification before production use."
         if deployment
@@ -624,7 +621,7 @@ def developer_guide_shell(title, lead, fragment, deployment=False):
 <div class="reading-progress" aria-hidden="true"><span></span></div>
 <button class="mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">Contents</button>
 <aside class="sidebar guide-nav" aria-label="{brand.title()} guide navigation">
-<a class="brand" href="#{root}">AGENT<br>{brand} GUIDE</a>
+<a class="brand" href="#{root}">AGENT<br>{brand_title}</a>
 <p class="brand-sub">{subtitle}</p>
 <div class="edition">{audience}<br><strong>{note}</strong><br>09 October 2026</div>
 <label class="nav-label" for="nav-search">Find a step</label>

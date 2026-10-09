@@ -17,3 +17,9 @@
 .guide-theme #deployment-guide h3{font-size:clamp(25px,2.5vw,32px);line-height:1.25;margin-top:0;padding-top:25px;border-top:2px solid #222}
 .guide-theme #deployment-guide .guide-step:first-of-type h3{border-top:0;padding-top:20px}
 @media(max-width:760px){.guide-theme #deployment-guide h3{scroll-margin-top:80px;font-size:25px}.guide-theme #deployment-guide .diagram-title:after{display:inline}}
+/* Deployment specification: editorial emphasis, restrained control accents. */
+.guide-theme #deployment-guide .spec-lead{font-size:19px;line-height:1.6;max-width:950px}
+.guide-theme #deployment-guide .spec-rule{border-left:3px solid #e34420;background:#f8f4ef;padding:16px 20px;margin:24px 0;font-size:14px}
+.guide-theme #deployment-guide .spec-rule strong{color:#ae3214}
+.guide-theme #deployment-guide .guide-step{padding-top:30px}
+@media(max-width:760px){.guide-theme #deployment-guide .spec-lead{font-size:17px}.guide-theme #deployment-guide .spec-rule{padding:14px;font-size:13px}}

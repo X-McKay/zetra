@@ -10,7 +10,99 @@ def text(x, y, value, size=16, color="#27252b", weight=400):
 def diagram(key):
     purple, orange, gray = "#71509c", "#ce692c", "#77747b"
     body = ""
-    if key == "deploy-lifecycle":
+    if key == "deploy-sequence":
+        title, height = "The deployment sequence: artifacts first, authority last", 525
+        for x, label, sub in [
+            (65, "Azure Repos", "Source + GitOps"),
+            (285, "Azure Pipelines", "Trusted CI"),
+            (535, "ACR", "Images + bundles"),
+            (790, "Argo CD", "Kubernetes reconciliation"),
+        ]:
+            body += text(x - 40, 30, label, 17, purple, 700) + text(x - 40, 54, sub, 14, gray)
+            body += f'<path d="M{x} 75V451" stroke="#dedbd7" stroke-dasharray="3 5"/>'
+
+        def transfer(x1, x2, y, label, color=purple):
+            end = x2 - 8 if x2 > x1 else x2 + 8
+            tip = (
+                f"{end - 7},{y - 4} {end},{y} {end - 7},{y + 4}"
+                if x2 > x1
+                else f"{end + 7},{y - 4} {end},{y} {end + 7},{y + 4}"
+            )
+            return (
+                f'<path d="M{x1} {y}H{end}" stroke="{color}" stroke-width="2"/><polyline points="{tip}" fill="none" stroke="{color}" stroke-width="2"/>'
+                + text(min(x1, x2) + 12, y - 12, label, 14, color)
+            )
+
+        body += transfer(65, 285, 111, "1 Push → validate")
+        body += transfer(285, 535, 176, "2 Publish candidate image")
+        body += '<path d="M285 215C365 215 365 256 285 256" fill="none" stroke="#71509c" stroke-width="2"/>'
+        body += text(382, 235, "3 Evaluate + profile", 17, purple, 700) + text(
+            382, 258, "Compile + qualify policies", 14
+        )
+        body += transfer(285, 535, 310, "4 Seal + store bundle")
+        body += transfer(285, 65, 380, "5 Approved GitOps merge", orange)
+        body += transfer(
+            65,
+            790,
+            426,
+            "6 Argo detects desired state; installs bound policies and workload",
+            orange,
+        )
+        body += text(
+            370, 485, "7 Verify effective controls → canary → live authority", 17, orange, 700
+        )
+        caption = "ACR receives the candidate image before profiling. Only the approved GitOps merge triggers production reconciliation; runtime verification precedes activation."
+    elif key == "deploy-artifacts":
+        title, height = "One release identity binds the artifacts and their consumers", 420
+        for x, y, label, sub in [
+            (32, 62, "Image · ACR", "Immutable container digest"),
+            (32, 285, "Evidence · object storage", "Versioned private records"),
+            (655, 62, "Policies · ACR bundle", "Native configuration digests"),
+            (655, 285, "Environment binding", "Identity + routes + runtime profile"),
+        ]:
+            body += text(x, y, label, 17, purple, 700) + text(x, y + 25, sub, 14)
+        body += '<path d="M275 82L425 188 M275 290L425 222 M525 188L645 82 M525 222L645 290" fill="none" stroke="#b9a4d3" stroke-width="2"/>'
+        body += (
+            '<circle cx="475" cy="205" r="57" fill="#f0eaf6" stroke="#71509c" stroke-width="2"/>'
+        )
+        body += text(436, 200, "Release", 18, purple, 700) + text(
+            436, 223, "digest", 18, purple, 700
+        )
+        body += text(40, 181, "Approval record", 17, orange, 700) + text(
+            40, 204, "Bundle + environment scope", 14
+        )
+        body += '<path d="M285 199H408 M542 205H649" stroke="#ce692c" stroke-width="2"/>'
+        body += text(660, 191, "GitOps projection", 17, orange, 700) + text(
+            660, 216, "Exact files + digest checks", 14
+        )
+        body += '<path d="M475 262V328" stroke="#71509c"/>'
+        body += text(344, 356, "Agent catalog indexes this release", 17, purple, 700)
+        body += text(344, 382, "It does not replace the artifact or approval store.", 14)
+        caption = "Store payloads once, address immutable versions, and carry the same release identity through approval, GitOps, policy loading, and runtime events."
+    elif key == "deploy-states":
+        title, height = "Release state advances only on recorded evidence", 215
+        labels = [
+            (40, "Candidate", "CI inputs valid"),
+            (208, "Qualified", "Tests + controls pass"),
+            (382, "Approved", "Scoped release approval"),
+            (583, "Staged", "Installed; no live work"),
+            (777, "Active", "Canary accepted"),
+        ]
+        body += '<path d="M40 81H822" stroke="#b9a4d3" stroke-width="2"/>'
+        for x, label, sub in labels:
+            body += f'<circle cx="{x}" cy="81" r="5" fill="{purple}"/>'
+            body += text(x - 10, 54, label, 17, purple, 700) + text(x - 10, 116, sub, 14)
+        body += '<path d="M40 145H822" stroke="#ce692c" stroke-dasharray="3 5"/>'
+        body += text(
+            135,
+            181,
+            "Failed or revoked: withhold authority, preserve evidence, reconcile effects.",
+            16,
+            orange,
+            700,
+        )
+        caption = "A published or installed release is not yet active. Revocation is independent of GitOps reconciliation and prevents automatic reactivation."
+    elif key == "deploy-lifecycle":
         title, height = "Two paths, one reviewed release", 360
         body += text(28, 34, "DEVELOPMENT", 14, purple, 700)
         body += text(28, 191, "DEPLOYMENT", 14, orange, 700)

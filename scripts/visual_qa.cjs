@@ -31,7 +31,7 @@ const root=path.resolve(__dirname,'..');
     if(await page.locator('.guide-step').count()!==12)failures.push('Deployment guide must have twelve steps');
     if(size.name==='mobile')await page.locator('.mobile-toggle').click();
     await page.locator('#nav-search').fill('profile');
-    if(await page.locator('.guide-nav nav a:visible').count()!==2)failures.push('Deployment guide navigation filter failed');
+    if(await page.locator('.guide-nav nav a:visible').count()!==1)failures.push('Deployment specification navigation filter failed');
     await page.locator('#nav-search').fill('');
     await page.locator('.detail-toggle').click();
     if(await page.locator('.guide-detail:not([open]),.guide-example:not([open])').count())failures.push('Deployment guide expand-all failed');
