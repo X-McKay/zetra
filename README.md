@@ -32,10 +32,10 @@ Edit `docs/chapters/*.html`, `docs/research/source-review.html` and `docs/assets
 
 ```bash
 just docs
-uv run --locked python -m http.server 8765 --directory docs --bind 127.0.0.1
+just preview
 ```
 
-Open `http://127.0.0.1:8765/` for the complete playbook. Generated standalone documents stay committed so readers do not need Python. The renderer embeds CSS, JavaScript and accessible SVG directly into each file.
+Open `http://127.0.0.1:8765/docs/` for the complete playbook. The loopback preview serves Git-tracked public files, including linked integration evidence, and rejects local tooling/credential paths and directory listings. Generated standalone documents stay committed so readers do not need Python. The renderer embeds CSS, JavaScript and accessible SVG directly into each file.
 
 ## Implementation status
 

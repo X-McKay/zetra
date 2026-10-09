@@ -173,5 +173,15 @@
     "documentCount": 7,
     "prekAllTrackedFiles": "passed: all six hooks, including finalized integration files",
     "githubCI": "Configured; not yet executed when this pre-publication report was recorded"
+  },
+  "initialGitHubCI": {
+    "commit": "2737ec22de94308438f8ed8beffbc4de830453d2",
+    "status": "passed",
+    "run": "https://github.com/X-McKay/zetra/actions/runs/37865200463",
+    "jobs": [
+      "nix",
+      "toolkit (3.11.16)",
+      "toolkit (3.12.13)"
+    ]
   }
 }

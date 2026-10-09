@@ -1,0 +1,19 @@
+{
+  "status": "passed",
+  "checkedAt": "2026-10-09T00:35:20.385848+00:00",
+  "scope": "Loopback documentation preview routes; not production HTTP service qualification",
+  "scriptSha256": "56299baf2135b032feea3aa5d3df1090d67bdb6bb0b71a75cb84285d3d47315a",
+  "checks": {
+    "playbook": true,
+    "integration-report": true,
+    "deployment-guide": true,
+    "private-local-tooling-denied": true,
+    "git-config-denied": true,
+    "directory-listing-denied": true,
+    "encoded-traversal-denied": true
+  },
+  "notQualified": [
+    "Production authentication, TLS or denial-of-service resistance"
+  ],
+  "portTested": 8766
+}

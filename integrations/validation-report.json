@@ -8,7 +8,7 @@
     {
       "component": "contributor-tooling",
       "report": "docs/research/tooling-validation.json",
-      "sha256": "e1ece934fb9a573b44cb7974e0e42cf31dbdbcbfee9d4311f72be4c75d10f5cd",
+      "sha256": "e88b475b82718d24d86a470f7f998ff7473c99efa922381dc6f327c515bf5343",
       "status": "passed",
       "scope": "Local contributor tooling on Apple Silicon macOS; not production qualification or a GitHub workflow execution",
       "checkCount": 11,
@@ -26,6 +26,17 @@
       "scope": [],
       "checkCount": 6,
       "openControls": []
+    },
+    {
+      "component": "document-preview",
+      "report": "docs/research/preview-validation.json",
+      "sha256": "f1c1c91ca5a9d1822994542b27d93cf9d344a9cc132c416ad690d103d69b0ba8",
+      "status": "passed",
+      "scope": "Loopback documentation preview routes; not production HTTP service qualification",
+      "checkCount": 7,
+      "openControls": [
+        "Production authentication, TLS or denial-of-service resistance"
+      ]
     },
     {
       "component": "kernel-and-network",

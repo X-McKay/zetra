@@ -53,6 +53,10 @@ docs:
     uv run --locked python scripts/build_playbooks.py
     uv run --locked python scripts/check_docs.py
 
+# Preview public tracked documents and linked evidence on loopback only.
+preview:
+    uv run --locked python scripts/serve_docs.py
+
 # Validate source contracts and evaluate each executable example.
 examples:
     uv run --locked zetra check examples/knowledge
