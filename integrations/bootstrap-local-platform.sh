@@ -136,12 +136,13 @@ fi
 
 # Keep live API preflight enabled. These auth/AppArmor/userns settings are lab
 # accommodations, not production recommendations; TLS and mTLS remain enabled.
+# The pinned driver injects the workload bootstrap and creates a separate
+# supervisor pod. supervisor.sideloadMethod is not a chart setting in 0.1.2.
 ensure_release openshell zetra-openshell helm-chart-0.1.2 "$zetra_cache/helm-chart-0.1.2.tgz" \
   --set agentSandbox.preflight.enabled=true --set server.tls.enableMtls=true \
   --set server.auth.allowUnauthenticatedUsers=true --set server.enableUserNamespaces=false \
-  --set server.appArmorProfile=Unconfined --set server.telemetryEnabled=false \
-  --set supervisor.sideloadMethod=init-container
-assert_values openshell zetra-openshell '{"agentSandbox.preflight.enabled":true,"server.tls.enableMtls":true,"server.auth.allowUnauthenticatedUsers":true,"server.enableUserNamespaces":false,"server.appArmorProfile":"Unconfined","server.telemetryEnabled":false,"supervisor.sideloadMethod":"init-container"}'
+  --set server.appArmorProfile=Unconfined --set server.telemetryEnabled=false
+assert_values openshell zetra-openshell '{"agentSandbox.preflight.enabled":true,"server.tls.enableMtls":true,"server.auth.allowUnauthenticatedUsers":true,"server.enableUserNamespaces":false,"server.appArmorProfile":"Unconfined","server.telemetryEnabled":false}'
 "${zetra_kubectl[@]}" -n zetra-openshell rollout status statefulset/openshell --timeout=120s
 
 mkdir -p "$zetra_root/integrations/evidence"

@@ -9,7 +9,11 @@ Start with the [complete HTML playbook](docs/index.html), or choose an audience:
 - [Agent Deployment Playbook](docs/deployment.html) — Kubernetes, Temporal, Tetragon/eBPF, OpenShell, agentgateway and telemetry.
 - [Risk, Governance & Oversight](docs/governance.html) — risk tiers, evidence, catalog/CD, kill switches and federated monitoring.
 - [Toolkit guide](docs/toolkit.html) — runnable commands, examples and implementation boundaries.
+- [Integration deep dive](docs/integration-deep-dive.html) — practical adapter contracts, credential ownership, native configuration and qualification gates for technical leaders.
+- [Incident triage walkthrough](docs/use-case-walkthrough.html) — one continuous run from runbook/status reads to an approved ticket, retry and stop.
 - [Source review](docs/source-review.html) — all seven supplied sources, technical corrections and upstream references.
+
+For a technical consensus review, read the integration deep dive first, then follow the incident walkthrough and run `just incident-triage`. Its deterministic fixture creates one ticket in a temporary SQLite database, shows the matching proposal/grant/receipt, and verifies retry and stop behavior. Production composition and qualification requirements are explicitly marked.
 
 The HTML documents are self-contained, responsive and printable, with local SVG diagrams, navigable contents and copyable code. No CDN or build service is needed to read them.
 
@@ -22,9 +26,10 @@ just bootstrap
 just check
 uv run --locked zetra run examples/knowledge --input '{"key":"zetra"}'
 uv run --locked python examples/action/demo.py
+just incident-triage
 ```
 
-Python 3.11+ is required. Three reference agents cover offline knowledge, approved actions and a restricted gateway read. Local scenario suites run without model API keys. `check` is static; `eval` and `run` execute trusted project code. The action example demonstrates atomic approval consumption and idempotency at a local SQLite receiver. Production authentication and confinement belong outside the agent process.
+Python 3.11+ is required. Four reference agents cover offline knowledge, approved actions, a restricted gateway read and incident triage. Local scenario suites run without model API keys. `check` is static; `eval` and `run` execute trusted project code. The action example demonstrates atomic approval consumption and idempotency at a local SQLite receiver. Production authentication and confinement belong outside the agent process.
 
 ## Documentation
 
@@ -50,6 +55,7 @@ src/zetra/          CLI, manifest, analysis, evidence, runtime and adapters
 examples/knowledge Read-only deterministic agent + executable scenarios
 examples/action    Approval-gated action + atomic receiver/idempotency
 examples/gateway-read Restricted MCP client + gateway scenarios
+examples/incident-triage Runbook/status → exact approval → ticket/retry/stop
 schemas/           Manifest wire contract
 integrations/      Local kind environment, live fixtures and evidence
 scripts/           HTML builder and document QA

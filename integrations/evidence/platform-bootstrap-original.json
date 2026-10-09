@@ -1,12 +1,12 @@
 {
   "schemaVersion": "zetra.dev/local-platform-bootstrap-v1alpha1",
   "status": "passed",
-  "createdAt": "2026-10-09T00:54:10.702998+00:00",
+  "createdAt": "2026-10-09T00:22:18.908779+00:00",
   "context": "kind-zetra-validation",
   "node": "zetra-validation-control-plane",
   "scope": "disposable-local-platform-bootstrap-readiness",
   "fixtureOnly": true,
-  "scriptSha256": "a6394487358778a8b90585bd19ac4fb6b2fe0c0d3132883d32510aeb14f2759c",
+  "scriptSha256": "54e98936d4f50d13aba4c8d0e774ed9f8dd2163f3e62cb943e09a9511e15341b",
   "releaseActions": {
     "cilium": "skipped",
     "tetragon": "skipped",

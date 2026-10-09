@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORTS = {
     "contributor-tooling": "docs/research/tooling-validation.json",
     "document-rendering": "docs/research/document-qa.json",
+    "incident-triage-reference": "docs/research/incident-triage-validation.json",
     "document-preview": "docs/research/preview-validation.json",
     "kernel-and-network": "integrations/evidence/kernel-network-report.json",
     "openshell": "integrations/openshell-live-output/report.json",

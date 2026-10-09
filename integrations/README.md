@@ -26,7 +26,7 @@ Read [LOCAL-CLUSTER.md](LOCAL-CLUSTER.md) before operating the VM. The tested ho
 | --- | --- | --- |
 | Cilium Helm chart | `cilium/cilium` **1.20.2**, official `https://helm.cilium.io` repository | `ipam.mode=kubernetes`, `kubeProxyReplacement=false`, `operator.replicas=1`, `bpf.hostLegacyRouting=true`; Cilium actually replaced the initial kindnet installation. |
 | Tetragon Helm chart | `cilium/tetragon` **1.7.1**, same official repository | `tetragon.enablePolicyFilter=true`; fixture-scoped `TracingPolicyNamespaced`, not a blanket file policy. |
-| OpenShell chart/server/CLI | **0.1.2**; official OCI chart artifact `helm-chart-0.1.2.tgz` | TLS/mTLS on, live Agent Sandbox preflight on, `supervisor.sideloadMethod=init-container`, `server.enableUserNamespaces=false`, `server.appArmorProfile=Unconfined`, anonymous telemetry off. **Local fixture only:** `server.auth.allowUnauthenticatedUsers=true`; principal authentication and AppArmor/user namespace protections are not qualified. |
+| OpenShell chart/server/CLI | **0.1.2**; official OCI chart artifact `helm-chart-0.1.2.tgz` | TLS/mTLS on, live Agent Sandbox preflight on, separate workload/supervisor boundary runtime, `server.enableUserNamespaces=false`, `server.appArmorProfile=Unconfined`, anonymous telemetry off. **Local fixture only:** `server.auth.allowUnauthenticatedUsers=true`; principal authentication and AppArmor/user namespace protections are not qualified. |
 | Agent Sandbox API | **1.0.6**, `v1beta1` API | Installed for OpenShell's Kubernetes compute driver. OpenShell's Kubernetes path is experimental; production adoption needs an explicit maturity decision. |
 | agentgateway | **v1.6.0**, official Darwin ARM64 release | Runner verifies SHA256 `6cebe8bd57262edce23a65a376d2f5a27b97cdfef609740642edbe75e1e9c685`; actual gateway is host loopback. |
 | Temporal Python SDK | **1.34.0**, resolved by `uv.lock` | Actual SDK test server, cached under `/tmp/zetra-temporal-bin`; no external service credentials. |
@@ -85,3 +85,5 @@ kubectl --kubeconfig "$PWD/.tools/zetra-kubeconfig" \
 ```
 
 Full disposable cluster/VM cleanup is documented in [LOCAL-CLUSTER.md](LOCAL-CLUSTER.md). Use its explicit Podman connection and dedicated kubeconfig; removing or repairing `kz-eval`, restarting it, or changing any shared cluster is outside fixture cleanup.
+
+The technical contract review corrected an unused OpenShell `supervisor.sideloadMethod` Helm value. The chart/driver define separate workload and supervisor runtimes; storing an extra Helm value did not establish that behavior. The corrected bootstrap passed readiness again with all four releases skipped. The [original readiness report](evidence/platform-bootstrap-original.json) is retained; [the current report](evidence/platform-bootstrap.json) records the corrected script hash. See [the pinned integration contract review](../docs/research/integration-contract-review.md).

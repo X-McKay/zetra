@@ -1,0 +1,12 @@
+{
+  "scenarios": {
+    "schema.contract": "test_cases.TriageTests.test_schema_and_continuous_plan",
+    "input.untrusted": "test_cases.TriageTests.test_untrusted_input_cannot_select_actions",
+    "capability.denied": "test_cases.TriageTests.test_capability_denied_before_receiver",
+    "budget.enforced": "test_cases.TriageTests.test_per_instance_budget",
+    "stop.enforced": "test_cases.TriageTests.test_stop_between_approval_and_commit",
+    "approval.bound": "test_cases.TriageTests.test_approval_exact_payload_actor_expiry_and_run_binding",
+    "idempotency.retry": "test_cases.TriageTests.test_retry_restart_and_consumed_approval",
+    "gateway.authorization": "test_cases.TriageTests.test_gateway_token_and_fixed_tool_contract"
+  }
+}

@@ -6,6 +6,8 @@ import re
 from html import escape
 from pathlib import Path
 
+from technical_diagrams import technical_diagram
+
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 CSS = (DOCS / "assets/playbook.css").read_text()
@@ -29,6 +31,16 @@ CHAPTERS = [
     ),
     ("toolkit", "Zetra Toolkit", "Working commands, examples and implementation boundaries"),
     ("source-review", "Source Review", "Provenance, corrections and upstream references"),
+    (
+        "integration-deep-dive",
+        "Integration Deep Dive",
+        "Implementation contracts and qualification for technical leaders",
+    ),
+    (
+        "use-case-walkthrough",
+        "Incident Triage Walkthrough",
+        "One incident from typed package to approved ticket and revocation",
+    ),
 ]
 COLORS = {
     "teal": ("#e3f5f0", "#087f85"),
@@ -503,7 +515,7 @@ def diagram(key):
             for i, (k, t, d) in enumerate(details)
         )
         return f'<div class="boundary-widget">{out}<div class="diagram-controls">{btns}</div><div class="boundary-detail" aria-live="polite">{details[0][2]}</div></div>'
-    return ""
+    return technical_diagram(key)
 
 
 def hero_svg():
@@ -546,12 +558,16 @@ def shell(title, lead, fragments, combined=False):
         f'<a href="{"#" + k if k in current else k + ".html"}"><strong>{i + 1:02} / {escape(t.replace("Agent ", ""))}</strong><span>{escape(description)}</span></a>'
         for i, (k, t, description) in enumerate(CHAPTERS[:4])
     )
+    technical_routes = "".join(
+        f'<a href="{"#" + key if key in current else key + ".html"}">{escape(title)}</a>'
+        for key, title, _ in CHAPTERS[6:]
+    )
     body = "\n".join(augment(f) for f in fragments)
     toc = "".join(
         f'<a href="#{id}">{escape(re.sub("<[^>]+>", "", label))}</a>'
         for id, label in re.findall(r'<h3[^>]*id="([^"]+)"[^>]*>(.*?)</h3>', body, re.S)
     )
-    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{escape(lead, quote=True)}"><title>{escape(title)} | Zetra</title><style>{CSS}</style></head><body><a href="#main" style="position:absolute;left:-9999px" onfocus="this.style.left='10px'" onblur="this.style.left='-9999px'">Skip to content</a><button class="mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">Contents</button><aside class="sidebar" aria-label="Playbook navigation"><a class="brand" href="index.html">ZETRA</a><p class="brand-sub">ZEro-TRust Agents</p><div class="edition">Agent Playbook<br><strong>Design draft / toolkit v0.1</strong><br>08 October 2026</div><label class="nav-label" for="nav-search">Find a playbook</label><input id="nav-search" type="search" placeholder="Filter navigation"><p class="nav-label">Audience tracks</p><nav>{nav}<a href="index.html">Complete playbook</a></nav><p class="note">Framework-neutral Python<br>Temporal · Kubernetes<br>General enterprise baseline</p><button class="print">Print / Save as PDF</button><p class="note">Standalone HTML. Diagrams, code and styling work offline.</p></aside><main id="main"><header class="hero"><p class="eyebrow">Bounded authority. Verifiable evidence.</p><div class="hero-grid"><div><h1>{escape(title)}</h1><p class="lead">{escape(lead)}</p><span class="badge">STRATEGY → DEVELOPMENT → DEPLOYMENT → OVERSIGHT</span><span class="badge">ZERO TRUST BY CONSTRUCTION</span></div>{hero_svg()}</div><p class="strap">A governed software package, a consistent lifecycle, and independent enforcement at every consequential boundary.</p></header><div class="reading-guide"><p class="eyebrow">Choose your lens</p><div class="guide-grid">{guide}</div></div><article class="content"><div class="callout"><strong>Status and reading convention.</strong> This is a proposed enterprise standard with a working initial toolkit. Upstream documentation checks, local tests and live enforcement evidence are different validation levels. See the toolkit chapter and integration report before treating a control as qualified.</div><details class="toc"><summary>In this document · detailed contents</summary>{toc}</details>{body}</article><footer class="foot"><strong>ZETRA / ZEro-TRust Agents</strong> · Design draft · 08 October 2026<br>Source chapters and build script live in the repository. Vendor integrations require a version-pinned qualification report; policy intent is never proof of runtime enforcement.</footer></main><script>{JS}</script></body></html>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{escape(lead, quote=True)}"><title>{escape(title)} | Zetra</title><style>{CSS}</style></head><body><a href="#main" style="position:absolute;left:-9999px" onfocus="this.style.left='10px'" onblur="this.style.left='-9999px'">Skip to content</a><button class="mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">Contents</button><aside class="sidebar" aria-label="Playbook navigation"><a class="brand" href="index.html">ZETRA</a><p class="brand-sub">ZEro-TRust Agents</p><div class="edition">Agent Playbook<br><strong>Design draft / toolkit v0.1</strong><br>08 October 2026</div><label class="nav-label" for="nav-search">Find a playbook</label><input id="nav-search" type="search" placeholder="Filter navigation"><p class="nav-label">Audience tracks</p><nav>{nav}<a href="index.html">Complete playbook</a></nav><p class="note">Framework-neutral Python<br>Temporal · Kubernetes<br>General enterprise baseline</p><button class="print">Print / Save as PDF</button><p class="note">Standalone HTML. Diagrams, code and styling work offline.</p></aside><main id="main"><header class="hero"><p class="eyebrow">Bounded authority. Verifiable evidence.</p><div class="hero-grid"><div><h1>{escape(title)}</h1><p class="lead">{escape(lead)}</p><span class="badge">STRATEGY → DEVELOPMENT → DEPLOYMENT → OVERSIGHT</span><span class="badge">ZERO TRUST BY CONSTRUCTION</span></div>{hero_svg()}</div><p class="strap">A governed software package, a consistent lifecycle, and independent enforcement at every consequential boundary.</p></header><div class="reading-guide"><p class="eyebrow">Choose your lens</p><div class="guide-grid">{guide}</div><p class="technical-route"><strong>Technical leader review:</strong> {technical_routes}</p></div><article class="content"><div class="callout"><strong>Status and reading convention.</strong> This is a proposed enterprise standard with a working initial toolkit. Upstream documentation checks, local tests and live enforcement evidence are different validation levels. See the toolkit chapter and integration report before treating a control as qualified.</div><details class="toc"><summary>In this document · detailed contents</summary>{toc}</details>{body}</article><footer class="foot"><strong>ZETRA / ZEro-TRust Agents</strong> · Design draft · 08 October 2026<br>Source chapters and build script live in the repository. Vendor integrations require a version-pinned qualification report; policy intent is never proof of runtime enforcement.</footer></main><script>{JS}</script></body></html>'''
 
 
 def main():

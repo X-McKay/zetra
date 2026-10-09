@@ -66,6 +66,13 @@ examples:
     uv run --locked zetra check examples/action --evidence .tools/action-evidence.json
     uv run --locked zetra eval examples/gateway-read --output .tools/gateway-evidence.json
     uv run --locked zetra check examples/gateway-read --evidence .tools/gateway-evidence.json
+    uv run --locked zetra eval examples/incident-triage --output .tools/triage-evidence.json
+    uv run --locked zetra check examples/incident-triage --evidence .tools/triage-evidence.json
+    just incident-triage
+
+# Follow one incident through proposal, local approval, ticket receipt and retries.
+incident-triage:
+    PYTHONPATH=src:examples/incident-triage/src uv run --locked python examples/incident-triage/demo.py
 
 # Run all repository gates. Live enforcement remains a separate qualification.
 check: lock-check lint typecheck ci-lint shell-lint test docs examples

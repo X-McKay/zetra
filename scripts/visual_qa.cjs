@@ -8,10 +8,15 @@ const root=path.resolve(__dirname,'..');
  const failures=[], results=[];
  for(const size of [{name:'desktop',width:1440,height:1000},{name:'mobile',width:390,height:844}]){
   const page=await browser.newPage({viewport:{width:size.width,height:size.height}});page.on('pageerror',e=>failures.push(e.message));
-  for(const name of ['index','strategy','developer','deployment','governance','toolkit','source-review']){
+  for(const name of fs.readdirSync(path.join(root,'docs')).filter(n=>n.endsWith('.html')).map(n=>n.slice(0,-5)).sort()){
    await page.goto('file://'+path.join(root,'docs',name+'.html'));
    const layout=await page.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,title:document.title,figures:document.querySelectorAll('figure').length,codeBlocks:document.querySelectorAll('pre').length,brokenImages:[...document.images].filter(i=>!i.complete||i.naturalWidth===0).length}));
    if(layout.scrollWidth>layout.width+1)failures.push(`${name}/${size.name}: body horizontal overflow ${layout.scrollWidth}/${layout.width}`);
+   const clipped=await page.evaluate(()=>[...document.querySelectorAll('figure svg')].flatMap(svg=>{
+    const bounds=svg.viewBox.baseVal;
+    return [...svg.querySelectorAll('text')].filter(t=>{const b=t.getBBox();return b.x<bounds.x-1||b.y<bounds.y-1||b.x+b.width>bounds.x+bounds.width+1||b.y+b.height>bounds.y+bounds.height+1}).map(t=>t.textContent);
+   }));
+   if(clipped.length)failures.push(`${name}/${size.name}: SVG text outside viewBox: ${clipped.join('; ')}`);
    if(layout.brokenImages)failures.push(`${name}/${size.name}: broken images`);
    await page.screenshot({path:path.join(out,`${name}-${size.name}.png`)});
    if(name==='index'&&size.name==='desktop'){
@@ -28,7 +33,7 @@ const root=path.resolve(__dirname,'..');
   await page.close();
  }
  await browser.close();
- const report={checkedAt:new Date().toISOString(),status:failures.length?'failed':'passed',checks:['desktop/mobile rendered pages','body overflow','browser errors','inline assets','boundary interaction','mobile navigation'],results,failures};
+ const report={checkedAt:new Date().toISOString(),status:failures.length?'failed':'passed',checks:['desktop/mobile rendered pages','body overflow','SVG text bounds','browser errors','inline assets','boundary interaction','mobile navigation'],results,failures};
  fs.writeFileSync(path.join(root,'docs/research/document-qa.json'),JSON.stringify(report,null,2)+'\n');
  console.log(JSON.stringify({status:report.status,pages:results.length,failures}));if(failures.length)process.exitCode=1;
 })().catch(e=>{console.error(e);process.exitCode=1});

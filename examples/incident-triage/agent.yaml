@@ -1,0 +1,16 @@
+apiVersion: zetra.dev/v1alpha1
+kind: Agent
+metadata:
+  name: incident-triage
+  owner: service-operations@example.invalid
+  businessFunction: service-operations
+spec:
+  entrypoint: incident_triage.factory:create_agent
+  capabilities: [knowledge.read, mcp.read_status, ticket.write]
+  dataClassification: internal
+  autonomy: supervised
+  execution: local
+  budgets:
+    maxSteps: 4
+    maxSeconds: 30
+    maxCostUsd: 0.05

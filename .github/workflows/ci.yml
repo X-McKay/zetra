@@ -37,6 +37,9 @@ jobs:
       - run: uv run --locked zetra check examples/action --evidence /tmp/action-evidence.json
       - run: uv run --locked zetra eval examples/gateway-read --output /tmp/gateway-evidence.json
       - run: uv run --locked zetra check examples/gateway-read --evidence /tmp/gateway-evidence.json
+      - run: uv run --locked zetra eval examples/incident-triage --output /tmp/triage-evidence.json
+      - run: uv run --locked zetra check examples/incident-triage --evidence /tmp/triage-evidence.json
+      - run: PYTHONPATH=src:examples/incident-triage/src uv run --locked python examples/incident-triage/demo.py
       - run: uv run --locked zetra render examples/knowledge --evidence /tmp/knowledge-evidence.json --image registry.invalid/zetra@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --namespace zetra-evaluation --gateway-namespace zetra-gateway --gateway-label app=agentgateway --output /tmp/withheld-deployment.yaml
       - run: uv run --locked --all-extras prek run --all-files
       # PR runs execute contributed code on ephemeral runners without cluster

@@ -59,6 +59,8 @@ def main():
             "governance",
             "toolkit",
             "source-review",
+            "integration-deep-dive",
+            "use-case-walkthrough",
         )
     ]
     parsed = {}
@@ -91,7 +93,7 @@ def main():
                     td.feed(target.read_text())
                 assert unquote(u.fragment) in td.ids, f"{p.name}: missing anchor {link}"
     print(
-        "Verified 7 HTML documents: local links, unique IDs, accessible SVG, offline assets, single titles and resolved diagrams."
+        f"Verified {len(paths)} HTML documents: local links, unique IDs, accessible SVG, offline assets, single titles and resolved diagrams."
     )
     print(
         "Figures:",

@@ -1,9 +1,10 @@
 {
-  "checkedAt": "2026-10-09T00:30:26.183Z",
+  "checkedAt": "2026-10-09T00:56:57.987Z",
   "status": "passed",
   "checks": [
     "desktop/mobile rendered pages",
     "body overflow",
+    "SVG text bounds",
     "browser errors",
     "inline assets",
     "boundary interaction",
@@ -11,23 +12,13 @@
   ],
   "results": [
     {
-      "document": "index",
+      "document": "deployment",
       "viewport": "desktop",
       "width": 1440,
       "scrollWidth": 1440,
-      "title": "The Agent Playbook | Zetra",
-      "figures": 8,
-      "codeBlocks": 22,
-      "brokenImages": 0
-    },
-    {
-      "document": "strategy",
-      "viewport": "desktop",
-      "width": 1440,
-      "scrollWidth": 1440,
-      "title": "Agent Strategy | Zetra",
-      "figures": 1,
-      "codeBlocks": 1,
+      "title": "Agent Deployment Playbook | Zetra",
+      "figures": 3,
+      "codeBlocks": 8,
       "brokenImages": 0
     },
     {
@@ -41,16 +32,6 @@
       "brokenImages": 0
     },
     {
-      "document": "deployment",
-      "viewport": "desktop",
-      "width": 1440,
-      "scrollWidth": 1440,
-      "title": "Agent Deployment Playbook | Zetra",
-      "figures": 3,
-      "codeBlocks": 8,
-      "brokenImages": 0
-    },
-    {
       "document": "governance",
       "viewport": "desktop",
       "width": 1440,
@@ -61,13 +42,23 @@
       "brokenImages": 0
     },
     {
-      "document": "toolkit",
+      "document": "index",
       "viewport": "desktop",
       "width": 1440,
       "scrollWidth": 1440,
-      "title": "Zetra Toolkit | Zetra",
-      "figures": 1,
-      "codeBlocks": 5,
+      "title": "The Agent Playbook | Zetra",
+      "figures": 14,
+      "codeBlocks": 45,
+      "brokenImages": 0
+    },
+    {
+      "document": "integration-deep-dive",
+      "viewport": "desktop",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "title": "Integration Deep Dive | Zetra",
+      "figures": 3,
+      "codeBlocks": 10,
       "brokenImages": 0
     },
     {
@@ -81,23 +72,43 @@
       "brokenImages": 0
     },
     {
-      "document": "index",
-      "viewport": "mobile",
-      "width": 390,
-      "scrollWidth": 390,
-      "title": "The Agent Playbook | Zetra",
-      "figures": 8,
-      "codeBlocks": 22,
-      "brokenImages": 0
-    },
-    {
       "document": "strategy",
-      "viewport": "mobile",
-      "width": 390,
-      "scrollWidth": 390,
+      "viewport": "desktop",
+      "width": 1440,
+      "scrollWidth": 1440,
       "title": "Agent Strategy | Zetra",
       "figures": 1,
       "codeBlocks": 1,
+      "brokenImages": 0
+    },
+    {
+      "document": "toolkit",
+      "viewport": "desktop",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "title": "Zetra Toolkit | Zetra",
+      "figures": 1,
+      "codeBlocks": 5,
+      "brokenImages": 0
+    },
+    {
+      "document": "use-case-walkthrough",
+      "viewport": "desktop",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "title": "Incident Triage Walkthrough | Zetra",
+      "figures": 3,
+      "codeBlocks": 13,
+      "brokenImages": 0
+    },
+    {
+      "document": "deployment",
+      "viewport": "mobile",
+      "width": 390,
+      "scrollWidth": 390,
+      "title": "Agent Deployment Playbook | Zetra",
+      "figures": 3,
+      "codeBlocks": 8,
       "brokenImages": 0
     },
     {
@@ -111,16 +122,6 @@
       "brokenImages": 0
     },
     {
-      "document": "deployment",
-      "viewport": "mobile",
-      "width": 390,
-      "scrollWidth": 390,
-      "title": "Agent Deployment Playbook | Zetra",
-      "figures": 3,
-      "codeBlocks": 8,
-      "brokenImages": 0
-    },
-    {
       "document": "governance",
       "viewport": "mobile",
       "width": 390,
@@ -128,6 +129,46 @@
       "title": "Risk, Governance & Oversight | Zetra",
       "figures": 2,
       "codeBlocks": 2,
+      "brokenImages": 0
+    },
+    {
+      "document": "index",
+      "viewport": "mobile",
+      "width": 390,
+      "scrollWidth": 390,
+      "title": "The Agent Playbook | Zetra",
+      "figures": 14,
+      "codeBlocks": 45,
+      "brokenImages": 0
+    },
+    {
+      "document": "integration-deep-dive",
+      "viewport": "mobile",
+      "width": 390,
+      "scrollWidth": 390,
+      "title": "Integration Deep Dive | Zetra",
+      "figures": 3,
+      "codeBlocks": 10,
+      "brokenImages": 0
+    },
+    {
+      "document": "source-review",
+      "viewport": "mobile",
+      "width": 390,
+      "scrollWidth": 390,
+      "title": "Source Review | Zetra",
+      "figures": 0,
+      "codeBlocks": 0,
+      "brokenImages": 0
+    },
+    {
+      "document": "strategy",
+      "viewport": "mobile",
+      "width": 390,
+      "scrollWidth": 390,
+      "title": "Agent Strategy | Zetra",
+      "figures": 1,
+      "codeBlocks": 1,
       "brokenImages": 0
     },
     {
@@ -141,13 +182,13 @@
       "brokenImages": 0
     },
     {
-      "document": "source-review",
+      "document": "use-case-walkthrough",
       "viewport": "mobile",
       "width": 390,
       "scrollWidth": 390,
-      "title": "Source Review | Zetra",
-      "figures": 0,
-      "codeBlocks": 0,
+      "title": "Incident Triage Walkthrough | Zetra",
+      "figures": 3,
+      "codeBlocks": 13,
       "brokenImages": 0
     }
   ],

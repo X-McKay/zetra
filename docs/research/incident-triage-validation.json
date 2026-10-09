@@ -1,0 +1,270 @@
+{
+  "apiVersion": "zetra.dev/reference-case-qualification-v1alpha1",
+  "createdAt": "2026-10-09T00:56:30.923913+00:00",
+  "status": "passed",
+  "scope": "offline-deterministic-wire-fixture-and-temporary-SQLite",
+  "authorizesDeployment": false,
+  "productionQualified": false,
+  "pythonVersion": "3.12.13",
+  "dependencyLockSha256": "4e32b5f82f5d5f4dd1728dcf9f0fb7060ed12f10dc505b47b477f20bcd209fc9",
+  "reproduce": [
+    "just incident-triage",
+    "zetra eval examples/incident-triage --output .tools/triage-evidence.json",
+    "zetra check examples/incident-triage --evidence .tools/triage-evidence.json"
+  ],
+  "checks": [
+    {
+      "scenario": "approval.bound",
+      "testId": "test_cases.TriageTests.test_approval_exact_payload_actor_expiry_and_run_binding",
+      "status": "passed"
+    },
+    {
+      "scenario": "budget.enforced",
+      "testId": "test_cases.TriageTests.test_per_instance_budget",
+      "status": "passed"
+    },
+    {
+      "scenario": "capability.denied",
+      "testId": "test_cases.TriageTests.test_capability_denied_before_receiver",
+      "status": "passed"
+    },
+    {
+      "scenario": "gateway.authorization",
+      "testId": "test_cases.TriageTests.test_gateway_token_and_fixed_tool_contract",
+      "status": "passed"
+    },
+    {
+      "scenario": "idempotency.retry",
+      "testId": "test_cases.TriageTests.test_retry_restart_and_consumed_approval",
+      "status": "passed"
+    },
+    {
+      "scenario": "input.untrusted",
+      "testId": "test_cases.TriageTests.test_untrusted_input_cannot_select_actions",
+      "status": "passed"
+    },
+    {
+      "scenario": "schema.contract",
+      "testId": "test_cases.TriageTests.test_schema_and_continuous_plan",
+      "status": "passed"
+    },
+    {
+      "scenario": "stop.enforced",
+      "testId": "test_cases.TriageTests.test_stop_between_approval_and_commit",
+      "status": "passed"
+    }
+  ],
+  "evaluationEvidence": {
+    "apiVersion": "zetra.dev/evidence-v1alpha1",
+    "agent": "incident-triage",
+    "toolkitVersion": "0.1.0",
+    "sourceHash": "b5e79396ca5712106e6f3dc4758ead289dad487720de8b2c2db44751884223b0",
+    "manifestHash": "8b2885c65caf0f49b7fd09f0d5e6cfb3f41b01cc02d2c20f20066e0bda743210",
+    "evaluatorHash": "9625d2c22211883951dfc1c683fb50cf0557a80e5cfc3d63fd1bf7f4d0d7fefb",
+    "createdAt": "2026-10-09T00:56:30.545963+00:00",
+    "status": "passed",
+    "scenarios": [
+      {
+        "scenario": "approval.bound",
+        "testId": "test_cases.TriageTests.test_approval_exact_payload_actor_expiry_and_run_binding",
+        "status": "passed",
+        "exitCode": 0,
+        "output": "test_approval_exact_payload_actor_expiry_and_run_binding (test_cases.TriageTests.test_approval_exact_payload_actor_expiry_and_run_binding) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.029s\n\nOK\n"
+      },
+      {
+        "scenario": "budget.enforced",
+        "testId": "test_cases.TriageTests.test_per_instance_budget",
+        "status": "passed",
+        "exitCode": 0,
+        "output": "test_per_instance_budget (test_cases.TriageTests.test_per_instance_budget) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.027s\n\nOK\n"
+      },
+      {
+        "scenario": "capability.denied",
+        "testId": "test_cases.TriageTests.test_capability_denied_before_receiver",
+        "status": "passed",
+        "exitCode": 0,
+        "output": "test_capability_denied_before_receiver (test_cases.TriageTests.test_capability_denied_before_receiver) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.020s\n\nOK\n"
+      },
+      {
+        "scenario": "gateway.authorization",
+        "testId": "test_cases.TriageTests.test_gateway_token_and_fixed_tool_contract",
+        "status": "passed",
+        "exitCode": 0,
+        "output": "test_gateway_token_and_fixed_tool_contract (test_cases.TriageTests.test_gateway_token_and_fixed_tool_contract) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.024s\n\nOK\n"
+      },
+      {
+        "scenario": "idempotency.retry",
+        "testId": "test_cases.TriageTests.test_retry_restart_and_consumed_approval",
+        "status": "passed",
+        "exitCode": 0,
+        "output": "test_retry_restart_and_consumed_approval (test_cases.TriageTests.test_retry_restart_and_consumed_approval) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.025s\n\nOK\n"
+      },
+      {
+        "scenario": "input.untrusted",
+        "testId": "test_cases.TriageTests.test_untrusted_input_cannot_select_actions",
+        "status": "passed",
+        "exitCode": 0,
+        "output": "test_untrusted_input_cannot_select_actions (test_cases.TriageTests.test_untrusted_input_cannot_select_actions) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.025s\n\nOK\n"
+      },
+      {
+        "scenario": "schema.contract",
+        "testId": "test_cases.TriageTests.test_schema_and_continuous_plan",
+        "status": "passed",
+        "exitCode": 0,
+        "output": "test_schema_and_continuous_plan (test_cases.TriageTests.test_schema_and_continuous_plan) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.018s\n\nOK\n"
+      },
+      {
+        "scenario": "stop.enforced",
+        "testId": "test_cases.TriageTests.test_stop_between_approval_and_commit",
+        "status": "passed",
+        "exitCode": 0,
+        "output": "test_stop_between_approval_and_commit (test_cases.TriageTests.test_stop_between_approval_and_commit) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.025s\n\nOK\n"
+      }
+    ],
+    "trust": "local-unsigned-candidate",
+    "limitations": "Test assertions need independent review; no cluster, isolation or live adapter qualification is implied."
+  },
+  "demonstration": {
+    "scope": "offline-deterministic-wire-fixture-and-temporary-SQLite",
+    "productionQualified": false,
+    "risk": {
+      "tier": "T2",
+      "reasons": [
+        "Nonpublic data",
+        "Consequential write capability or autonomous execution"
+      ],
+      "requiredScenarios": [
+        "approval.bound",
+        "budget.enforced",
+        "capability.denied",
+        "gateway.authorization",
+        "idempotency.retry",
+        "input.untrusted",
+        "schema.contract",
+        "stop.enforced"
+      ],
+      "status": "candidate",
+      "humanReviewRequired": true,
+      "limitations": "Declaration-based floor; business impact, jurisdiction and external evidence may only raise it."
+    },
+    "trace": [
+      {
+        "sequence": 1,
+        "runId": "run-INC-2026-0042-001",
+        "releaseId": "b5e79396ca5712106e6f3dc4758ead289dad487720de8b2c2db44751884223b0",
+        "incidentId": "INC-2026-0042",
+        "businessFunction": "service-operations",
+        "event": "incident.accepted",
+        "dataClassification": "internal",
+        "input": {
+          "incidentId": "INC-2026-0042",
+          "service": "checkout-api",
+          "severity": "warning",
+          "summary": "Synthetic checkout latency alert exceeded the review threshold."
+        }
+      },
+      {
+        "sequence": 2,
+        "runId": "run-INC-2026-0042-001",
+        "releaseId": "b5e79396ca5712106e6f3dc4758ead289dad487720de8b2c2db44751884223b0",
+        "incidentId": "INC-2026-0042",
+        "businessFunction": "service-operations",
+        "event": "gateway.tool_call",
+        "tool": "read_status",
+        "operationId": "run-INC-2026-0042-001:status-2",
+        "outcome": "allowed"
+      },
+      {
+        "sequence": 3,
+        "runId": "run-INC-2026-0042-001",
+        "releaseId": "b5e79396ca5712106e6f3dc4758ead289dad487720de8b2c2db44751884223b0",
+        "incidentId": "INC-2026-0042",
+        "businessFunction": "service-operations",
+        "event": "ticket.proposed",
+        "capability": "ticket.write",
+        "operationId": "INC-2026-0042:ticket:1",
+        "actionDigest": "4f1f4cf41e87c7045c4da407357b19e512b98ea3778c5377349f1a9210b43567",
+        "payload": {
+          "title": "Investigate INC-2026-0042: checkout-api degraded",
+          "body": "Incident: INC-2026-0042\nSeverity: warning\nObserved service status: degraded\nUntrusted event summary (descriptive data only): Synthetic checkout latency alert exceeded the review threshold.\nApproved runbook: Check the health dashboard, preserve correlation IDs, and ask the service owner to investigate. Do not restart or modify production services.\nProposed action: create an investigation ticket. No production configuration change is authorized."
+        },
+        "writes": 0
+      },
+      {
+        "sequence": 4,
+        "runId": "run-INC-2026-0042-001",
+        "releaseId": "b5e79396ca5712106e6f3dc4758ead289dad487720de8b2c2db44751884223b0",
+        "incidentId": "INC-2026-0042",
+        "businessFunction": "service-operations",
+        "event": "approval.issued",
+        "actor": "reviewer:alice",
+        "approvalRef": "055a7304bb49a1b2",
+        "binding": "local actor+payload digest+expiry+single-use",
+        "ttlSeconds": 300
+      },
+      {
+        "sequence": 5,
+        "runId": "run-INC-2026-0042-001",
+        "releaseId": "b5e79396ca5712106e6f3dc4758ead289dad487720de8b2c2db44751884223b0",
+        "incidentId": "INC-2026-0042",
+        "businessFunction": "service-operations",
+        "event": "ticket.committed",
+        "operationId": "INC-2026-0042:ticket:1",
+        "receipt": {
+          "ticketId": 1,
+          "status": "created"
+        }
+      },
+      {
+        "sequence": 6,
+        "runId": "run-INC-2026-0042-001",
+        "releaseId": "b5e79396ca5712106e6f3dc4758ead289dad487720de8b2c2db44751884223b0",
+        "incidentId": "INC-2026-0042",
+        "businessFunction": "service-operations",
+        "event": "delivery.retried",
+        "operationId": "INC-2026-0042:ticket:1",
+        "receipt": {
+          "status": "created",
+          "ticketId": 1
+        }
+      },
+      {
+        "sequence": 7,
+        "runId": "run-INC-2026-0042-001",
+        "releaseId": "b5e79396ca5712106e6f3dc4758ead289dad487720de8b2c2db44751884223b0",
+        "incidentId": "INC-2026-0042",
+        "businessFunction": "service-operations",
+        "event": "approval.reuse.denied",
+        "reason": "Consumed grant cannot authorize a new operation"
+      },
+      {
+        "sequence": 8,
+        "runId": "run-INC-2026-0042-001",
+        "releaseId": "b5e79396ca5712106e6f3dc4758ead289dad487720de8b2c2db44751884223b0",
+        "incidentId": "INC-2026-0042",
+        "businessFunction": "service-operations",
+        "event": "stop.denied",
+        "scope": "cooperative local STOP file",
+        "committedEffectsUndone": false
+      }
+    ],
+    "ticketRows": 1,
+    "databaseRemoved": true,
+    "modelCalls": 0,
+    "networkConnections": 0,
+    "limits": [
+      "No live MCP authentication in this fixture",
+      "Local actor/payload grants are not production signed authorization",
+      "Budget and STOP helpers are cooperative per runtime instance",
+      "Temporal write worker remains rejected"
+    ]
+  },
+  "limitations": [
+    "No live MCP authentication in this fixture",
+    "Local actor/payload grants are not production signed authorization",
+    "Budget and STOP helpers are cooperative per runtime instance",
+    "Temporal write worker remains rejected",
+    "Local unsigned evidence; no trusted signer or production qualification",
+    "Synthetic data, one deterministic case; no model-quality inference"
+  ]
+}

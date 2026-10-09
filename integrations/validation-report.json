@@ -21,11 +21,27 @@
     {
       "component": "document-rendering",
       "report": "docs/research/document-qa.json",
-      "sha256": "a22d3133d677ee405e4db64e0dae1bfea0b9aa1969b16441dca8deb7ac8ea678",
+      "sha256": "4c8f4a244bed2909fb147953e46407efd6bb58038dea38c3cdcf96e3f780fce9",
       "status": "passed",
       "scope": [],
-      "checkCount": 6,
+      "checkCount": 7,
       "openControls": []
+    },
+    {
+      "component": "incident-triage-reference",
+      "report": "docs/research/incident-triage-validation.json",
+      "sha256": "8dbfbef35af2a5d39ce89bbc2e1ef1633127d5f8588a5a313c7a518c4ef0b8e5",
+      "status": "passed",
+      "scope": "offline-deterministic-wire-fixture-and-temporary-SQLite",
+      "checkCount": 8,
+      "openControls": [
+        "No live MCP authentication in this fixture",
+        "Local actor/payload grants are not production signed authorization",
+        "Budget and STOP helpers are cooperative per runtime instance",
+        "Temporal write worker remains rejected",
+        "Local unsigned evidence; no trusted signer or production qualification",
+        "Synthetic data, one deterministic case; no model-quality inference"
+      ]
     },
     {
       "component": "document-preview",
@@ -178,7 +194,7 @@
     {
       "component": "platform-bootstrap",
       "report": "integrations/evidence/platform-bootstrap.json",
-      "sha256": "37f4013d678a2e134f0452e7477efc09b71f9a62d48eaa66279a58a6212141c4",
+      "sha256": "544f2f585ef2bf01a9d01e97c9aae63e54e5d8f8968b2f106df34fd39fcbc8b9",
       "status": "passed",
       "scope": "disposable-local-platform-bootstrap-readiness",
       "checkCount": 7,
