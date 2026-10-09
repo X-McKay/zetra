@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-09T15:00:02.369Z",
+  "checkedAt": "2026-10-09T15:10:51.826Z",
   "status": "passed",
   "checks": [
     "desktop/mobile rendered pages",
@@ -34,8 +34,8 @@
       "width": 1440,
       "scrollWidth": 1440,
       "title": "Zero-Trust Agent Deployment Specification",
-      "figures": 4,
-      "codeBlocks": 3,
+      "figures": 5,
+      "codeBlocks": 7,
       "brokenImages": 0
     },
     {
@@ -64,8 +64,8 @@
       "width": 1440,
       "scrollWidth": 1440,
       "title": "The Agent Playbook | Zetra",
-      "figures": 24,
-      "codeBlocks": 59,
+      "figures": 25,
+      "codeBlocks": 63,
       "brokenImages": 0
     },
     {
@@ -144,8 +144,8 @@
       "width": 390,
       "scrollWidth": 390,
       "title": "Zero-Trust Agent Deployment Specification",
-      "figures": 4,
-      "codeBlocks": 3,
+      "figures": 5,
+      "codeBlocks": 7,
       "brokenImages": 0
     },
     {
@@ -174,8 +174,8 @@
       "width": 390,
       "scrollWidth": 390,
       "title": "The Agent Playbook | Zetra",
-      "figures": 24,
-      "codeBlocks": 59,
+      "figures": 25,
+      "codeBlocks": 63,
       "brokenImages": 0
     },
     {

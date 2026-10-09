@@ -569,7 +569,12 @@ def developer_guide_shell(title, lead, fragment, deployment=False):
     body = augment(fragment)
     prefix = "deploy-step" if deployment else "dlc-step"
     groups = (
-        (("Build + qualify", 0, 5), ("Publish + deploy", 5, 9), ("Operate + verify", 9, 12))
+        (
+            ("Build + qualify", 0, 5),
+            ("Publish + deploy", 5, 9),
+            ("Operate + verify", 9, 12),
+            ("Deployment layers", 12, 17),
+        )
         if deployment
         else (("Build", 0, 4), ("Validate", 4, 7), ("Operate", 7, 9))
     )

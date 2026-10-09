@@ -85,7 +85,7 @@ qualification_target: staging-profile-id</code></pre><p>ACR supports OCI and sup
 <tr><td>4 · Verify</td><td>Qualification probes run against the installed environment with test-only authority.</td><td>Allowed paths work; forbidden paths fail; telemetry and stop mechanisms function.</td></tr>
 </tbody></table>
 <p>Argo CD sync waves provide ordering, not proof of enforcement. The release controller must independently validate authenticated readiness reports against the release, policy version, and target nodes. If any mandatory confirmation is missing, no live task intake or action authority is issued.</p>
-<details class="guide-detail"><summary>How native services consume the configurations</summary><p><strong>Tetragon:</strong> the platform installs scoped <code>TracingPolicyNamespaced</code> resources using the <code>cilium.io</code> API. Test node loading, selectors, hook semantics, and startup filtering. This is not a single policy file for every product. A post-event kill must not be presented as guaranteed prevention.</p><p><strong>OpenShell:</strong> the platform adapter verifies the bundle, resolves approved credential references, creates the sandbox using its supported driver, and verifies effective filesystem/network policy. It owns lifecycle reconciliation, retries, cleanup, and status. Startup policy changes need a replacement sandbox; live updates must still follow release approval.</p><p><strong>AgentGateway:</strong> its controller consumes supported <code>AgentgatewayPolicy</code>, <code>AgentgatewayBackend</code>, and Gateway API resources. The platform verifies route acceptance, authentication, authorization, and direct-route denial. Business receivers still enforce arguments, tenant scope, approvals, and duplicate prevention.</p><p>References: <a href="https://tetragon.io/docs/concepts/runtime-hooks/">Tetragon runtime hooks</a>, <a href="https://docs.nvidia.com/openshell/latest/how-it-works/policies/schema">OpenShell policy lifecycle</a>, <a href="https://agentgateway.dev/docs/kubernetes/latest/reference/api/">AgentGateway resources</a>, <a href="https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/">Argo CD waves</a>.</p></details>
+<p>For the layer architecture and native configuration flows, see <a href="#deploy-step-13">deployment layers</a>, <a href="#deploy-step-14">Tetragon</a>, <a href="#deploy-step-15">OpenShell</a>, and <a href="#deploy-step-16">AgentGateway</a>.</p>
 
 <h3 id="deploy-step-9">9. Activation grants bounded execution authority</h3>
 <p>The release controller checks approval, signature trust, freshness, revocation status, installed policy versions, and target-environment probes. Only then does it enable a limited canary: restricted users or task volume, explicit budgets, and an observation window with agreed thresholds.</p>
@@ -108,4 +108,117 @@ qualification_target: staging-profile-id</code></pre><p>ACR supports OCI and sup
 <ul><li>A developer push produces an image-bound evaluation/profile and a readable native policy diff without manually wiring each product.</li><li>A failed gate, unsigned bundle, altered policy, stale approval, or revoked release cannot activate.</li><li>Argo deploys the approved revision; each adapter reports the matching effective policy before live authority is issued.</li><li>Direct egress, protected-file access, forbidden tools, cross-tenant requests, unapproved actions, and duplicate effects are rejected in live probes.</li><li>Canary expansion, a failed deployment, controller restart, concurrent promotion, rollback, and revocation have observable, retry-safe outcomes.</li><li>Operations can trace an effect to the task, agent, image, policy, approval, and release evidence.</li></ul>
 <div class="spec-rule"><strong>Remaining platform work:</strong> release compiler and signing policy; OpenShell lifecycle adapter; admission and readiness verification; catalog and authority/revocation service; CI/GitOps templates; composed qualification and operational runbooks.</div>
 <details class="guide-detail"><summary>Design basis and deeper references</summary><p>The supplied eBPF, OpenShell, AgentGateway, evaluation, and Temporal proposals inform this specification. Their discovery and automation ideas are retained; observed behavior is not treated as authority, formal analysis is bounded by modeled coverage, and native policy installation is separated from tested enforcement.</p><p>Detailed configurations and prior test scope are in the <a href="deployment.html">Deployment Playbook</a>, <a href="integration-deep-dive.html">integration deep dive</a>, <a href="use-case-walkthrough.html">incident walkthrough</a>, and <a href="../integrations/validation-report.json">integration evidence index</a>. OpenShell adoption, kernel/CNI coverage, distributed credentials, and revocation require an explicit qualification decision for the selected deployment. This specification does not claim production qualification.</p></details>
+
+<h3 id="deploy-step-13">13. Deployment layers and trust boundaries</h3>
+<p>These technologies operate at different boundaries. An agent runs inside a supervised execution environment; its requests pass through an authenticated gateway; the underlying Linux node provides independent kernel evidence. The receiving service decides whether a specific business effect is authorized.</p>
+<div data-diagram="deploy-layers"></div>
+<table><thead><tr><th>Layer / technology</th><th>Where it runs</th><th>Primary responsibility</th></tr></thead><tbody>
+<tr><td>Kubernetes + network-policy CNI</td><td>Cluster, nodes, and workload networking.</td><td>Placement, workload identity, container restrictions, resource isolation, and blocking direct routes around approved services.</td></tr>
+<tr><td><a href="#deploy-step-14">Tetragon / eBPF</a></td><td>Platform-managed node daemon, outside agent control.</td><td>Observe selected process/file/network behavior; apply supported, qualified responses at kernel hooks.</td></tr>
+<tr><td><a href="#deploy-step-15">OpenShell</a></td><td>Sandbox runtime and supervisor/proxy; managed through its supported Kubernetes driver.</td><td>Confine filesystem and network access; supervise the agent’s execution lifecycle.</td></tr>
+<tr><td><a href="#deploy-step-16">AgentGateway</a></td><td>Shared or tenant-isolated gateway data plane and Kubernetes controller.</td><td>Authenticate callers and restrict supported model/MCP requests and routes.</td></tr>
+<tr><td>Tool / business-service receiver</td><td>Destination API or dedicated action service.</td><td>Validate tenant/resource scope, arguments, approval, current authority, and idempotency before effects.</td></tr>
+<tr><td>Release controller + admission</td><td>Restricted platform control plane.</td><td>Verify artifact trust, reconcile lifecycle, collect effective-state evidence, activate or revoke.</td></tr>
+<tr><td>Temporal + OpenTelemetry</td><td>Workflow service/workers and telemetry collectors.</td><td>Durable coordination and correlated observation; neither replaces access authorization.</td></tr>
+</tbody></table>
+<p><strong>One request, several checks:</strong> the sandbox permits reaching the gateway; network policy prevents bypass; the gateway validates identity and tool access; the receiver checks the target resource and approval. Tetragon supplies an independent view of selected node activity throughout that execution.</p>
+<details class="guide-detail"><summary>Deployment topology and overlapping controls</summary><p>Use an explicit AgentGateway endpoint injected into the agent’s runtime configuration. Do not assume encrypted traffic can be semantically inspected by a kernel probe or transparent redirection. TLS trust and protocol termination must be configured at the supported inspection boundary.</p><p>OpenShell is provisioned through its driver, not treated as an ordinary library or a sidecar that automatically secures an existing container. Its supervisor and workload may be separate runtime resources. Qualify attribution for this topology: network events can belong to a proxy rather than the agent process.</p><p>For this design, OpenShell permits the approved gateway connection; AgentGateway owns upstream model/MCP credentials and semantic authorization. Additional OpenShell provider routes require explicit review. Tenant isolation and gateway availability determine whether gateways are shared, per tenant, or dedicated. Select one supported topology per platform profile.</p></details>
+
+<h3 id="deploy-step-14">14. Tetragon: kernel profiling and runtime response</h3>
+<p><strong>Purpose.</strong> Tetragon provides evidence below the application: selected process creation, file operations, connections, and related kernel activity. It can execute supported responses, but it does not understand whether an answer is correct or a ticket is justified.</p>
+<p><strong>Platform prerequisite.</strong> Install and qualify the node daemon independently of agent releases. Pin image/chart/CRD versions, runtime-hook integration, supported kernels and node classes. Maintain a library of tested probe and response templates; agents never choose arbitrary host-wide hooks.</p>
+<h4>Automatic configuration</h4>
+<ol><li><strong>Select observation templates.</strong> CI resolves the runtime profile, namespaces, protected workload selectors, intended file/network/process coverage, and image subject.</li><li><strong>Capture and normalize.</strong> Run scenarios on qualified nodes; collect native events and loss counters; correlate container identity and descendants. Preserve hook, arguments, action, outcome, and uncertainty.</li><li><strong>Generate the candidate.</strong> Populate versioned templates with reviewed resource scopes. Keep observation requirements separate from enforcement requirements. Do not translate an observed binary list into an untested blanket kill rule.</li><li><strong>Qualify, package, and install.</strong> Validate against installed CRDs, execute scoped negative probes, store YAML in the signed ACR bundle, and render the identical resource into GitOps. Argo applies it; Tetragon loads it on applicable nodes.</li><li><strong>Verify readiness.</strong> The platform adapter checks native policy state, workload attribution, supported actions, startup coverage, and collection health, then issues a release-bound readiness report.</li></ol>
+<details class="guide-example"><summary>Generated observation policy: native configuration shape</summary><pre><code># Illustrative template output: selected TCP observation, not a deny rule.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: incident-r42-connect
+  namespace: agents-operations
+spec:
+  podSelector:
+    matchLabels:
+      platform.example/agent: incident-assistant
+      platform.example/release: r42
+  kprobes:
+    - call: tcp_connect
+      syscall: false
+      args:
+        - index: 0
+          type: sock</code></pre><p>The compiler fills the namespace and protected selectors from the environment binding. The hook and argument definitions come from the qualified template, not agent-generated code. Kubernetes admission/RBAC prevent arbitrary workloads from copying or changing release selectors. The image binding is checked separately; a label is not authenticated artifact identity.</p><p>Validate the emitted fields on the actual node. Socket observations do not directly identify MCP tool names or HTTP authorization decisions. Native schema: <a href="https://tetragon.io/docs/reference/tracing-policy/">Tetragon policy API</a>.</p></details>
+<details class="guide-detail"><summary>Enforcement, updates, and activation failures</summary><p>An enforcement template must name the exact operation, hook, selector, action, and expected outcome. Where prevention is required, use a qualified pre-operation mechanism or another preventive boundary. A post-event <code>Sigkill</code> response must not be represented as guaranteed prevention of an already attempted effect.</p><p>Require the selected runtime-hook/startup strategy to establish coverage before agent code. New nodes and rescheduled workloads must meet the same condition; an earlier acknowledgement from another node is insufficient. See <a href="https://tetragon.io/docs/concepts/runtime-hooks/">runtime hooks</a> and <a href="https://tetragon.io/docs/concepts/tracing-policy/">policy concepts</a>.</p><p>Roll out versioned policy resources without replacing the active release’s rules underneath it. Narrow selectors prevent canary policies from affecting unrelated workloads. Missing policies, unsupported hooks/actions, unqualified nodes, excessive event loss, or unexplained startup gaps withhold the affected release. Runtime failures trigger the risk profile’s containment/stop response.</p></details>
+
+<h3 id="deploy-step-15">15. OpenShell: supervised execution and sandbox policy</h3>
+<p><strong>Purpose.</strong> OpenShell constrains the execution environment around the agent. Filesystem restrictions use Linux Landlock; network policy permits supported connections and request patterns through the sandbox proxy. The sandbox lifecycle is a platform operation, not something the agent can approve or widen.</p>
+<p><strong>Platform prerequisite.</strong> Qualify the selected compute driver, runtime image, kernel protections, authentication, and policy-update behavior. Identify required runtime paths and writable scratch mounts. The agent image must be compatible with supervised execution; an arbitrary container is not automatically a qualified sandbox.</p>
+<h4>Automatic configuration</h4>
+<ol><li><strong>Resolve access.</strong> Map the approved filesystem request, runtime baseline, gateway endpoint, binary paths, process identity, and scratch limits into a native policy.</li><li><strong>Validate effective scope.</strong> Account for policy precedence, provider-contributed rules, and baseline paths. The organization boundary is applied by the compiler; a global policy is not assumed to intersect per-agent policy.</li><li><strong>Qualify the sandbox.</strong> Run the candidate image under that configuration. Confirm approved reads/writes and routes, then test protected-file access, outside-scratch writes, direct egress, and alternate-executable paths.</li><li><strong>Create through the lifecycle adapter.</strong> After Argo publishes the approved release intent, the adapter verifies the bundle and calls the supported OpenShell lifecycle interface with image, policy, and approved provider/credential references.</li><li><strong>Read back and activate.</strong> Await loaded policy state, retrieve effective configuration, reconcile it against the approved plan, and record sandbox generation and policy revision. Only then run the agent with the allowed task authority.</li></ol>
+<details class="guide-example"><summary>Generated sandbox policy: native configuration shape</summary><pre><code># Partial template output; resolve all runtime paths before use.
+version: 1
+filesystem_policy:
+  include_workdir: false
+  read_only: [/app, /usr, /lib, /etc/ssl/certs]
+  read_write: [/tmp/agent-scratch]
+landlock:
+  compatibility: hard_requirement
+network_policies:
+  approved_gateway:
+    endpoints:
+      - host: gateway.internal.example
+        port: 443
+        protocol: tcp
+    binaries:
+      - path: /usr/local/bin/python</code></pre><p>Use the image’s actual executable and library paths. This TCP route is a transport permission, not MCP tool authorization. The approved Kubernetes workload definition supplies nonroot identity, bounded scratch storage, and resource limits. Schema and driver behavior: <a href="https://docs.nvidia.com/openshell/latest/how-it-works/policies/schema">OpenShell policy reference</a>.</p></details>
+<details class="guide-detail"><summary>Policy composition, updates, and activation failures</summary><p>Provider attachments can add network rules to the base policy. A configured global policy replaces individual policy rather than acting as an intersecting ceiling. Compare the effective result, including baseline additions, with the approved boundary; block unexpected widening. See <a href="https://docs.nvidia.com/openshell/latest/how-it-works/policies/overview">policy precedence and composition</a>.</p><p>Filesystem and other startup controls require a replacement sandbox when changed. Supported network changes may load live, but this architecture still binds them to an approved release revision. Read back the loaded revision and test required denials after updating; submitted configuration is not proof of activation. See <a href="https://docs.nvidia.com/openshell/latest/how-it-works/policies/manage-policies">policy lifecycle</a>.</p><p>Keep automatic advisor approval disabled. If a prover is used, require conclusive results for the necessary modeled domains. Neither proposals nor proofs replace runtime probes. Missing required Landlock protection, skipped required paths, unsupported inspection, policy mismatch, or failed provider authentication blocks activation.</p><p>The adapter uses release/environment as an idempotency key, reconciles existing sandbox generations after restart, propagates cancellation, and cleans up retired generations. These orchestration and readiness obligations are proposed platform functionality.</p></details>
+
+<h3 id="deploy-step-16">16. AgentGateway: identity, model routes, and tool authorization</h3>
+<p><strong>Purpose.</strong> AgentGateway provides an explicitly addressed boundary for supported model and MCP traffic. It authenticates the caller, selects approved upstreams, and restricts supported requests. Network and sandbox controls make direct upstream access fail.</p>
+<p><strong>Platform prerequisite.</strong> Install compatible Gateway API and AgentGateway CRDs/controller/data plane. Configure trusted TLS, workload authentication, backend credential integration, and telemetry. Give tenants and releases explicit route/policy scope; do not permit an agent author to attach policy to another tenant’s route.</p>
+<h4>Automatic configuration</h4>
+<ol><li><strong>Resolve semantic capabilities.</strong> Map logical model aliases and MCP tools to approved backends, exact tool schemas, authenticated subjects, and resource-authorization owners.</li><li><strong>Render native resources.</strong> Generate Gateway/route resources, <code>AgentgatewayBackend</code> definitions, and <code>AgentgatewayPolicy</code> for supported authentication, model/tool authorization, and limits. Credentials appear only as approved references.</li><li><strong>Check scope and policy interactions.</strong> Validate target references, namespaces, TLS, issuer/audience, merge precedence, and any broader inherited rules. Preserve denial by default for the protected route.</li><li><strong>Qualify and reconcile.</strong> Test allowed calls, invalid/expired identities, forbidden tool calls, model restrictions, cross-tenant paths, and bypass. Seal the configuration in ACR; Argo applies the matching GitOps resources; the controller configures the proxy.</li><li><strong>Verify the data plane.</strong> Confirm native status and effective behavior, associate the serving gateway configuration with the release, and report readiness. Inject only approved endpoint bindings into the agent runtime.</li></ol>
+<details class="guide-example"><summary>Generated MCP authorization policy: native configuration shape</summary><pre><code># Tool authorization fragment. JWT validation / TLS / routes are separate.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: incident-r42-tools
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: incident-r42-mcp
+  backend:
+    mcp:
+      authorization:
+        action: Allow
+        policy:
+          matchExpressions:
+            - 'jwt.sub == "incident-r42" &amp;&amp; mcp.tool.name in ["read_runbook", "read_status", "create_ticket"]'</code></pre><p>The backend/route must have separately configured authenticated identity. A caller-supplied <code>sub</code> field is not a trusted JWT claim. Keep the claim and tool check in the same expression: alternative match expressions use OR semantics. Validate this shape against the installed release and test both tool discovery and direct <code>tools/call</code>.</p><p>Allowing <code>create_ticket</code> at the gateway does not grant approval to create a particular ticket. The receiver checks project/tenant, exact arguments, approval scope/expiry, revocation, and idempotency before the effect. References: <a href="https://agentgateway.dev/docs/kubernetes/latest/documentation/mcp/tool-access/">MCP tool authorization</a> and <a href="https://agentgateway.dev/docs/kubernetes/latest/reference/api/">native resource API</a>.</p></details>
+<details class="guide-detail"><summary>Credentials, limits, updates, and activation failures</summary><p>For this topology, the gateway integration owns upstream credentials; the agent receives restricted workload identity. Backend key retrieval, rotation, and any token exchange require a qualified integration. Do not assume a Kubernetes token automatically becomes a model or business-service credential.</p><p>Enable supported request/token limits, model allowlists, and content checks according to the platform profile. Aggregate financial budgets and action approval may need independent ledger/receiver services. Content filters are supplementary and cannot guarantee that every sensitive disclosure or malicious instruction is detected.</p><p>Create release-scoped routes/backends or otherwise qualify isolated policy updates. Wait for convergence and data-plane probes before shifting traffic. Authentication failure, unsupported mandatory policy, rejected target references, unexpected merged permissions, failed credentials, or a successful bypass blocks activation. Revoke receiver/gateway authority independently of eventual GitOps cleanup.</p></details>
+
+<h3 id="deploy-step-17">17. The shared automation and readiness contract</h3>
+<p>The compiler and three adapters share a release identity, but each produces its own native artifact and effective-state report. None of the products natively consumes the organization’s complete release bundle. The platform provides that binding and translates it into supported product interfaces.</p>
+<table><thead><tr><th>Adapter</th><th>Artifact and consumer</th><th>Effective evidence</th></tr></thead><tbody>
+<tr><td>Tetragon</td><td>Signed bundle → exact GitOps CRD → Kubernetes API → node daemon.</td><td>Resource generation, qualified node identities, loaded policy state, hook/action probes, collector health.</td></tr>
+<tr><td>OpenShell</td><td>Signed policy/image binding → lifecycle adapter → supported sandbox interface.</td><td>Sandbox generation, policy revision/source, normalized effective policy, applied paths, denial probes.</td></tr>
+<tr><td>AgentGateway</td><td>Signed bundle → exact GitOps resources → controller → proxy configuration.</td><td>Resource status/generation, serving data-plane scope, identity/tool/model probes, bypass denial.</td></tr>
+</tbody></table>
+<details class="guide-example"><summary>Proposed adapter acknowledgement</summary><pre><code># Organization-owned report, not a native vendor resource.
+release: incident-assistant/42
+bundle_digest: sha256:BUNDLE
+adapter: openshell
+target_environment: production
+subject:
+  workload_image: sha256:IMAGE
+  sandbox_generation: GENERATION
+policy:
+  desired_artifact_digest: sha256:POLICY
+  native_revision: REVISION
+  normalized_effective_digest: sha256:EFFECTIVE
+qualification: {report_digest: sha256:PROBES, required_checks: passed}
+observed_at: TRUSTED_TIMESTAMP
+valid_until: POLICY_DEFINED_EXPIRY</code></pre><p>Authenticate the reporting adapter and verify its allowed target scope. Effective policy may contain provider/runtime contributions, so its normalized digest is not necessarily identical to the base artifact digest. The verifier checks the approved transformation and additions; it does not accept arbitrary equality asserted by the agent.</p></details>
+<p>The release controller requires current acknowledgements from all mandatory boundaries, with the same bundle, environment, and applicable workload/node scope. Controller restarts, node replacement, provider changes, or policy drift require revalidation. No adapter may silently downgrade an unsupported control to a warning.</p>
+<p>During deployment, failures keep the candidate inactive. During operation, risk-specific control failures withdraw affected authority, preserve evidence, and reconcile in-flight effects. Upstream status plus actual probes establishes readiness; labels, timestamps, hashes, and green Kubernetes objects alone do not.</p>
+
 </section>

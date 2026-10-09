@@ -28,7 +28,7 @@ const root=path.resolve(__dirname,'..');
     await page.locator('.boundary-widget button').nth(2).click();const msg=await page.locator('.boundary-detail').innerText();if(!msg.includes('gateway authenticates'))failures.push('Boundary controls not responding');
    }
    if(name==='deployment-guide'){
-    if(await page.locator('.guide-step').count()!==12)failures.push('Deployment guide must have twelve steps');
+    if(await page.locator('.guide-step').count()!==17)failures.push('Deployment specification must have seventeen sections');
     if(size.name==='mobile')await page.locator('.mobile-toggle').click();
     await page.locator('#nav-search').fill('profile');
     if(await page.locator('.guide-nav nav a:visible').count()!==1)failures.push('Deployment specification navigation filter failed');
@@ -38,12 +38,20 @@ const root=path.resolve(__dirname,'..');
     await page.locator('.detail-toggle').click();
     await page.locator('.guide-nav a[href="#deploy-step-6"]').click();
     await page.waitForFunction(()=>document.querySelector('.guide-nav a[href="#deploy-step-6"]')?.getAttribute('aria-current')==='step');
-    if(!await page.locator('#reading-position').innerText().then(t=>t.endsWith('/ 12')))failures.push('Deployment guide step count incorrect');
+    if(!await page.locator('#reading-position').innerText().then(t=>t.endsWith('/ 17')))failures.push('Deployment guide step count incorrect');
     const first=page.locator('.guide-step[aria-labelledby="deploy-step-6"] details').first();
     await first.locator('summary').press('Enter');
     if(!await first.evaluate(e=>e.open))failures.push('Deployment guide keyboard disclosure failed');
     await first.locator('summary').press('Enter');
     await page.screenshot({path:path.join(out,`deployment-runtime-${size.name}.png`)});
+    for(const n of [14,15,16]){
+     const section=page.locator(`.guide-step[aria-labelledby="deploy-step-${n}"]`);
+     await section.locator('details summary').first().press('Enter');
+     if(!await section.locator('details').first().evaluate(e=>e.open))failures.push(`Technology configuration example did not expand: ${n}`);
+     await section.locator('details summary').first().press('Enter');
+    }
+    await page.locator('#deploy-step-13').evaluate(e=>e.scrollIntoView({block:'start',behavior:'instant'}));
+    await page.screenshot({path:path.join(out,`deployment-layers-${size.name}.png`)});
     await page.evaluate(()=>{window.scrollTo({top:0,behavior:'instant'});document.querySelector('.sidebar').scrollTop=0;});
     await page.screenshot({path:path.join(out,`deployment-guide-${size.name}.png`)});
    }

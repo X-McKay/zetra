@@ -10,7 +10,55 @@ def text(x, y, value, size=16, color="#27252b", weight=400):
 def diagram(key):
     purple, orange, gray = "#71509c", "#ce692c", "#77747b"
     body = ""
-    if key == "deploy-sequence":
+    if key == "deploy-layers":
+        title, height = "Three runtime boundaries; one release-controlled configuration", 470
+        body += text(25, 30, "CONTROL PLANE", 14, purple, 700)
+        body += text(
+            25, 56, "Release controller → native adapters → Argo / supported sandbox lifecycle", 16
+        )
+        body += (
+            '<rect x="25" y="91" width="440" height="320" rx="8" fill="#f7f6f3" stroke="#c8c5c1"/>'
+        )
+        body += text(45, 120, "Linux node · Kubernetes", 17, gray, 700)
+        body += (
+            '<rect x="55" y="149" width="335" height="158" rx="8" fill="#f0eaf6" stroke="#71509c"/>'
+        )
+        body += text(75, 180, "OpenShell sandbox boundary", 17, purple, 700)
+        body += text(75, 207, "Filesystem + permitted connections", 15)
+        body += text(75, 256, "Agent computation", 20, purple, 700)
+        body += '<path d="M275 253H539" stroke="#71509c" stroke-width="3"/>'
+        body += text(399, 239, "Approved route", 14, purple)
+        body += (
+            '<circle cx="592" cy="253" r="52" fill="#f0eaf6" stroke="#71509c" stroke-width="2"/>'
+        )
+        body += text(534, 160, "AgentGateway", 18, purple, 700)
+        body += (
+            text(563, 242, "Identity", 14)
+            + text(563, 263, "Models", 14)
+            + text(563, 284, "Tools", 14)
+        )
+        for y, label, sub in [
+            (132, "Model backend", "Approved provider"),
+            (253, "Read backend", "Tenant + resource scope"),
+            (365, "Action receiver", "Approval + idempotency"),
+        ]:
+            body += f'<path d="M644 253C705 253 705 {y} 748 {y}" fill="none" stroke="#71509c" stroke-width="2"/>'
+            body += text(755, y - 10, label, 17, purple, 700) + text(755, y + 14, sub, 14)
+        body += '<rect x="45" y="333" width="400" height="57" fill="#fff0e5"/>'
+        body += text(60, 355, "Tetragon / eBPF · node daemon", 17, orange, 700)
+        body += text(60, 379, "Independent kernel evidence + qualified responses", 14)
+        body += '<path d="M258 285C445 315 503 325 713 322" fill="none" stroke="#b64b27" stroke-dasharray="4 5"/>'
+        body += '<path d="M666 313L682 331 M682 313L666 331" stroke="#b64b27" stroke-width="2"/>'
+        body += text(486, 352, "Direct bypass denied", 14, orange, 700)
+        body += text(
+            25,
+            450,
+            "Kubernetes / CNI restrict reachability. Receivers retain business authorization.",
+            16,
+            gray,
+        )
+        caption = "Logical boundaries, not a pod layout. The selected OpenShell driver may separate supervisor and workload resources; each component is correlated to the same release."
+    elif key == "deploy-sequence":
         title, height = "The deployment sequence: artifacts first, authority last", 525
         for x, label, sub in [
             (65, "Azure Repos", "Source + GitOps"),
