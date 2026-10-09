@@ -1,0 +1,104 @@
+{
+  "checkedAt": "2026-10-09T00:18:42.567568+00:00",
+  "status": "passed",
+  "scope": "Built and locally loaded OCI worker image; production approval is withheld",
+  "platform": "linux/arm64",
+  "podmanConnection": "zetra-validation-root",
+  "tag": "localhost/zetra-worker:0.1-lab",
+  "imageId": "sha256:4052966b888a888880def2837c3a69ce1e8798eab44484108d4a75ac4ecc1787",
+  "podmanManifestDigest": "sha256:e0a4b5ae57e53f65ff7977f762b8067d72af93dbbddce53bfd9e621c4a593612",
+  "exportedOCIManifestDigest": "sha256:f2245a1a696d0ebec49cc3cb0fb145b6b5bd9953000bc0a3e48d0f305f2fd240",
+  "kindImageReference": "localhost/zetra-worker@sha256:b8dc0f5920797713eb87c1f2450fc18d2d5db5ba7cbd85d4e72f33d2f4ca4462",
+  "kindCluster": "kind-zetra-validation",
+  "kindLoaded": true,
+  "digestNote": "OCI export recompresses layers, so the Podman storage manifest and exported OCI manifest differ. The retained Kubernetes OCI index selects the ARM64 exported manifest; that manifest references the final config ID. All target/content hashes and the live CRI chain were verified.",
+  "bases": {
+    "python": "docker.io/library/python:3.12.13-slim-trixie@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
+    "uv": "ghcr.io/astral-sh/uv:0.12.7@sha256:95f2aa1fe59274951cfe9b0cbc7972e879ff1004bc8945d130a32eb0dbd85945"
+  },
+  "build": {
+    "installer": "uv sync --locked --no-dev --extra temporal --no-editable --python /usr/local/bin/python",
+    "registryPush": false,
+    "runtimeDevTools": false,
+    "runtimeUser": "10001:10001",
+    "rootFilesystemReadOnlyCompatible": true
+  },
+  "runtime": {
+    "uid": 10001,
+    "gid": 10001,
+    "packages": [
+      "PyYAML",
+      "nexus-rpc",
+      "protobuf",
+      "temporalio",
+      "types-protobuf",
+      "typing_extensions",
+      "zetra"
+    ],
+    "agentFingerprint": "41c45905784554de49c80d15f6e6ecf9c86e8774608fa06742a386eb7b54cb26"
+  },
+  "tests": [
+    {
+      "name": "worker --help on final image",
+      "status": "passed"
+    },
+    {
+      "name": "runtime UID/dependency inventory/agent fingerprint",
+      "status": "passed"
+    },
+    {
+      "name": "ticket.write startup denied before Temporal connection",
+      "status": "passed",
+      "exitCode": 1
+    }
+  ],
+  "testRestrictions": {
+    "readOnlyRoot": true,
+    "network": "none",
+    "capabilitiesDropped": "ALL",
+    "noNewPrivileges": true
+  },
+  "kubernetesWorkflowQualification": {
+    "status": "passed",
+    "report": "integrations/evidence/worker-temporal-kubernetes-report.json",
+    "reportSHA256": "465fe518c0351225cf5fc1584429d9035e2a2fc0d075aec43ddc575199dcfbfd",
+    "scope": "Actual Kubernetes OCI worker, controlled knowledge workflow, recorded history replay and live image correlation; lab namespace deleted"
+  },
+  "sourceHashes": {
+    "src/zetra/__init__.py": "54059a5154211fc0c8bdf6e6afd183eab688a0e88170851eb840e510bb0b85ef",
+    "src/zetra/__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
+    "src/zetra/analysis.py": "01cfcbdfde3a7b86e7bdbec28d4159b09f3e8a125be952777cb70fedc9b16fbc",
+    "src/zetra/cli.py": "6c8ecbae0c58c650fd3b6f29964477a988e7fbda4049c8c4b535b5d2687754df",
+    "src/zetra/deployment.py": "e00a95a19020d087d2ee8ff0416d1518f208b1db21d78928d0ddb153f38d46c1",
+    "src/zetra/evidence.py": "071d7b4b39bcac6267618e3724bedd8201b1295ec08f9b1fbf75a69b79a3620f",
+    "src/zetra/gateway.py": "847a394a97636b82af5ecf0649630a2e7f9f8d0bc6e076f9a86510ca0f28dd1c",
+    "src/zetra/loader.py": "e0f56b0ca0ec56f87e38358e1b73801b40147a26f04de908d2939141e521f1a7",
+    "src/zetra/manifest.py": "d90c948453e4ac063932cb1c466d99a56d1016cea0fe9c24d16cd2bdb9a0134b",
+    "src/zetra/profiling.py": "7bba98010f9d0fd384b3384e28918590c6395c94713e86776a745e69e4e3177b",
+    "src/zetra/runtime.py": "08979249a1ab18502818bbfcfde91b3d9d21a488ebabdb84bf7fe7e801d410e2",
+    "src/zetra/templates/knowledge/src/knowledge/__init__.py": "f3863058f16107dc1a5ac9589fc47471f0d5c3729798acbbe796d3f8d3059146",
+    "src/zetra/templates/knowledge/src/knowledge/factory.py": "e3169cdfec6aa82f9a86ed13f6fb689469d6eb4f0d98218de7000598039292c7",
+    "src/zetra/templates/knowledge/tests/test_cases.py": "ece4456a5a019939206838b7c3114ed66b55304b3f58644b4fb79c28dd110974",
+    "src/zetra/temporal_worker.py": "ed89ff322fbee676f52dc59732cfcc6a6ca44c67a3cc893ef9d9060db1bdc7d9",
+    "src/zetra/temporal_workflow.py": "7daba046ddbd97abcdb604bc3d656537895df8c5dbaba1e977de8f398ebb3c25"
+  },
+  "inputHashes": {
+    "deploy/Dockerfile": "ae4142bdeead90b5ba9a502cd9639cdc98041bc1dc5000979177ba7fd684ac45",
+    ".dockerignore": "e23194bba75e86abd6e6646303b294e822a3a45b11bb6b52dfb3b56e88313cb3",
+    "pyproject.toml": "c84c00576862c5a89311ec3ee9122cf54a19c0a34f1e0068e6862851e6f0c017",
+    "uv.lock": "4e32b5f82f5d5f4dd1728dcf9f0fb7060ed12f10dc505b47b477f20bcd209fc9"
+  },
+  "limitations": [
+    "ARM64 only tested; no amd64 build",
+    "No registry publication, signature verification, SBOM or vulnerability qualification",
+    "Local image tests do not establish OpenShell containment, gateway authorization or production Temporal mTLS",
+    "Native release renderer continues to withhold worker activation until mandatory integrations qualify"
+  ],
+  "exportedOCIIndexDigest": "sha256:b8dc0f5920797713eb87c1f2450fc18d2d5db5ba7cbd85d4e72f33d2f4ca4462",
+  "reproduction": {
+    "build": "just worker-image",
+    "load": "just worker-load",
+    "fixture": "deploy/worker-qualification.yaml",
+    "client": "integrations/worker_temporal_kubernetes_test.py"
+  }
+}

@@ -1,0 +1,33 @@
+# Zetra isolated fixture: scoped sensitive-file read response.
+# Pattern qualified against Tetragon 1.7.1; hook semantics are kernel-dependent.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: zetra-fixture-file-guard
+  namespace: zetra-validation
+spec:
+  podSelector:
+    matchLabels:
+      zetra.dev/agent: tetragon-fixture
+  kprobes:
+    - call: security_file_permission
+      syscall: false
+      return: true
+      args:
+        - index: 0
+          type: file
+        - index: 1
+          type: int
+      returnArg:
+        index: 0
+        type: int
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: Equal
+              values: [/tmp/zetra-sensitive]
+            - index: 1
+              operator: Equal
+              values: ["4"]
+          matchActions:
+            - action: Sigkill

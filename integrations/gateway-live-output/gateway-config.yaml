@@ -1,0 +1,29 @@
+# Official standalone v1.6.0 configuration; synthetic test identities.
+mcp:
+  port: 18300
+  dnsRebindingProtection: true
+  policies:
+    jwtAuth:
+      mode: strict
+      issuer: zetra-local-test
+      audiences: [zetra-gateway-test]
+      jwks:
+        file: /Users/al/git/zetra/.tools/gateway-test-state/jwks.json
+    mcpAuthorization:
+      rules:
+        - 'jwt.sub == "knowledge-assistant" && mcp.tool.name == "read_status"'
+  targets:
+    - name: fixture
+      mcp:
+        host: http://127.0.0.1:18305/mcp
+frontendPolicies:
+  tracing:
+    host: 127.0.0.1:14317
+    randomSampling: true
+    resources:
+      service.name: '"zetra-live-gateway"'
+      deployment.environment: '"disposable-local-kind"'
+    attributes:
+      zetra.release.id: '"x-zetra-release-id" in request.headers ? request.headers["x-zetra-release-id"] : ""'
+      zetra.run.id: '"x-zetra-run-id" in request.headers ? request.headers["x-zetra-run-id"] : ""'
+      zetra.operation.id: '"x-zetra-operation-id" in request.headers ? request.headers["x-zetra-operation-id"] : ""'

@@ -1,0 +1,19 @@
+# Host tools only. Python quality tools are resolved by uv.lock.
+[tools]
+python = "3.12.13"
+uv = "0.12.7"
+just = "1.58.0"
+actionlint = "1.7.12"
+shellcheck = "0.11.0"
+
+[env]
+UV_CACHE_DIR = "{{config_root}}/.tools/uv-cache"
+PREK_HOME = "{{config_root}}/.tools/prek-cache"
+
+[tasks.bootstrap]
+description = "Install the locked Python environment"
+run = "just bootstrap"
+
+[tasks.check]
+description = "Run the contributor quality gate"
+run = "just check"

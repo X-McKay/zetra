@@ -1,0 +1,53 @@
+name: Zetra contributor quality gates
+on: [push, pull_request]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  UV_CACHE_DIR: ${{ github.workspace }}/.tools/uv-cache
+  PREK_HOME: ${{ github.workspace }}/.tools/prek-cache
+jobs:
+  toolkit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11.16', '3.12.13']
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          version: '0.12.7'
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - run: uv sync --locked --all-extras
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked --all-extras ty check
+      - run: uv run --locked --all-extras python -m unittest discover -s tests -v
+      - run: uv run --locked python scripts/build_playbooks.py
+      - run: git diff --exit-code -- docs
+      - run: uv run --locked python scripts/check_docs.py
+      - run: uv run --locked zetra check examples/knowledge
+      - run: uv run --locked zetra eval examples/knowledge --output /tmp/knowledge-evidence.json
+      - run: uv run --locked zetra check examples/knowledge --evidence /tmp/knowledge-evidence.json
+      - run: uv run --locked zetra eval examples/action --output /tmp/action-evidence.json
+      - run: uv run --locked zetra check examples/action --evidence /tmp/action-evidence.json
+      - run: uv run --locked zetra eval examples/gateway-read --output /tmp/gateway-evidence.json
+      - run: uv run --locked zetra check examples/gateway-read --evidence /tmp/gateway-evidence.json
+      - run: uv run --locked zetra render examples/knowledge --evidence /tmp/knowledge-evidence.json --image registry.invalid/zetra@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --namespace zetra-evaluation --gateway-namespace zetra-gateway --gateway-label app=agentgateway --output /tmp/withheld-deployment.yaml
+      - run: uv run --locked --all-extras prek run --all-files
+      # PR runs execute contributed code on ephemeral runners without cluster
+      # credentials, model API keys or deployment permissions.
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+      - run: nix flake check --no-build --all-systems
+      - run: nix develop --command nixfmt --check flake.nix
+      - run: nix develop --command just --fmt --check
+      - run: nix develop --command just bootstrap
+      - run: nix develop --command just check

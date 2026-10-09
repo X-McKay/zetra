@@ -1,0 +1,33 @@
+{
+  "active_version": 1,
+  "config_revision": 4787852757384789215,
+  "hash": "4f1991b4e4a21fb8a047e7af2da5577841b1994598c8fdcdc635e0eb9776b965",
+  "policy": {
+    "filesystem_policy": {
+      "include_workdir": true,
+      "read_only": [
+        "/bin",
+        "/usr",
+        "/lib",
+        "/proc",
+        "/dev/urandom",
+        "/etc",
+        "/var/log"
+      ],
+      "read_write": [
+        "/sandbox",
+        "/tmp",
+        "/dev/null"
+      ]
+    },
+    "landlock": {
+      "compatibility": "hard_requirement"
+    },
+    "version": 1
+  },
+  "policy_source": "sandbox",
+  "sandbox": "zetra-strict",
+  "scope": "sandbox",
+  "status": "effective",
+  "version": 1
+}

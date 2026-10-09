@@ -1,0 +1,238 @@
+{
+  "events": [
+    {
+      "eventId": "1",
+      "eventTime": "2026-10-09T00:27:58.203787549Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED",
+      "taskId": "1048620",
+      "workflowExecutionStartedEventAttributes": {
+        "workflowType": {
+          "name": "AgentWorkflow"
+        },
+        "taskQueue": {
+          "name": "zetra-image-qualification",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJrZXkiOiJ6ZXRyYSJ9"
+            }
+          ]
+        },
+        "workflowExecutionTimeout": "60s",
+        "workflowRunTimeout": "60s",
+        "workflowTaskTimeout": "10s",
+        "originalExecutionRunId": "01a11e0f-3f7b-7c02-87be-a83f5332194f",
+        "identity": "72520@alair",
+        "firstExecutionRunId": "01a11e0f-3f7b-7c02-87be-a83f5332194f",
+        "attempt": 1,
+        "workflowExecutionExpirationTime": "2026-10-09T00:28:58.203Z",
+        "firstWorkflowTaskBackoff": "0s",
+        "workflowId": "zetra-oci-kubernetes-7b10a4d8-d1c9-4983-b7f6-d3b8df500a46",
+        "priority": {}
+      }
+    },
+    {
+      "eventId": "2",
+      "eventTime": "2026-10-09T00:27:58.204129884Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "taskId": "1048621",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "zetra-image-qualification",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "3",
+      "eventTime": "2026-10-09T00:27:58.212904224Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "taskId": "1048627",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "2",
+        "identity": "1@zetra-worker-temporal",
+        "requestId": "aeba5f61-758f-471c-b8b5-59ed822f9b1e",
+        "historySizeBytes": "367",
+        "workerVersion": {
+          "buildId": "bdbfbae9ceef3087d0a0b17fba5b4367"
+        }
+      }
+    },
+    {
+      "eventId": "4",
+      "eventTime": "2026-10-09T00:27:58.242327095Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "taskId": "1048632",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "2",
+        "startedEventId": "3",
+        "identity": "1@zetra-worker-temporal",
+        "workerVersion": {
+          "buildId": "bdbfbae9ceef3087d0a0b17fba5b4367"
+        },
+        "sdkMetadata": {
+          "coreUsedFlags": [
+            3,
+            1,
+            2
+          ],
+          "sdkName": "temporal-python",
+          "sdkVersion": "1.34.0"
+        },
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "5",
+      "eventTime": "2026-10-09T00:27:58.242459762Z",
+      "eventType": "EVENT_TYPE_ACTIVITY_TASK_SCHEDULED",
+      "taskId": "1048633",
+      "activityTaskScheduledEventAttributes": {
+        "activityId": "1",
+        "activityType": {
+          "name": "zetra.run_agent"
+        },
+        "taskQueue": {
+          "name": "zetra-image-qualification",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "header": {},
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJrZXkiOiJ6ZXRyYSJ9"
+            }
+          ]
+        },
+        "scheduleToCloseTimeout": "60s",
+        "scheduleToStartTimeout": "60s",
+        "startToCloseTimeout": "30s",
+        "heartbeatTimeout": "0s",
+        "workflowTaskCompletedEventId": "4",
+        "retryPolicy": {
+          "initialInterval": "1s",
+          "backoffCoefficient": 2.0,
+          "maximumInterval": "100s",
+          "maximumAttempts": 3,
+          "nonRetryableErrorTypes": [
+            "Denied",
+            "ContractError"
+          ]
+        },
+        "useWorkflowBuildId": true,
+        "priority": {}
+      }
+    },
+    {
+      "eventId": "6",
+      "eventTime": "2026-10-09T00:27:58.242512096Z",
+      "eventType": "EVENT_TYPE_ACTIVITY_TASK_STARTED",
+      "taskId": "1048637",
+      "activityTaskStartedEventAttributes": {
+        "scheduledEventId": "5",
+        "identity": "1@zetra-worker-temporal",
+        "requestId": "751ef07a-ce8b-4c95-a3f6-c410375462c2",
+        "attempt": 1,
+        "workerVersion": {
+          "buildId": "bdbfbae9ceef3087d0a0b17fba5b4367"
+        }
+      }
+    },
+    {
+      "eventId": "7",
+      "eventTime": "2026-10-09T00:27:58.249835928Z",
+      "eventType": "EVENT_TYPE_ACTIVITY_TASK_COMPLETED",
+      "taskId": "1048638",
+      "activityTaskCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJhbnN3ZXIiOiJaZXRyYSBtZWFucyBaRXJvLVRSdXN0IEFnZW50cy4iLCJzb3VyY2UiOiJhcHByb3ZlZC1rbm93bGVkZ2UtZml4dHVyZSJ9"
+            }
+          ]
+        },
+        "scheduledEventId": "5",
+        "startedEventId": "6",
+        "identity": "1@zetra-worker-temporal"
+      }
+    },
+    {
+      "eventId": "8",
+      "eventTime": "2026-10-09T00:27:58.249869012Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "taskId": "1048639",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "1@zetra-worker-temporal-c215051a0aa64ed68a0e90eeba9b77d1",
+          "kind": "TASK_QUEUE_KIND_STICKY",
+          "normalName": "zetra-image-qualification"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "9",
+      "eventTime": "2026-10-09T00:27:58.254634580Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "taskId": "1048643",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "8",
+        "identity": "1@zetra-worker-temporal",
+        "requestId": "483ea340-b77a-464b-846e-5d642cdcf0d7",
+        "historySizeBytes": "1228",
+        "workerVersion": {
+          "buildId": "bdbfbae9ceef3087d0a0b17fba5b4367"
+        }
+      }
+    },
+    {
+      "eventId": "10",
+      "eventTime": "2026-10-09T00:27:58.259008979Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "taskId": "1048647",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "8",
+        "startedEventId": "9",
+        "identity": "1@zetra-worker-temporal",
+        "workerVersion": {
+          "buildId": "bdbfbae9ceef3087d0a0b17fba5b4367"
+        },
+        "sdkMetadata": {},
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "11",
+      "eventTime": "2026-10-09T00:27:58.259055562Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED",
+      "taskId": "1048648",
+      "workflowExecutionCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJhbnN3ZXIiOiJaZXRyYSBtZWFucyBaRXJvLVRSdXN0IEFnZW50cy4iLCJzb3VyY2UiOiJhcHByb3ZlZC1rbm93bGVkZ2UtZml4dHVyZSJ9"
+            }
+          ]
+        },
+        "workflowTaskCompletedEventId": "10"
+      }
+    }
+  ]
+}

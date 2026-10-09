@@ -1,0 +1,114 @@
+<section id="toolkit" class="chapter">
+<p class="eyebrow">05 / Developers · Platform implementers</p><h2>The Zetra Toolkit</h2>
+<p>Zetra v0.1 is a runnable foundation for the proposed standard. Its framework-neutral Python contract keeps agent logic portable and makes development checks reproducible. The local runtime demonstrates capability checks, bounded execution and receiver-side approval/idempotency. The Kubernetes renderer withholds activation. Integration fixtures exercise real external components separately; a local passing check is never a production approval.</p>
+<div class="status-grid"><div class="status-card"><strong>Working local toolkit</strong><p>Strict manifests, AST hints, conservative risk floors, executable scenario evaluation, evidence binding, candidate profiles, Kubernetes renders and catalog candidates.</p></div><div class="status-card"><strong>Real integration adapters</strong><p>Explicit Temporal workflow/worker and replay smoke; Kubernetes discovery; versioned live fixtures with reported positive and negative paths.</p></div><div class="status-card"><strong>Production platform work</strong><p>Trusted signed attestations, enforced admission, authenticated distributed approval/revocation, enterprise catalog service and operational ownership remain implementation gates.</p></div></div>
+<h3>5.1 Install and run the complete local workflow</h3>
+<p>Use the locked Nix development shell or the pinned mise toolchain, then <code>just bootstrap</code>. uv manages the committed Python resolution, including Ruff, ty and prek; just exposes the common quality gate. The package supports Python 3.11 or newer. The core dependency is PyYAML. Temporal is optional so basic development and example evaluation do not need a cluster, model key or paid inference. Running <code>eval</code> and <code>run</code> executes project code and is intended for a trusted local project or an appropriately isolated CI runner. <code>check</code> scans source without importing the agent.</p>
+<pre><code>nix develop
+just bootstrap
+just check
+.venv/bin/zetra --help
+
+# All three reference agents have deterministic offline scenario suites.
+.venv/bin/zetra check examples/knowledge
+.venv/bin/zetra eval examples/knowledge --output build/knowledge-evidence.json
+.venv/bin/zetra check examples/knowledge --evidence build/knowledge-evidence.json
+.venv/bin/zetra run examples/knowledge --input '{"key":"zetra"}'
+
+.venv/bin/zetra eval examples/action --output build/action-evidence.json
+PYTHONPATH=src .venv/bin/python examples/action/demo.py
+
+# New projects get an executable starter, not empty test placeholders.
+.venv/bin/zetra init /tmp/my-zetra-agent --name my-zetra-agent
+.venv/bin/zetra eval /tmp/my-zetra-agent --output /tmp/my-zetra-evidence.json</code></pre>
+<p>Replace the scaffold owner and business function before organizational use. The initialized project is a single-agent package with root <code>agent.yaml</code>; the developer playbook describes the expanded multi-agent structure as the target standard. Empty datasets and policy directories created by scaffolding are organizational aids, not proof that scenarios or controls exist.</p>
+<h3>5.2 The implemented manifest contract</h3>
+<p>The parser rejects unknown fields, duplicate YAML mapping keys, invalid identifiers, duplicate capabilities, invalid execution modes, booleans where a numeric budget is expected, nonfinite costs and unbounded values. This prevents a reviewed value from being silently shadowed or a misspelled policy field from disappearing. Capability names are logical identifiers; the initial toolkit implements only a small set of local behaviors and does not claim every declared capability is enforced.</p>
+<pre><code>apiVersion: zetra.dev/v1alpha1
+kind: Agent
+metadata:
+  name: knowledge-assistant
+  owner: platform-team@example.invalid
+  businessFunction: engineering
+spec:
+  entrypoint: knowledge.factory:create_agent
+  capabilities: [knowledge.read]
+  dataClassification: public
+  autonomy: assist
+  execution: local
+  budgets:
+    maxSteps: 3
+    maxSeconds: 30
+    maxCostUsd: 0.05</code></pre>
+<p><code>schemas/agent-v1alpha1.schema.json</code> documents the wire contract. The Python parser is the authoritative v0.1 validator; CI should require both schema and behavioral validation when an editor or third-party generator uses the schema. <code>spec.execution</code> records deployment intent. The CLI <code>run</code> remains a local development command; use the explicit Temporal worker to select durable execution rather than monkey-patching arbitrary source. The read-only Temporal worker rejects capabilities outside its qualified set.</p>
+<h3>5.3 Command reference and failure semantics</h3>
+<table><thead><tr><th>Command</th><th>What executes or produces</th><th>What a success means</th></tr></thead><tbody>
+<tr><td><code>init DIR --name NAME</code></td><td>Copies a runnable knowledge example and scenario tests into a new/empty directory.</td><td>Scaffold created; ownership, requirements and production controls still need review.</td></tr>
+<tr><td><code>check DIR [--evidence FILE]</code></td><td>Strict manifest parsing, AST hints and risk requirements; optional evidence validation. No agent import.</td><td>No recognized static violation; AST completeness and runtime safety are not proved.</td></tr>
+<tr><td><code>eval DIR --output FILE</code></td><td>Executes trusted unittest scenario selectors in a child process and records bound results.</td><td>Required local scenarios passed within the configured evaluation constraints; evidence remains unsigned.</td></tr>
+<tr><td><code>run DIR --input JSON</code></td><td>Constructs and runs the factory with local dependencies.</td><td>Cooperative local execution; the write receiver is intentionally absent from the generic CLI.</td></tr>
+<tr><td><code>profile EVENTS --agent NAME --image DIGEST --output FILE</code></td><td>Filters normalized recorded events by agent and image; emits a review candidate.</td><td>Scoped evidence summarized. No vendor policy or automatic permission is granted.</td></tr>
+<tr><td><code>render DIR … --evidence FILE --output FILE</code></td><td>Native ServiceAccount, default-deny and gateway egress NetworkPolicies, zero-replica Deployment.</td><td>Candidate generated with immutable image and local evidence binding; activation withheld.</td></tr>
+<tr><td><code>catalog DIR --evidence FILE --output FILE</code></td><td>Unsigned catalog candidate with risk and required publication gates.</td><td>Local record prepared; nothing published to a central catalog.</td></tr>
+<tr><td><code>qualify --context CTX --namespace NS --output FILE</code></td><td>Read-only Kubernetes discovery of server, CRDs, pods and network policies.</td><td>Prerequisites observed; enforcement is not qualified by discovery.</td></tr>
+</tbody></table>
+<p>Validation and gate failures exit nonzero. An evaluation file contains scenario results and binding metadata; absence of a required scenario, failed test, stale evidence or source drift blocks subsequent evidence-dependent commands. Mutable local JSON cannot establish signer trust. The production release service must consume trusted CI artifacts, verify signatures and approvals, and enforce the same evidence contract independently.</p>
+<p>The local step, elapsed-time and cost helpers apply to one injected <code>RuntimeDependencies</code> instance. Cost reservations are caller-reported; they are not provider billing measurements. A Temporal retry constructs fresh dependencies and resets these counters. SDK activity and schedule timeouts impose separate bounds. Enforcing a run-wide budget across retries, parallel activities and delegated agents requires an independent durable reservation ledger; v0.1 does not provide that ledger.</p>
+<h3>5.4 Three reference implementations with useful failure paths</h3>
+<p><strong>Knowledge assistant.</strong> <code>examples/knowledge</code> demonstrates a read-only factory injected with a small approved knowledge store. It answers a known key and returns a defined missing-data response for unknown keys. The cases exercise basic behavior, capability denial, budget exhaustion and stop behavior without a live model. This makes the example deterministic and suitable for understanding the boundary contract; it is not a benchmark of LLM reasoning quality.</p>
+<p><strong>Gateway read agent.</strong> <code>examples/gateway-read</code> uses the qualified <code>mcp.read_status</code> capability with an explicit restricted StreamableHTTP MCP client. Production connections require HTTPS; plaintext is permitted only at a numeric loopback lab endpoint. The client validates the reviewed tool name and arguments, bounds time and response size, reads rotating workload credentials without logging them, and emits redacted release/run/operation correlation. Offline conformance scenarios and the actual gateway/Temporal/collector chain exercise this adapter.</p>
+<p><strong>Approval-gated action agent.</strong> <code>examples/action</code> demonstrates a ticket action backed by a SQLite receiver. An independent demonstration controller issues an approval bound to actor and canonical payload with expiry. The receiver atomically consumes the approval, creates the ticket and records a receipt in one transaction. Retrying the same operation returns the receipt; changing payload, actor or approval under the same operation key fails. Reusing the consumed approval for another operation also fails. The suite covers denial and replay/idempotency behavior.</p>
+<div class="warning"><strong>Demonstration trust boundary.</strong> The local controller and agent share a machine and the SQLite file. It demonstrates transaction mechanics, not authenticated human identity or isolation from a compromised process. A production approval service needs external authentication, tenant/resource/release/policy binding, revocation, durable storage and independent authority. A remote side effect requires idempotency at its actual receiver.</div>
+<pre><code># Portable factory contract used by the reference examples
+from zetra.runtime import Agent, RuntimeDependencies
+
+def create_agent(deps: RuntimeDependencies) -&gt; Agent:
+    return KnowledgeAgent(deps)
+
+# The caller injects capabilities, budgets and platform bindings.
+# Construction is deterministic; external I/O occurs at explicit boundaries.</code></pre>
+<h3>5.5 Evaluation inference and evidence limits</h3>
+<p>The initial analyzer uses Python AST patterns and a capability-to-scenario map. It identifies some subprocess, file-write and network patterns and reports recognized undeclared capabilities. Unknown capabilities and incomplete classifications raise review obligations. Reflection, native extensions, aliases, indirect calls, third-party libraries, generated code and remote tool behavior can escape the scanner; a clean scan is not an exhaustive capability graph.</p>
+<p>The implemented analyzer emits T0–T3 declaration-based floors. The governance playbook's target model also includes T4 for exceptional or prohibited uses. Business consequence assessment and independent review must apply that escalation; the local analyzer cannot establish that a package is eligible for production or free of T4 conditions.</p>
+<p>Stable scenario IDs map to actual unittest selectors. Evaluation runs the selectors and records outcomes, rather than accepting a file named “safety” as evidence. The fingerprint binds relevant package files and manifest content while excluding documented generated/cache paths. Evidence freshness is bounded; changing instructions, dependency declarations, evaluators or scenario selectors invalidates prior evidence. The exact canonicalization and exclusions live in <code>src/zetra/evidence.py</code>. Local timestamps are not a trusted time source for production approval.</p>
+<p>Use these mechanics to extend the harness with repeated model runs, evaluator calibration, protected holdout cases, trajectory checks and real sandbox-negative scenarios. The default examples have no paid model and do not provide statistical assurance. An LLM judge must never be the sole authorization, schema, approval, isolation or idempotency gate. Aggregate quality scores cannot compensate for missing material scenarios or a known critical failure.</p>
+<h3>5.6 Render, profile and prepare the catalog candidate</h3>
+<pre><code># Use a real immutable digest from your built worker image.
+ZETRA_IMAGE='registry.example/agents/knowledge@sha256:&lt;64-lowercase-hex&gt;'
+.venv/bin/zetra render examples/knowledge \
+  --image "$ZETRA_IMAGE" \
+  --namespace agent-staging \
+  --gateway-namespace agentgateway-system \
+  --gateway-label app=agentgateway \
+  --evidence build/knowledge-evidence.json \
+  --output build/knowledge-deployment.yaml
+
+.venv/bin/zetra catalog examples/knowledge \
+  --evidence build/knowledge-evidence.json \
+  --output build/catalog-candidate.json</code></pre>
+<p>The renderer uses a gateway TCP listener template and deliberately grants no broad DNS, model-provider, Temporal or telemetry access. Add reviewed control-plane egress in the environment binding and test it before activation. The image must provide a qualified persistent worker/service entrypoint. Rendering a one-shot demonstration image does not make a production worker. The zero-replica state is an intentional stop gate; a future release controller owns authenticated promotion, policy readiness and admission checks.</p>
+<p>The profile command expects normalized input rather than raw vendor-specific kernel or OpenTelemetry events. Adapter parsers must verify event fields, workload identity, descendants, loss counters and version compatibility. The fixture format is documented in the integration directory; malicious or unrelated observations cannot silently broaden the approved manifest. Catalog preparation stores evidence hashes and unresolved gates but cannot publish or approve a record.</p>
+<p>Normalized <code>outcome</code> values are <code>allowed</code>, <code>denied</code> or <code>observed</code>; missing values mean observation only. Denied events appear under <code>deniedObservations</code> and are excluded from process, file and network candidates. Even a successful or unclassified observation remains an unsigned review candidate. The real Tetragon fixture records the denied sensitive path without proposing it as permitted access.</p>
+<h3>5.7 Real integrations and their qualification record</h3>
+<p><code>integrations/</code> contains the reproducible local environment, version-pinned fixtures and observed test outcomes. The local kind cluster is explicitly separate from the existing Kubernetes context. Credentials and kubeconfigs stay under ignored local tooling paths. macOS supplies the development host; the Podman VM supplies the Linux kernel used by kind and eBPF tests. A local kernel result qualifies that environment only.</p>
+<div data-diagram="validation-lab"></div>
+<table><thead><tr><th>Observed boundary</th><th>Recorded result</th><th>Scope and remaining limits</th></tr></thead><tbody>
+<tr><td>Tetragon 1.7.1 + Cilium 1.20.2</td><td>8 checks passed: loaded policy, selected kill, unaffected peer, identity correlation, reachable baseline and network allow/deny.</td><td>ARM64 kind node on Linux 7.1.10; startup races, outages, event loss and broader bypass paths remain open.</td></tr>
+<tr><td>OpenShell 0.1.2</td><td>7 probes passed, including the real knowledge agent, allowed scratch access and denied filesystem/network operations.</td><td>Strict Landlock requirement acknowledged. Local user authentication and user namespaces were relaxed; production identity and policy revocation remain open.</td></tr>
+<tr><td>agentgateway 1.6.0</td><td>11 checks passed for JWT failures, filtered tools, allowed read, denied write and the real Temporal/agent chain.</td><td>Host loopback with deterministic MCP receiver. Observed JWT clock leeway belongs in freshness objectives; production TLS and resource authorization remain open.</td></tr>
+<tr><td>Temporal SDK + OpenTelemetry collector</td><td>Read-only workflow retried and history replayed; 8 collector assertions passed for actual spans, correlation and denial visibility.</td><td>Host test server and gateway export to the kind collector. Separate correlation records do not prove one shared trace DAG or exactly-once writes.</td></tr>
+<tr><td>Built OCI worker on Kubernetes</td><td>Nonroot worker completed the known knowledge workflow; its 11-event history replayed. Four rendered native resources passed server dry-run with zero replicas.</td><td>Separate pod-local Temporal development server with ephemeral storage and loopback transport. Production HA, persistence, mTLS, worker-crash recovery and complete sandbox/gateway composition remain open.</td></tr>
+</tbody></table>
+<p>The optional Temporal worker registers <code>AgentWorkflow</code> and its read-only activity. The smoke test starts a real workflow, checks its result, saves a history and replays it with the SDK replayer. This establishes execution/replay for that read-only fixture, not exactly-once remote writes or crash recovery for all frameworks. The supported worker binds an explicit agent directory and never assumes arbitrary SDK calls are durable.</p>
+<pre><code># Run a real Temporal service first; endpoints are explicit.
+PYTHONPATH=src .venv/bin/python -m zetra.temporal_worker \
+  --root examples/knowledge --address 127.0.0.1:7233
+
+# In another terminal:
+PYTHONPATH=src .venv/bin/python integrations/temporal_smoke.py \
+  --address 127.0.0.1:7233 --history /tmp/zetra-history.json</code></pre>
+<div class="callout"><strong>Live verification status.</strong> Read <a href="../integrations/validation-report.json">integrations/validation-report.json</a> and <a href="../integrations/README.md">integrations/README.md</a> for the final observed matrix. A component installation is recorded separately from an allowed-path test and a denied-path test. Unattempted, unsupported or failed controls stay open and block a production-readiness claim.</div>
+<h3>5.8 Extend the toolkit without diluting the standard</h3>
+<p>Next increments should implement adapter parsers and schema-qualified policy generation, signed release evidence and admission validation, centrally authenticated approval/revocation, budget accounting, catalog publication through CD and business-function access controls. Add a feature only when its failure semantics and negative tests are clear. A generic “security enabled” boolean is too weak to stand in for supported control coverage.</p>
+<p>Contributors run <code>python -m unittest discover -s tests -v</code>, all three example scenario suites and the document builder. Changes to a schema or canonical evidence format require migration/version rules; changes to a Temporal workflow require replay evidence. Integration changes need a recorded compatibility tuple and supported/unsupported matrix. Do not accept simulated events, resource discovery or empty stubs as live enforcement proof.</p>
+</section>

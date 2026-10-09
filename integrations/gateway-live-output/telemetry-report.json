@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "createdAt": "2026-10-09T00:05:10.043851+00:00",
+  "scope": "macOS-reference-agent-and-Temporal-test-server-to-native-gateway-to-MCP-fixture-to-kind-OTel-collector-via-loopback-port-forward",
+  "checks": {
+    "actual-collector-spans": true,
+    "injected-traceparent-preserved": true,
+    "temporal-run-linked": true,
+    "release-linked": true,
+    "operation-linked": true,
+    "deny-visible": true,
+    "no-raw-bearer-in-captured-logs": true,
+    "gateway-and-chain-passed": true
+  },
+  "collectorImages": [
+    "docker.io/otel/opentelemetry-collector@sha256:310a800ad69ee430e7c541796852a242c9c7db97aaad4daa5ccf843c525fbdb2"
+  ],
+  "gatewayBinarySha256": "6cebe8bd57262edce23a65a376d2f5a27b97cdfef609740642edbe75e1e9c685",
+  "collectorLogSha256": "fbb3480d2653e0ca49bfc73e021d9ac50ed5467116ec787bcf4ffc9339ea1006",
+  "temporalRunId": "83f84935-e43c-4049-b92c-0efed02facc3",
+  "notQualified": [
+    "single shared Temporal/gateway trace DAG",
+    "production telemetry access/retention",
+    "universal secret redaction",
+    "TLS exporter authentication",
+    "all components in Kubernetes"
+  ],
+  "notes": [
+    "Correlation headers are diagnostic metadata, never trusted workload identity.",
+    "Log assertions cover this synthetic fixture only. No generic DLP assurance is claimed."
+  ]
+}

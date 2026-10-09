@@ -1,0 +1,877 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "annotations": {
+                    "agents.x-k8s.io/propagated-annotations": "openshell.ai/sandbox-id",
+                    "agents.x-k8s.io/propagated-labels": "openshell.ai/boundary-pair,openshell.ai/boundary-role",
+                    "openshell.ai/sandbox-id": "8b22800d-7df9-419e-9a46-3de99ba85ad1"
+                },
+                "creationTimestamp": "2026-10-09T00:08:25Z",
+                "generation": 2,
+                "labels": {
+                    "agents.x-k8s.io/sandbox-name-hash": "2664b040",
+                    "openshell.ai/boundary-pair": "8b22800d-7df9-419e-9a46-3de99ba85ad1",
+                    "openshell.ai/boundary-role": "workload"
+                },
+                "name": "default--zetra-strict",
+                "namespace": "zetra-openshell",
+                "ownerReferences": [
+                    {
+                        "apiVersion": "agents.x-k8s.io/v1beta1",
+                        "blockOwnerDeletion": true,
+                        "controller": true,
+                        "kind": "Sandbox",
+                        "name": "default--zetra-strict",
+                        "uid": "81744e04-e5de-4cb4-88b6-3ec1983e5bcc"
+                    }
+                ],
+                "resourceVersion": "2218",
+                "uid": "5ea2cc08-819a-4abc-97dc-ea3cc44861de"
+            },
+            "spec": {
+                "automountServiceAccountToken": false,
+                "containers": [
+                    {
+                        "command": [
+                            "/.openshell/runtime/openshell-sandbox",
+                            "--bootstrap",
+                            "/.openshell/state/bootstrap/boundary.json"
+                        ],
+                        "env": [
+                            {
+                                "name": "OPENSHELL_TELEMETRY_ENABLED",
+                                "value": "false"
+                            },
+                            {
+                                "name": "OPENSHELL_OCI_IMAGE_USER"
+                            },
+                            {
+                                "name": "OPENSHELL_SANDBOX_UID",
+                                "value": "10001"
+                            },
+                            {
+                                "name": "OPENSHELL_SANDBOX_GID",
+                                "value": "10001"
+                            }
+                        ],
+                        "image": "docker.io/library/python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "agent",
+                        "ports": [
+                            {
+                                "containerPort": 5500,
+                                "name": "sandbox-control",
+                                "protocol": "TCP"
+                            }
+                        ],
+                        "resources": {
+                            "limits": {
+                                "cpu": "500m",
+                                "memory": "512Mi"
+                            },
+                            "requests": {
+                                "cpu": "500m",
+                                "memory": "512Mi"
+                            }
+                        },
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "runAsGroup": 10001,
+                            "runAsNonRoot": true,
+                            "runAsUser": 10001
+                        },
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File",
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/.openshell/runtime",
+                                "name": "openshell-runtime",
+                                "readOnly": true
+                            },
+                            {
+                                "mountPath": "/.openshell/state",
+                                "name": "openshell-runtime-state"
+                            },
+                            {
+                                "mountPath": "/.openshell/pod-identity",
+                                "name": "openshell-pod-identity",
+                                "readOnly": true
+                            },
+                            {
+                                "mountPath": "/run",
+                                "name": "openshell-run"
+                            },
+                            {
+                                "mountPath": "/sandbox",
+                                "name": "workspace"
+                            }
+                        ]
+                    }
+                ],
+                "dnsConfig": {
+                    "nameservers": [
+                        "127.0.0.53"
+                    ],
+                    "options": [
+                        {
+                            "name": "ndots",
+                            "value": "5"
+                        },
+                        {
+                            "name": "timeout",
+                            "value": "2"
+                        },
+                        {
+                            "name": "attempts",
+                            "value": "2"
+                        }
+                    ]
+                },
+                "dnsPolicy": "None",
+                "enableServiceLinks": true,
+                "initContainers": [
+                    {
+                        "command": [
+                            "/openshell-sandbox",
+                            "bootstrap"
+                        ],
+                        "image": "ghcr.io/nvidia/openshell/sandbox:0.1.2",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "openshell-sandbox-bootstrap",
+                        "resources": {},
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "readOnlyRootFilesystem": true,
+                            "runAsGroup": 10001,
+                            "runAsNonRoot": true,
+                            "runAsUser": 10001
+                        },
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File",
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/.openshell/bootstrap-input",
+                                "name": "openshell-sandbox-bootstrap",
+                                "readOnly": true
+                            },
+                            {
+                                "mountPath": "/.openshell/runtime",
+                                "name": "openshell-runtime"
+                            },
+                            {
+                                "mountPath": "/.openshell/state",
+                                "name": "openshell-runtime-state"
+                            }
+                        ]
+                    },
+                    {
+                        "command": [
+                            "/.openshell/runtime/openshell-sandbox",
+                            "seed-workspace"
+                        ],
+                        "image": "docker.io/library/python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "workspace-init",
+                        "resources": {},
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "readOnlyRootFilesystem": true,
+                            "runAsGroup": 10001,
+                            "runAsNonRoot": true,
+                            "runAsUser": 10001
+                        },
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File",
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/mnt/openshell-workspace",
+                                "name": "workspace"
+                            },
+                            {
+                                "mountPath": "/.openshell/runtime",
+                                "name": "openshell-runtime",
+                                "readOnly": true
+                            }
+                        ]
+                    }
+                ],
+                "nodeName": "zetra-validation-control-plane",
+                "preemptionPolicy": "PreemptLowerPriority",
+                "priority": 0,
+                "restartPolicy": "Never",
+                "schedulerName": "default-scheduler",
+                "securityContext": {
+                    "fsGroup": 10001,
+                    "fsGroupChangePolicy": "OnRootMismatch",
+                    "runAsGroup": 10001,
+                    "runAsNonRoot": true,
+                    "runAsUser": 10001,
+                    "seccompProfile": {
+                        "type": "RuntimeDefault"
+                    },
+                    "supplementalGroupsPolicy": "Strict",
+                    "sysctls": [
+                        {
+                            "name": "net.ipv4.ip_unprivileged_port_start",
+                            "value": "0"
+                        }
+                    ]
+                },
+                "serviceAccount": "openshell-sandbox",
+                "serviceAccountName": "openshell-sandbox",
+                "shareProcessNamespace": false,
+                "terminationGracePeriodSeconds": 30,
+                "tolerations": [
+                    {
+                        "effect": "NoExecute",
+                        "key": "node.kubernetes.io/not-ready",
+                        "operator": "Exists",
+                        "tolerationSeconds": 300
+                    },
+                    {
+                        "effect": "NoExecute",
+                        "key": "node.kubernetes.io/unreachable",
+                        "operator": "Exists",
+                        "tolerationSeconds": 300
+                    }
+                ],
+                "volumes": [
+                    {
+                        "emptyDir": {
+                            "medium": "Memory"
+                        },
+                        "name": "openshell-runtime"
+                    },
+                    {
+                        "emptyDir": {
+                            "medium": "Memory"
+                        },
+                        "name": "openshell-runtime-state"
+                    },
+                    {
+                        "name": "openshell-sandbox-bootstrap",
+                        "secret": {
+                            "defaultMode": 288,
+                            "secretName": "os-sandbox-8b22800d-7df9-419e-9a46-3de99ba85ad1-5706049bbdf3"
+                        }
+                    },
+                    {
+                        "downwardAPI": {
+                            "defaultMode": 420,
+                            "items": [
+                                {
+                                    "fieldRef": {
+                                        "apiVersion": "v1",
+                                        "fieldPath": "metadata.uid"
+                                    },
+                                    "path": "uid"
+                                }
+                            ]
+                        },
+                        "name": "openshell-pod-identity"
+                    },
+                    {
+                        "emptyDir": {
+                            "medium": "Memory"
+                        },
+                        "name": "openshell-run"
+                    },
+                    {
+                        "name": "workspace",
+                        "persistentVolumeClaim": {
+                            "claimName": "workspace-default--zetra-strict"
+                        }
+                    }
+                ]
+            },
+            "status": {
+                "conditions": [
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:30Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "PodReadyToStartContainers"
+                    },
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:31Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "Initialized"
+                    },
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:32Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "Ready"
+                    },
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:32Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "ContainersReady"
+                    },
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:29Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "PodScheduled"
+                    }
+                ],
+                "containerStatuses": [
+                    {
+                        "allocatedResources": {
+                            "cpu": "500m",
+                            "memory": "512Mi"
+                        },
+                        "containerID": "containerd://03029f1612c4da67779bb9d1a01a3be747eb8a47bf0d98557392d130f20dbba7",
+                        "image": "docker.io/library/python:3.12.13-slim",
+                        "imageID": "docker.io/library/python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
+                        "lastState": {},
+                        "name": "agent",
+                        "ready": true,
+                        "resources": {
+                            "limits": {
+                                "cpu": "500m",
+                                "memory": "512Mi"
+                            },
+                            "requests": {
+                                "cpu": "500m",
+                                "memory": "512Mi"
+                            }
+                        },
+                        "restartCount": 0,
+                        "started": true,
+                        "state": {
+                            "running": {
+                                "startedAt": "2026-10-09T00:08:31Z"
+                            }
+                        },
+                        "user": {
+                            "linux": {
+                                "gid": 10001,
+                                "supplementalGroups": [
+                                    10001
+                                ],
+                                "uid": 10001
+                            }
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/.openshell/runtime",
+                                "name": "openshell-runtime",
+                                "readOnly": true,
+                                "recursiveReadOnly": "Disabled"
+                            },
+                            {
+                                "mountPath": "/.openshell/state",
+                                "name": "openshell-runtime-state"
+                            },
+                            {
+                                "mountPath": "/.openshell/pod-identity",
+                                "name": "openshell-pod-identity",
+                                "readOnly": true,
+                                "recursiveReadOnly": "Disabled"
+                            },
+                            {
+                                "mountPath": "/run",
+                                "name": "openshell-run"
+                            },
+                            {
+                                "mountPath": "/sandbox",
+                                "name": "workspace"
+                            }
+                        ]
+                    }
+                ],
+                "hostIP": "10.89.0.2",
+                "hostIPs": [
+                    {
+                        "ip": "10.89.0.2"
+                    }
+                ],
+                "initContainerStatuses": [
+                    {
+                        "containerID": "containerd://08cf74d68e2984d0ee5ec41cedbbf46a32721af86dec0eda333831892b91e81c",
+                        "image": "ghcr.io/nvidia/openshell/sandbox:0.1.2",
+                        "imageID": "ghcr.io/nvidia/openshell/sandbox@sha256:bf4797b6c511f2d8ba02955dbba4bf76c1f0dd6d83531420c5408d5f1fb9d72f",
+                        "lastState": {},
+                        "name": "openshell-sandbox-bootstrap",
+                        "ready": true,
+                        "resources": {},
+                        "restartCount": 0,
+                        "started": false,
+                        "state": {
+                            "terminated": {
+                                "containerID": "containerd://08cf74d68e2984d0ee5ec41cedbbf46a32721af86dec0eda333831892b91e81c",
+                                "exitCode": 0,
+                                "finishedAt": "2026-10-09T00:08:30Z",
+                                "reason": "Completed",
+                                "startedAt": "2026-10-09T00:08:30Z"
+                            }
+                        },
+                        "user": {
+                            "linux": {
+                                "gid": 10001,
+                                "supplementalGroups": [
+                                    10001
+                                ],
+                                "uid": 10001
+                            }
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/.openshell/bootstrap-input",
+                                "name": "openshell-sandbox-bootstrap",
+                                "readOnly": true,
+                                "recursiveReadOnly": "Disabled"
+                            },
+                            {
+                                "mountPath": "/.openshell/runtime",
+                                "name": "openshell-runtime"
+                            },
+                            {
+                                "mountPath": "/.openshell/state",
+                                "name": "openshell-runtime-state"
+                            }
+                        ]
+                    },
+                    {
+                        "containerID": "containerd://133445568692924a6ac7d1467eb585cc0419de0603fe0676a2111d39d5894927",
+                        "image": "docker.io/library/python:3.12.13-slim",
+                        "imageID": "docker.io/library/python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
+                        "lastState": {},
+                        "name": "workspace-init",
+                        "ready": true,
+                        "resources": {},
+                        "restartCount": 0,
+                        "started": false,
+                        "state": {
+                            "terminated": {
+                                "containerID": "containerd://133445568692924a6ac7d1467eb585cc0419de0603fe0676a2111d39d5894927",
+                                "exitCode": 0,
+                                "finishedAt": "2026-10-09T00:08:30Z",
+                                "reason": "Completed",
+                                "startedAt": "2026-10-09T00:08:30Z"
+                            }
+                        },
+                        "user": {
+                            "linux": {
+                                "gid": 10001,
+                                "supplementalGroups": [
+                                    10001
+                                ],
+                                "uid": 10001
+                            }
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/mnt/openshell-workspace",
+                                "name": "workspace"
+                            },
+                            {
+                                "mountPath": "/.openshell/runtime",
+                                "name": "openshell-runtime",
+                                "readOnly": true,
+                                "recursiveReadOnly": "Disabled"
+                            }
+                        ]
+                    }
+                ],
+                "observedGeneration": 2,
+                "phase": "Running",
+                "podIP": "10.244.0.84",
+                "podIPs": [
+                    {
+                        "ip": "10.244.0.84"
+                    }
+                ],
+                "qosClass": "Burstable",
+                "startTime": "2026-10-09T00:08:29Z"
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "annotations": {
+                    "openshell.ai/sandbox-id": "8b22800d-7df9-419e-9a46-3de99ba85ad1"
+                },
+                "creationTimestamp": "2026-10-09T00:08:25Z",
+                "generation": 2,
+                "labels": {
+                    "openshell.ai/boundary-pair": "8b22800d-7df9-419e-9a46-3de99ba85ad1",
+                    "openshell.ai/boundary-role": "supervisor",
+                    "openshell.ai/component": "supervisor",
+                    "openshell.ai/gateway-id": "openshell",
+                    "openshell.ai/managed-by": "openshell",
+                    "openshell.ai/sandbox-id": "8b22800d-7df9-419e-9a46-3de99ba85ad1"
+                },
+                "name": "os-supervisor-8b22800d-7df9-419e-9a46-3de99ba85ad1",
+                "namespace": "zetra-openshell",
+                "ownerReferences": [
+                    {
+                        "apiVersion": "agents.x-k8s.io/v1beta1",
+                        "blockOwnerDeletion": false,
+                        "kind": "Sandbox",
+                        "name": "default--zetra-strict",
+                        "uid": "81744e04-e5de-4cb4-88b6-3ec1983e5bcc"
+                    }
+                ],
+                "resourceVersion": "2227",
+                "uid": "66b0a6e3-5ade-4c1e-90b3-e21a8da36502"
+            },
+            "spec": {
+                "automountServiceAccountToken": false,
+                "containers": [
+                    {
+                        "command": [
+                            "/openshell-supervisor",
+                            "--backend-descriptor-file",
+                            "/.openshell/supervisor/runtime-descriptor.json",
+                            "--auth-bundle-file",
+                            "/.openshell/supervisor/auth.json",
+                            "--workdir",
+                            "/sandbox",
+                            "--health-socket-path",
+                            "/run/openshell/health.sock"
+                        ],
+                        "env": [
+                            {
+                                "name": "OPENSHELL_ADMITTED_ISOLATION_BACKEND",
+                                "value": "openshell-sandbox"
+                            },
+                            {
+                                "name": "OPENSHELL_ENDPOINT",
+                                "value": "https://openshell.zetra-openshell.svc.cluster.local:8080"
+                            },
+                            {
+                                "name": "OPENSHELL_SANDBOX_ID",
+                                "value": "8b22800d-7df9-419e-9a46-3de99ba85ad1"
+                            },
+                            {
+                                "name": "OPENSHELL_SANDBOX",
+                                "value": "zetra-strict"
+                            },
+                            {
+                                "name": "OPENSHELL_MAIN_PROCESS_SPEC",
+                                "value": "{\"version\":1,\"command\":[\"/bin/sleep\",\"3600\"],\"tty\":false,\"await_main_process_attachment\":false}"
+                            },
+                            {
+                                "name": "OPENSHELL_K8S_SA_TOKEN_FILE",
+                                "value": "/var/run/secrets/openshell/token"
+                            },
+                            {
+                                "name": "OPENSHELL_SSH_SOCKET_PATH",
+                                "value": "/run/openshell/ssh.sock"
+                            },
+                            {
+                                "name": "OPENSHELL_SSH_SOCKET_SHARED",
+                                "value": "true"
+                            },
+                            {
+                                "name": "OPENSHELL_PROXY_TLS_DIR",
+                                "value": "/run/openshell/proxy-tls"
+                            },
+                            {
+                                "name": "OPENSHELL_PROXY_CA_CERT",
+                                "value": "/.openshell/supervisor/proxy-ca.crt"
+                            },
+                            {
+                                "name": "OPENSHELL_PROXY_CA_KEY",
+                                "value": "/.openshell/supervisor/proxy-ca.key"
+                            },
+                            {
+                                "name": "OPENSHELL_LOG_LEVEL",
+                                "value": "info"
+                            },
+                            {
+                                "name": "OPENSHELL_TELEMETRY_ENABLED",
+                                "value": "false"
+                            },
+                            {
+                                "name": "OPENSHELL_NETWORK_RUNTIME_CAPABILITIES"
+                            },
+                            {
+                                "name": "OPENSHELL_TLS_CA",
+                                "value": "/var/run/secrets/openshell-tls/ca.crt"
+                            },
+                            {
+                                "name": "OPENSHELL_TLS_CERT",
+                                "value": "/var/run/secrets/openshell-tls/tls.crt"
+                            },
+                            {
+                                "name": "OPENSHELL_TLS_KEY",
+                                "value": "/var/run/secrets/openshell-tls/tls.key"
+                            }
+                        ],
+                        "image": "ghcr.io/nvidia/openshell/supervisor:0.1.2",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "supervisor",
+                        "readinessProbe": {
+                            "exec": {
+                                "command": [
+                                    "/openshell-supervisor",
+                                    "health",
+                                    "--socket",
+                                    "/run/openshell/health.sock"
+                                ]
+                            },
+                            "failureThreshold": 3,
+                            "periodSeconds": 1,
+                            "successThreshold": 1,
+                            "timeoutSeconds": 1
+                        },
+                        "resources": {},
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "readOnlyRootFilesystem": true,
+                            "runAsGroup": 10001,
+                            "runAsNonRoot": true,
+                            "runAsUser": 10001
+                        },
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "FallbackToLogsOnError",
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/.openshell/supervisor",
+                                "name": "bootstrap",
+                                "readOnly": true
+                            },
+                            {
+                                "mountPath": "/var/run/secrets/openshell",
+                                "name": "sa-token",
+                                "readOnly": true
+                            },
+                            {
+                                "mountPath": "/run/openshell",
+                                "name": "run"
+                            },
+                            {
+                                "mountPath": "/var/log",
+                                "name": "logs"
+                            },
+                            {
+                                "mountPath": "/var/run/secrets/openshell-tls",
+                                "name": "client-tls",
+                                "readOnly": true
+                            }
+                        ]
+                    }
+                ],
+                "dnsPolicy": "ClusterFirst",
+                "enableServiceLinks": true,
+                "nodeName": "zetra-validation-control-plane",
+                "preemptionPolicy": "PreemptLowerPriority",
+                "priority": 0,
+                "restartPolicy": "Never",
+                "schedulerName": "default-scheduler",
+                "securityContext": {
+                    "fsGroup": 10001,
+                    "fsGroupChangePolicy": "OnRootMismatch",
+                    "seccompProfile": {
+                        "type": "RuntimeDefault"
+                    }
+                },
+                "serviceAccount": "openshell-sandbox",
+                "serviceAccountName": "openshell-sandbox",
+                "terminationGracePeriodSeconds": 30,
+                "tolerations": [
+                    {
+                        "effect": "NoExecute",
+                        "key": "node.kubernetes.io/not-ready",
+                        "operator": "Exists",
+                        "tolerationSeconds": 300
+                    },
+                    {
+                        "effect": "NoExecute",
+                        "key": "node.kubernetes.io/unreachable",
+                        "operator": "Exists",
+                        "tolerationSeconds": 300
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "bootstrap",
+                        "secret": {
+                            "defaultMode": 288,
+                            "secretName": "os-supervisor-8b22800d-7df9-419e-9a46-3de99ba85ad1-5706049bbdf3"
+                        }
+                    },
+                    {
+                        "name": "sa-token",
+                        "projected": {
+                            "defaultMode": 288,
+                            "sources": [
+                                {
+                                    "serviceAccountToken": {
+                                        "audience": "openshell-gateway",
+                                        "expirationSeconds": 3600,
+                                        "path": "token"
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "emptyDir": {},
+                        "name": "run"
+                    },
+                    {
+                        "emptyDir": {},
+                        "name": "logs"
+                    },
+                    {
+                        "name": "client-tls",
+                        "secret": {
+                            "defaultMode": 288,
+                            "secretName": "openshell-client-tls"
+                        }
+                    }
+                ]
+            },
+            "status": {
+                "conditions": [
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:26Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "PodReadyToStartContainers"
+                    },
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:25Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "Initialized"
+                    },
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:33Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "Ready"
+                    },
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:33Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "ContainersReady"
+                    },
+                    {
+                        "lastProbeTime": null,
+                        "lastTransitionTime": "2026-10-09T00:08:25Z",
+                        "observedGeneration": 2,
+                        "status": "True",
+                        "type": "PodScheduled"
+                    }
+                ],
+                "containerStatuses": [
+                    {
+                        "containerID": "containerd://e4d14fc1b8974ce2f505bc31378cc4af7d6dcfb71d4053a4762765205d20c599",
+                        "image": "ghcr.io/nvidia/openshell/supervisor:0.1.2",
+                        "imageID": "ghcr.io/nvidia/openshell/supervisor@sha256:d7b5264bb6bc56f4796e6fa3617b8e4a8d785be0b7293542efd8cc250b0fb67a",
+                        "lastState": {},
+                        "name": "supervisor",
+                        "ready": true,
+                        "resources": {},
+                        "restartCount": 0,
+                        "started": true,
+                        "state": {
+                            "running": {
+                                "startedAt": "2026-10-09T00:08:26Z"
+                            }
+                        },
+                        "user": {
+                            "linux": {
+                                "gid": 10001,
+                                "supplementalGroups": [
+                                    10001
+                                ],
+                                "uid": 10001
+                            }
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/.openshell/supervisor",
+                                "name": "bootstrap",
+                                "readOnly": true,
+                                "recursiveReadOnly": "Disabled"
+                            },
+                            {
+                                "mountPath": "/var/run/secrets/openshell",
+                                "name": "sa-token",
+                                "readOnly": true,
+                                "recursiveReadOnly": "Disabled"
+                            },
+                            {
+                                "mountPath": "/run/openshell",
+                                "name": "run"
+                            },
+                            {
+                                "mountPath": "/var/log",
+                                "name": "logs"
+                            },
+                            {
+                                "mountPath": "/var/run/secrets/openshell-tls",
+                                "name": "client-tls",
+                                "readOnly": true,
+                                "recursiveReadOnly": "Disabled"
+                            }
+                        ]
+                    }
+                ],
+                "hostIP": "10.89.0.2",
+                "hostIPs": [
+                    {
+                        "ip": "10.89.0.2"
+                    }
+                ],
+                "observedGeneration": 2,
+                "phase": "Running",
+                "podIP": "10.244.0.239",
+                "podIPs": [
+                    {
+                        "ip": "10.244.0.239"
+                    }
+                ],
+                "qosClass": "BestEffort",
+                "startTime": "2026-10-09T00:08:25Z"
+            }
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

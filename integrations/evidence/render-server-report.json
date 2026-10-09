@@ -1,0 +1,24 @@
+{
+  "status": "passed",
+  "checkedAt": "2026-10-09T00:27:31.369119+00:00",
+  "scope": "Native Kubernetes API server dry-run of a withheld release candidate",
+  "context": "kind-zetra-validation",
+  "image": "localhost/zetra-worker@sha256:b8dc0f5920797713eb87c1f2450fc18d2d5db5ba7cbd85d4e72f33d2f4ca4462",
+  "renderSha256": "7d9ea31fda6a1ceba3c456d780921de3f58f9a3d7c725c6fe42fc1f47e96d209",
+  "acceptedResources": [
+    "serviceaccount/knowledge-assistant",
+    "networkpolicy.networking.k8s.io/knowledge-assistant-deny",
+    "networkpolicy.networking.k8s.io/knowledge-assistant-gateway",
+    "deployment.apps/knowledge-assistant"
+  ],
+  "checks": [
+    "Four native resources accepted by server",
+    "Zero replicas preserved",
+    "Actual immutable built image reference"
+  ],
+  "notQualified": [
+    "No workload activation",
+    "No signed admission verification",
+    "No gateway or Temporal environment binding"
+  ]
+}

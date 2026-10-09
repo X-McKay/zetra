@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zetra Governance Review"
+  short_description: "Assess risk obligations, evidence and revocation"
+  default_prompt: "Use $zetra-governance-review to review the risk and release readiness of this agent."

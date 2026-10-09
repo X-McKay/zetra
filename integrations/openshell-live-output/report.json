@@ -1,0 +1,122 @@
+{
+  "status": "passed",
+  "createdAt": "2026-10-09T00:16:30.723431+00:00",
+  "sandbox": "zetra-385aa0",
+  "scope": "actual-OpenShell-supervised-reference-agent-in-disposable-kind",
+  "cliVersion": "openshell 0.1.2",
+  "cliSha256": "789093ba9278271f2617642cadfabe58d3c08f9f8a5a11c29dcbd4ab60d6611f",
+  "effectivePolicyHash": "4f1991b4e4a21fb8a047e7af2da5577841b1994598c8fdcdc635e0eb9776b965",
+  "landlockCompatibility": "hard_requirement",
+  "probe": {
+    "scope": "actual-OpenShell-supervised-Python-sandbox",
+    "uid": 10001,
+    "cwd": "/sandbox",
+    "checks": [
+      {
+        "name": "scratch-write-read",
+        "status": "passed",
+        "detail": {}
+      },
+      {
+        "name": "outside-read-denied",
+        "status": "passed",
+        "detail": {
+          "errno": 13,
+          "exception": "PermissionError",
+          "mode": "0o644",
+          "path": "/var/lib/dpkg/status"
+        }
+      },
+      {
+        "name": "outside-write-denied",
+        "status": "passed",
+        "detail": {
+          "errno": 13,
+          "exception": "PermissionError",
+          "mode": "0o1777",
+          "path": "/var/tmp/zetra-forbidden-write"
+        }
+      },
+      {
+        "name": "etc-write-denied",
+        "status": "passed",
+        "detail": {
+          "errno": 13,
+          "exception": "PermissionError",
+          "mode": "0o755",
+          "path": "/etc/zetra-forbidden-write"
+        }
+      },
+      {
+        "name": "unapproved-http-denied",
+        "status": "passed",
+        "detail": {
+          "exception": "URLError",
+          "httpStatus": null,
+          "reason": "<urlopen error [Errno 13] Permission denied>"
+        }
+      },
+      {
+        "name": "direct-egress-denied",
+        "status": "passed",
+        "detail": {
+          "errno": 13,
+          "exception": "PermissionError",
+          "reason": "[Errno 13] Permission denied"
+        }
+      },
+      {
+        "name": "actual-offline-reference-agent",
+        "status": "passed",
+        "detail": {
+          "result": {
+            "answer": "Zetra means ZEro-TRust Agents.",
+            "source": "approved-knowledge-fixture"
+          }
+        }
+      }
+    ],
+    "status": "passed",
+    "limitations": [
+      "No principal authentication or production credential exchange test",
+      "etc write denial alone may also be DAC; outside read/write use world-accessible locations",
+      "No automatic permission expansion or business authorization is implied"
+    ]
+  },
+  "supervisorNetworkDenialObserved": true,
+  "initialPolicyAcknowledged": true,
+  "images": {
+    "default--zetra-385aa0": [
+      "docker.io/library/python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+    ],
+    "os-supervisor-c6d272de-bba4-4599-bcf9-4154ddc7b776": [
+      "ghcr.io/nvidia/openshell/supervisor@sha256:d7b5264bb6bc56f4796e6fa3617b8e4a8d785be0b7293542efd8cc250b0fb67a"
+    ]
+  },
+  "sourceHashes": {
+    "src/zetra/runtime.py": "08979249a1ab18502818bbfcfde91b3d9d21a488ebabdb84bf7fe7e801d410e2",
+    "src/zetra/__init__.py": "54059a5154211fc0c8bdf6e6afd183eab688a0e88170851eb840e510bb0b85ef",
+    "examples/knowledge/src/knowledge/factory.py": "e3169cdfec6aa82f9a86ed13f6fb689469d6eb4f0d98218de7000598039292c7",
+    "examples/knowledge/src/knowledge/__init__.py": "f3863058f16107dc1a5ac9589fc47471f0d5c3729798acbbe796d3f8d3059146",
+    "integrations/openshell-probe.py": "4d9fb89f9afea69857cc1215bd9518feb0bc130c26a35d7dcc27f353d6584637"
+  },
+  "notQualified": [
+    "production principal authentication; local gateway permits unauthenticated users after mTLS transport",
+    "user namespace isolation (disabled in this local tuple)",
+    "provider credential exchange",
+    "allowed external L7 routes",
+    "policy revocation/hot reload",
+    "multi-tenant/business authorization",
+    "first-instruction race or privileged-node compromise",
+    "AppArmor protection (server.appArmorProfile=Unconfined in the local chart)"
+  ],
+  "fixtureOnly": true,
+  "observedLabChartValues": {
+    "source": "actual Helm get values openshell in dedicated kind-zetra-validation context; confirmed by platform-bootstrap.json",
+    "appArmorProfile": "Unconfined",
+    "allowUnauthenticatedUsers": true,
+    "enableUserNamespaces": false,
+    "enableMtls": true,
+    "telemetryEnabled": false
+  }
+}

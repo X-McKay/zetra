@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-10-08",
+  "requested_target": "disposable local kind or k3d cluster",
+  "status": "cluster_ready",
+  "cluster_created": true,
+  "actual_cluster_modified": false,
+  "tools_installed": [
+    {
+      "name": "kind",
+      "version": "v0.33.0",
+      "path": "/Users/al/git/zetra/.tools/kind",
+      "architecture": "darwin/arm64",
+      "sha256": "0c8c7dbe5e23594a198b786c4bc13dacc101fa6196b0cb0b23a1ca44e61f4b4f",
+      "source": "https://kind.sigs.k8s.io/dl/v0.33.0/kind-darwin-arm64",
+      "checksum_source": "https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-darwin-arm64.sha256sum"
+    }
+  ],
+  "host": {
+    "operating_system": "darwin",
+    "architecture": "arm64",
+    "container_runtime_found": "/opt/homebrew/bin/podman",
+    "container_runtime_version": "6.1.0",
+    "physical_memory_bytes": 25769803776,
+    "logical_cpus": 10,
+    "free_disk_gib": 403,
+    "reported_memory_free_percent": 34
+  },
+  "checks": [
+    {
+      "check": "Search application and common CLI installation paths",
+      "paths": [
+        "/Applications",
+        "/Applications/Utilities",
+        "/usr/local/bin",
+        "/opt/homebrew/bin"
+      ],
+      "result": "Podman found; Docker, OrbStack, Colima, Rancher Desktop, kind and k3d not found in inspected paths"
+    },
+    {
+      "check": "podman machine list and system connection list",
+      "execution": "escalated read-only inspection after sandbox denied runtime lockfile/local socket access",
+      "result": "Existing kz-eval VM reports running with 4 CPUs, 6 GiB memory and 20 GiB disk; two other existing VMs report stopped"
+    },
+    {
+      "command": "/opt/homebrew/bin/podman info --format json",
+      "execution": "escalated",
+      "exit_code": 125,
+      "result": "Cannot connect to default rootless container API; SSH rejected connection to socket (connect failed/open failed)"
+    },
+    {
+      "command": "/opt/homebrew/bin/podman --connection kz-eval-root info --format json",
+      "execution": "escalated",
+      "exit_code": 125,
+      "result": "Cannot connect to rootful container API; SSH rejected connection to socket (connect failed/open failed)"
+    },
+    {
+      "command": "/opt/homebrew/bin/podman machine ssh kz-eval 'uname -r; systemctl is-active podman.socket; systemctl --user is-active podman.socket; df -h /; command -v podman; ls -l /run/podman/podman.sock /run/user/501/podman/podman.sock'",
+      "execution": "escalated read-only",
+      "exit_code": 2,
+      "result": {
+        "kernel": "7.1.4-200.fc44.aarch64",
+        "rootful_socket_service": "failed",
+        "rootless_socket_service": "failed",
+        "root_filesystem": {
+          "size": "20G",
+          "used": "20G",
+          "available": "88K",
+          "use_percent": "100%"
+        },
+        "podman_error": "updating container state: unable to open database file: no such file or directory",
+        "rootless_socket_file": "exists"
+      }
+    },
+    {
+      "command": "podman machine init --cpus 4 --memory 6144 --disk-size 25 --rootful --update-connection=false zetra-validation",
+      "execution": "escalated",
+      "exit_code": 0,
+      "result": "Created a separate stopped disposable VM; existing default connection unchanged"
+    },
+    {
+      "command": "podman machine start --update-connection=false zetra-validation",
+      "execution": "escalated",
+      "exit_code": 125,
+      "result": "unable to start zetra-validation: kz-eval already starting or running: only one VM can be active at a time"
+    },
+    {
+      "command": "podman machine list --format json; podman system connection list --format json",
+      "execution": "escalated read-only",
+      "exit_code": 0,
+      "result": "zetra-validation stopped; kz-eval still running and remains default"
+    },
+    {
+      "command": "podman machine stop kz-eval",
+      "execution": "escalated after user explicitly authorized stopping/clearing Podman",
+      "exit_code": 0,
+      "result": "Old VM stopped; its images, volumes and files were not removed"
+    },
+    {
+      "command": "podman machine start --update-connection=false zetra-validation",
+      "execution": "escalated",
+      "result": "First startup inherited host gVisor/runsc configuration; fresh VM does not contain runsc"
+    },
+    {
+      "command": "podman machine rm --force zetra-validation; podman machine init --cpus 4 --memory 6144 --disk-size 25 --rootful --update-connection=false --volume /Users/al/git/zetra:/Users/al/git/zetra zetra-validation",
+      "execution": "escalated",
+      "result": "Recreated only the disposable VM with a workspace-only mount to exclude unrelated global runtime config"
+    },
+    {
+      "check": "Disposable VM process lifetime",
+      "result": "VM child processes stopped when a launching tool command exited. Interrupted first boot caused Ignition failure. Recreated the disposable VM and retained launcher shell session 50315 to keep the VM alive"
+    },
+    {
+      "command": "podman system connection default kz-eval",
+      "execution": "escalated",
+      "exit_code": 0,
+      "result": "Restored original default after Podman removal operation changed it; final default confirmed kz-eval"
+    },
+    {
+      "command": "kind create cluster --name zetra-validation --config integrations/kind-config.yaml --kubeconfig .tools/zetra-kubeconfig --wait 120s",
+      "execution": "escalated with explicit KIND_EXPERIMENTAL_PROVIDER=podman, CONTAINER_HOST and CONTAINER_SSHKEY",
+      "exit_code": 0,
+      "result": "One control-plane node Ready; API accessible through dedicated kubeconfig"
+    },
+    {
+      "command": "kubectl --kubeconfig .tools/zetra-kubeconfig get nodes -o wide; kubectl --kubeconfig .tools/zetra-kubeconfig get pods -A",
+      "execution": "escalated read-only",
+      "exit_code": 0,
+      "result": "Node Ready; core Kubernetes system pods Running; kindnet CNI active"
+    }
+  ],
+  "blocker": null,
+  "actions_not_taken": [
+    "No old VM data, images or volumes deleted",
+    "No unrelated host containers configuration edited",
+    "No actual Kubernetes resources or default kubeconfig context changed",
+    "No Cilium/Tetragon/OpenShell/platform services installed by this subtask"
+  ],
+  "next_step": "Parent installs platform services on the dedicated local cluster and replaces kindnet before NetworkPolicy denial tests. Keep launcher session 50315 open until a graceful validation VM stop.",
+  "created_resources": {
+    "podman_machine": "zetra-validation",
+    "running": true,
+    "cpus": 4,
+    "memory_mib": 6144,
+    "disk_gib": 25,
+    "rootful_connection": "zetra-validation-root",
+    "container_host": "ssh://root@127.0.0.1:57654/run/podman/podman.sock",
+    "default_connection_changed": false,
+    "default_connection_restored_after_podman_removal": true,
+    "launcher_terminal_session_id": 50315
+  },
+  "cleanup_plan": {
+    "cluster_command": "KIND_EXPERIMENTAL_PROVIDER=podman CONTAINER_HOST=<validation-root-URI> CONTAINER_SSHKEY=<identity-path> .tools/kind delete cluster --name zetra-validation --kubeconfig .tools/zetra-kubeconfig",
+    "stop_command": "/opt/homebrew/bin/podman machine stop zetra-validation",
+    "remove_optional": "/opt/homebrew/bin/podman machine rm --force zetra-validation",
+    "scope": "Stop/delete only disposable validation resources after tests. Old kz-eval VM remains stopped with data intact and can be started when validation VM is stopped.",
+    "tool_cleanup": "Retain .tools/kind if useful; do not commit binaries or kubeconfigs.",
+    "executed": false
+  },
+  "cluster": {
+    "name": "zetra-validation",
+    "context": "kind-zetra-validation",
+    "kubeconfig_path": "/Users/al/git/zetra/.tools/zetra-kubeconfig",
+    "node_name": "zetra-validation-control-plane",
+    "node_ready": true,
+    "kubernetes_version": "v1.35.8",
+    "containerd_version": "2.3.4",
+    "node_image": "kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0",
+    "cni_at_creation": "kindnet",
+    "networkpolicy_enforcement_verified": false,
+    "config_note": "Config loaded before disableDefaultCNI was added. Current cluster has kindnet; checked-in config disables it for future creations. Parent will replace it with Cilium."
+  },
+  "linux_prerequisites": {
+    "kernel": "7.1.10-200.fc44.aarch64",
+    "architecture": "arm64",
+    "btf_vmlinux": true,
+    "lsm": [
+      "lockdown",
+      "capability",
+      "yama",
+      "selinux",
+      "bpf",
+      "landlock",
+      "ipe",
+      "ima",
+      "evm"
+    ],
+    "cgroup_version": "v2",
+    "cgroup_manager": "systemd",
+    "oci_runtime": "crun 1.30",
+    "rootless": false,
+    "seccomp_enabled": true,
+    "selinux_enabled": true,
+    "vm_root_disk_available": "23G",
+    "note": "Prerequisites qualified; actual enforcement remains subject to service installation and denied-operation tests."
+  }
+}

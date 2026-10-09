@@ -1,0 +1,23 @@
+{
+  "status": "passed",
+  "scope": "local-real-temporal-test-server",
+  "activityAttempts": [
+    1,
+    2
+  ],
+  "checks": [
+    "Transient first attempt failed",
+    "Second attempt succeeded",
+    "Exact known-fixture result",
+    "Recorded history replayed"
+  ],
+  "history": "tests/fixtures/temporal-readonly-history.json",
+  "createdAt": "2026-10-08T23:58:39.416184+00:00",
+  "limitations": [
+    "Read-only agent only",
+    "Not Kubernetes or sandbox qualification",
+    "No production approval/write adapter",
+    "Ephemeral server did not advertise failed-activity heartbeat preservation; heartbeat semantics untested"
+  ],
+  "historySha256": "915b0ea96c1c90e543df3be6f572fd647feed60bbe7654cc399ed98f85c6411c"
+}

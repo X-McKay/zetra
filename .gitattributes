@@ -1,0 +1,2 @@
+# Captured diagnostic logs retain their exact bytes for report hash verification.
+*.log whitespace=-blank-at-eol

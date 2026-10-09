@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: zetra-fixture-gateway-only
+  namespace: zetra-network-test
+spec:
+  podSelector:
+    matchLabels: {zetra.dev/agent: network-fixture}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {zetra.dev/target: approved}
+      ports:
+        - protocol: TCP
+          port: 8080

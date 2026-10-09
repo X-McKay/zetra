@@ -1,0 +1,52 @@
+2026-10-09T00:08:26.177530419Z 2026-10-09T00:08:26.177Z INFO openshell_supervisor: Starting sandbox supervision
+2026-10-09T00:08:33.396446509Z 2026-10-09T00:08:33.396Z INFO openshell_supervisor: Fetching sandbox policy via gRPC
+2026-10-09T00:08:33.429471542Z 2026-10-09T00:08:33.427Z INFO openshell_supervisor_network::opa: Configured OPA runtime binary identity mode
+2026-10-09T00:08:33.429486042Z 2026-10-09T00:08:33.427Z OCSF CONFIG:CONFIGURED [INFO] OPA runtime binary identity mode configured [source:proto require_binary_identity:true] [source:proto]
+2026-10-09T00:08:33.441078966Z 2026-10-09T00:08:33.440Z INFO openshell_supervisor: Isolation boundary attached
+2026-10-09T00:08:33.442475124Z 2026-10-09T00:08:33.441Z INFO openshell_supervisor: Isolation boundary enforcement confirmed
+2026-10-09T00:08:33.445700894Z 2026-10-09T00:08:33.445Z OCSF CONFIG:ENABLED [INFO] TLS termination enabled: provisioned CA loaded
+2026-10-09T00:08:33.445902059Z 2026-10-09T00:08:33.445Z OCSF CONFIG:READY [INFO] Policy DNS connected to isolation boundary
+2026-10-09T00:08:33.445905768Z 2026-10-09T00:08:33.445Z OCSF NET:LISTEN [INFO] 127.0.0.1:3128
+2026-10-09T00:08:33.454992166Z 2026-10-09T00:08:33.454Z INFO openshell_supervisor: Isolation boundary agent started
+2026-10-09T00:08:33.456227033Z 2026-10-09T00:08:33.456Z OCSF SSH:LISTEN [INFO]
+2026-10-09T00:08:33.469623654Z 2026-10-09T00:08:33.469Z OCSF CONFIG:LOADED [INFO] Acknowledged initial policy revision as loaded [version:1] [hash:4f1991b4e4a21fb8a047e7af2da5577841b1994598c8fdcdc635e0eb9776b965]
+2026-10-09T00:08:33.471094394Z 2026-10-09T00:08:33.471Z OCSF NET:OPEN [INFO] openshell.zetra-openshell.svc.cluster.local:8080
+2026-10-09T00:08:33.471262810Z 2026-10-09T00:08:33.471Z INFO openshell_supervisor: Control-mode access plane started
+2026-10-09T00:08:39.193268639Z 2026-10-09T00:08:39.192Z OCSF EVENT [INFO] ssh relay open (channel_id=2ab7e6bf-5199-4e32-a93a-1c573cdbe22a, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:08:39.193279139Z 2026-10-09T00:08:39.193Z OCSF SSH:OPEN [INFO] ALLOWED
+2026-10-09T00:08:39.256242726Z 2026-10-09T00:08:39.256Z OCSF EVENT [INFO] ssh relay open (channel_id=03621299-01bb-42d8-855a-29508bcd3e10, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:08:39.256387516Z 2026-10-09T00:08:39.256Z OCSF SSH:OPEN [INFO] ALLOWED
+2026-10-09T00:08:39.271912831Z 2026-10-09T00:08:39.271Z OCSF EVENT [INFO] ssh relay closed (channel_id=03621299-01bb-42d8-855a-29508bcd3e10, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:08:40.220320816Z 2026-10-09T00:08:40.220Z OCSF EVENT [INFO] ssh relay closed (channel_id=2ab7e6bf-5199-4e32-a93a-1c573cdbe22a, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:08:43.465495981Z 2026-10-09T00:08:43.465Z OCSF CONFIG:DETECTED [INFO] Settings poll: config change detected [old_revision:4787852757384789215 new_revision:4787852757384789215 policy_changed:false provider_env_changed:true]
+2026-10-09T00:08:43.475294708Z 2026-10-09T00:08:43.475Z INFO openshell_supervisor_network::opa: Configured OPA runtime binary identity mode
+2026-10-09T00:08:43.475544915Z 2026-10-09T00:08:43.475Z OCSF CONFIG:CONFIGURED [INFO] OPA runtime binary identity mode configured [source:proto require_binary_identity:true] [source:proto]
+2026-10-09T00:08:45.211952646Z 2026-10-09T00:08:45.211Z OCSF EVENT [INFO] ssh relay open (channel_id=31f3b72b-9f05-402a-a4c1-0aa582318ea4, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:08:45.211972271Z 2026-10-09T00:08:45.211Z OCSF SSH:OPEN [INFO] ALLOWED
+2026-10-09T00:08:45.223451238Z 2026-10-09T00:08:45.223Z OCSF EVENT [INFO] ssh relay closed (channel_id=31f3b72b-9f05-402a-a4c1-0aa582318ea4, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:08:55.914994917Z 2026-10-09T00:08:55.914Z OCSF EVENT [INFO] ssh relay open (channel_id=1e72e3be-215f-4560-a374-ef460e91224b, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:08:55.915292873Z 2026-10-09T00:08:55.915Z OCSF SSH:OPEN [INFO] ALLOWED
+2026-10-09T00:08:55.970225513Z 2026-10-09T00:08:55.970Z OCSF EVENT [INFO] ssh relay open (channel_id=3e728016-e0a9-45e0-adb4-7b79723e2db4, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:08:55.970561177Z 2026-10-09T00:08:55.970Z OCSF SSH:OPEN [INFO] ALLOWED
+2026-10-09T00:08:56.237290760Z 2026-10-09T00:08:56.237Z OCSF NET:REFUSE [MED] DENIED example.com [reason:policy_dns_ineligible]
+2026-10-09T00:08:56.237302719Z 2026-10-09T00:08:56.237Z OCSF CONFIG:OBSERVATION [INFO] Policy DNS staged unapproved name example.com synthetic=198.18.0.2 for TCP policy review
+2026-10-09T00:08:56.238586127Z 2026-10-09T00:08:56.238Z WARN openshell_supervisor_network::proxy: Denied staged transparent connection
+2026-10-09T00:08:56.238647460Z 2026-10-09T00:08:56.238Z OCSF NET:OPEN [MED] DENIED /usr/local/bin/python3.12(0) -> example.com:80 [reason:transparent_tcp_policy_denied]
+2026-10-09T00:08:56.239724411Z 2026-10-09T00:08:56.239Z WARN openshell_supervisor_network::proxy: Denied staged transparent connection
+2026-10-09T00:08:56.239737494Z 2026-10-09T00:08:56.239Z OCSF NET:OPEN [MED] DENIED /usr/local/bin/python3.12(0) -> 1.1.1.1:443 [reason:transparent_tcp_policy_denied]
+2026-10-09T00:08:56.346015380Z 2026-10-09T00:08:56.345Z OCSF EVENT [INFO] ssh relay closed (channel_id=3e728016-e0a9-45e0-adb4-7b79723e2db4, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:08:56.935457179Z 2026-10-09T00:08:56.935Z OCSF EVENT [INFO] ssh relay closed (channel_id=1e72e3be-215f-4560-a374-ef460e91224b, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:09:03.453249662Z 2026-10-09T00:09:03.452Z INFO openshell_supervisor: Flushed denial analysis to gateway
+2026-10-09T00:09:18.975422394Z 2026-10-09T00:09:18.975Z OCSF EVENT [INFO] ssh relay open (channel_id=db650ae1-b72a-495e-9dfa-d95b4fd908c0, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:09:18.975727309Z 2026-10-09T00:09:18.975Z OCSF SSH:OPEN [INFO] ALLOWED
+2026-10-09T00:09:19.055807158Z 2026-10-09T00:09:19.055Z OCSF EVENT [INFO] ssh relay open (channel_id=e9ddddfb-978f-4296-b31a-379b192c194d, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:09:19.055919033Z 2026-10-09T00:09:19.055Z OCSF SSH:OPEN [INFO] ALLOWED
+2026-10-09T00:09:19.342071363Z 2026-10-09T00:09:19.341Z OCSF NET:REFUSE [MED] DENIED example.com [reason:policy_dns_ineligible]
+2026-10-09T00:09:19.342092072Z 2026-10-09T00:09:19.341Z OCSF CONFIG:OBSERVATION [INFO] Policy DNS staged unapproved name example.com synthetic=198.18.0.2 for TCP policy review
+2026-10-09T00:09:19.343287397Z 2026-10-09T00:09:19.343Z WARN openshell_supervisor_network::proxy: Denied staged transparent connection
+2026-10-09T00:09:19.343378855Z 2026-10-09T00:09:19.343Z OCSF NET:OPEN [MED] DENIED /usr/local/bin/python3.12(0) -> example.com:80 [reason:transparent_tcp_policy_denied]
+2026-10-09T00:09:19.344063309Z 2026-10-09T00:09:19.343Z WARN openshell_supervisor_network::proxy: Denied staged transparent connection
+2026-10-09T00:09:19.344077558Z 2026-10-09T00:09:19.344Z OCSF NET:OPEN [MED] DENIED /usr/local/bin/python3.12(0) -> 1.1.1.1:443 [reason:transparent_tcp_policy_denied]
+2026-10-09T00:09:19.451153023Z 2026-10-09T00:09:19.451Z OCSF EVENT [INFO] ssh relay closed (channel_id=e9ddddfb-978f-4296-b31a-379b192c194d, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:09:20.013002378Z 2026-10-09T00:09:20.012Z OCSF EVENT [INFO] ssh relay closed (channel_id=db650ae1-b72a-495e-9dfa-d95b4fd908c0, target=unix:/run/openshell/ssh.sock)
+2026-10-09T00:09:23.457420568Z 2026-10-09T00:09:23.457Z INFO openshell_supervisor: Flushed denial analysis to gateway

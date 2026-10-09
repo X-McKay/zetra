@@ -1,0 +1,192 @@
+<section id="deployment" class="chapter">
+<p class="eyebrow">03 / Platform engineering · SRE · Security engineering</p>
+<h2>Agent Deployment Playbook</h2>
+<p>An agent directory becomes a governed release through compilation, evidence binding and independent runtime qualification. The developer supplies business logic and declared intent. The platform supplies identities, durable coordination, confined execution, approved routes and operational controls. Automation removes repetitive work; it does not silently convert observed behavior into permission or promote untested policy into production.</p>
+<div class="decision"><strong>Selected baseline.</strong> Framework-neutral Python contracts, explicit Temporal activities and workflows, cloud-neutral Kubernetes, and general enterprise controls. The target architecture below defines the integration acceptance criteria. The toolkit chapter records what has actually been executed, rendered or live-tested.</div>
+<div data-diagram="deployment"></div>
+<h3>3.1 Deployment inputs and the immutable release bundle</h3>
+<p>The initial repository provides an actual locked OCI worker build and a separate Kubernetes qualification fixture. Follow <a href="../deploy/README.md">the worker build and deployment guide</a> for its entrypoint, configuration, digest chain and reproduced workflow. This implementation is a read-only baseline; the target release bundle below adds independent trust and governance requirements.</p>
+<p>The release compiler consumes a validated agent manifest, a source revision, a built image digest, the organization policy boundary, approved capability requests, evaluation evidence, and a versioned platform profile. Each input has an owner. The developer cannot replace the organization boundary, approve their own exception or nominate an arbitrary evaluator result as trusted release evidence. A release controller must independently verify provenance from its configured CI identities.</p>
+<p>A package is portable; a deployment is environment specific. Keep logical capability names such as <code>documents.search</code> in agent code. Resolve those names to a tenant-aware backend, workload identity, schema and approved endpoint in the environment binding. Do not embed production network addresses, vault paths or model API keys in portable source. The compiler should fail on unresolved capabilities instead of inventing permissive defaults.</p>
+<table><thead><tr><th>Bundle member</th><th>Binding and purpose</th><th>Activation requirement</th></tr></thead><tbody>
+<tr><td>Image and source</td><td>OCI digest, source revision, lockfile digest, SBOM, build provenance; reproducible factory entrypoint.</td><td>Trusted builder and allowed registry; vulnerability policy and dependency exceptions current.</td></tr>
+<tr><td>Agent contract</td><td>Canonical manifest digest, input/output schema, tool schemas, instruction and skill digests, ownership and business function.</td><td>Every executable or retrieved capability accounted for; artifact remains tied to the evaluated instruction set.</td></tr>
+<tr><td>Policy set</td><td>Organization boundary, approved agent request and environment binding; effective-policy digest for each adapter.</td><td>No unauthorized widening; unsupported enforcement feature blocks activation.</td></tr>
+<tr><td>Evidence</td><td>Scenario IDs, outcomes, evaluator revisions, sample counts, environment, timestamps, negative tests and exception records.</td><td>Fresh, authentic, complete and tied to this release. Local unsigned evidence cannot satisfy a production attestation.</td></tr>
+<tr><td>Deployment and catalog</td><td>Kubernetes resources, rollout strategy, revocation scope, retention and runtime compatibility tuple.</td><td>Admission validates the binding; catalog records desired and effective state separately.</td></tr>
+</tbody></table>
+<p>Sign an envelope containing these digests rather than signing unstructured folders. Verification binds a specific subject digest to an approved signer identity, workflow and source revision. Signatures prove origin and integrity; they do not prove safety. A production admission rule must check signature trust, required predicates, freshness, environment and revocation status. Keyless signing still requires an issuer/subject allowlist and verification policy. Use a transparency record or approved internal equivalent according to your organization’s supply-chain design.</p>
+<pre><code># Proposed release-envelope contract; a Zetra schema, not a vendor CRD
+release_id: knowledge-assistant/2026-10-08.1
+subjects:
+  image: registry.example/agents/knowledge@sha256:…
+  manifest_sha256: …
+  effective_policy_sha256: …
+  evaluation_evidence_sha256: …
+  integration_report_sha256: …
+platform_profile: linux-kubernetes-temporal-v1
+policy_epoch: 41
+required_predicates:
+  - trusted-build
+  - material-scenario-coverage
+  - runtime-boundary-qualification
+  - risk-approval
+activation: withheld-until-verified</code></pre>
+<h3>3.2 Compile permission from intent, evidence and a boundary</h3>
+<p>Policy synthesis is a constrained proposal process. Static analysis produces capability hints; SDK/MCP introspection supplies tool schemas; dynamic profiling reveals exercised behavior and denials. None establishes business authorization. The approved capability request states what the agent is allowed to do; the organization boundary states what the platform may permit; the environment binding identifies how that authority is enforced. The target effective permission is their intersection, with explicit deny precedence and time-bounded exceptions.</p>
+<p>Normalize events into a schema with agent ID, release/image digest, pod UID, container ID, process ancestry, operation type, destination/resource, outcome and collection timestamp. Reject mismatched workload identity; retain event-loss metrics and collector health. Never append an entire trace to an allowlist. Deduplicate repeated calls, distinguish attempted from successful operations, and retain supporting scenario IDs. A call seen only in an adversarial test is evidence that a denial should work, not a reason to grant it.</p>
+<p>Profile delta reports show “declared but unobserved,” “observed and declared,” “observed but undeclared” and “unsupported/unclassified.” The first can indicate missing coverage; the third can indicate an undeclared dependency or compromise. Both require triage. The compiler may scaffold a narrow candidate rule for review; it must never auto-accept permission expansion from an agent or evaluator’s own output. Rollout impact simulation helps discover required behavior without treating denial volume as proof of correctness.</p>
+<pre><code># Current v0.1 CLI: produces a proposal, not an executable vendor policy
+zetra profile integrations/evidence/tetragon-normalized-events.jsonl \
+  --agent tetragon-fixture \
+  --image docker.io/library/alpine@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412 \
+  --output build/policy-candidate.json
+
+# Native Kubernetes resources start at zero replicas.
+zetra render examples/knowledge \
+  --image registry.example/agents/knowledge@sha256:… \
+  --namespace agent-staging \
+  --gateway-namespace agentgateway-system \
+  --gateway-label app=agentgateway \
+  --evidence build/eval.json \
+  --output build/deployment.yaml</code></pre>
+<div class="warning"><strong>No automatic completeness claim.</strong> A passing suite exercises a sample of behavior. A generated policy may omit rare legitimate operations or admit a harmful operation observed during tests. Safe activation requires reviewed intent, negative enforcement tests and a rollback path.</div>
+<h3>3.3 Kubernetes is the deployment substrate and an enforcement boundary</h3>
+<p>Build the worker image from pinned dependencies, run a nonroot UID, drop capabilities, disable privilege escalation, use a read-only root filesystem and the runtime-default seccomp profile. Mount bounded temporary scratch space at an approved location. Do not grant host networking, host PID, host paths, arbitrary devices or privileged containers to ordinary agent workloads. The platform’s privileged node agents belong in a separately administered trust domain.</p>
+<p>Create a dedicated ServiceAccount and disable automatic token mounting unless an explicit authenticated platform connection requires a projected token. Scope a projected token to the receiving audience and short lifetime; it is a workload credential, not a universal model, database or business-user credential. Kubernetes RBAC should grant no rights by default. Namespace isolation is an organizational aid, not a strong tenant boundary by itself; high-consequence workloads may need separate worker pools or clusters.</p>
+<p>Install default-deny ingress and egress, then grant narrowly scoped access to the approved gateway and required control services. Namespace and pod selectors in the same NetworkPolicy peer form a combined condition; use both to avoid matching every pod in a trusted namespace. Port restrictions must match the actual gateway listener. DNS is a deliberate channel: use the approved resolver, deny direct external DNS and test IP-literal, alternate protocol and IPv6 bypasses. NetworkPolicy enforcement depends on the selected CNI and policy model. Native policies are additive and do not authorize HTTP methods or tool names. Validate actual denied connectivity; resource presence alone is insufficient. <a href="https://kubernetes.io/docs/concepts/services-networking/network-policies/">Kubernetes NetworkPolicy reference</a>.</p>
+<p>The v0.1 renderer withholds activation by emitting zero replicas. Its gateway egress template is a starting point, not a complete Temporal/telemetry environment binding. A platform-reviewed binding must add control-plane peers and the correct listener ports before activation. Do not scale the render merely because schema validation passed. The target release controller additionally requires policy-ready acknowledgements from each mandatory adapter and an effective-policy epoch consistent with the release.</p>
+<pre><code># Native Kubernetes security context, illustrative platform baseline
+spec:
+  serviceAccountName: knowledge-assistant
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: agent
+      image: registry.example/agents/knowledge@sha256:…
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: [ALL]}
+      resources:
+        requests: {cpu: 100m, memory: 128Mi}
+        limits: {cpu: "1", memory: 512Mi}</code></pre>
+<p>Mutating admission can inject approved endpoint bindings, telemetry setup or sandbox launch parameters. It cannot guarantee that arbitrary Python becomes durable or that encrypted network traffic becomes visible. Keep mutation deterministic, idempotent, versioned and observable; avoid assumptions about container array positions or existing environment arrays. A separate validating admission layer rejects omitted controls, digest mismatch, unauthorized exceptions, unsuitable nodes or missing qualifications. Validate the final object after mutation. Fail-closed rules need an operational emergency path whose use is explicitly audited. The baseline security context follows <a href="https://kubernetes.io/docs/concepts/security/pod-security-standards/">Kubernetes Pod Security Standards</a>; Zetra-specific binding rules require a platform implementation.</p>
+<div data-diagram="boundary"></div>
+<h3>3.4 Tetragon: selected kernel evidence and tested response</h3>
+<p>Tetragon supplies process and selected kernel-boundary evidence. It complements application authorization; it cannot determine whether an LLM’s answer is truthful or a permitted database update is appropriate. Install the daemon through a separately reviewed platform change and pin the chart, image, CRD and runtime-hook configuration. Qualification records node architecture, kernel/BTF features, container runtime, available hook symbols and event-loss behavior. A heterogeneous cluster needs qualification per supported node class.</p>
+<p>Use scoped observation policies in an isolated evaluation environment. Three probes do not record every syscall. Choose hook points for the specific behavior, declare argument types, verify emitted fields and correlate descendants as well as the parent process. Runtime lifecycle filtering must be explicitly configured and tested. A policy present in the API is not proof that the node loaded it before workload startup. <a href="https://tetragon.io/docs/concepts/runtime-hooks/">Tetragon runtime hooks</a>, <a href="https://tetragon.io/docs/reference/tracing-policy/">TracingPolicy schema</a>.</p>
+<pre><code># Documented observation shape; validate kernel/CRD compatibility live.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: zetra-observe-connect
+  namespace: agent-ci
+spec:
+  podSelector:
+    matchLabels:
+      zetra.dev/agent: knowledge-assistant
+  kprobes:
+    - call: tcp_connect
+      syscall: false
+      args:
+        - index: 0
+          type: sock</code></pre>
+<p>This example observes a selected TCP hook; it grants or denies no capability. Enforcement templates need independent tests for hook semantics, selectors, action availability and races. Do not use a <code>matchBinaries</code> example as proof that a newly requested executable is authorized. Interpret hook arguments in their declared context; a <code>matchArgs</code> index is not automatically a Python command-line argument. A post-event kill action can stop a process after an attempted operation; it is not universally a pre-operation authorization decision.</p>
+<p>Prefer OS confinement and pre-operation controls for access that must never occur. Use Tetragon to detect unexpected processes, sensitive-path access, network behavior and policy drift, with tested responses appropriate to the hook. Avoid host-wide kill policies and automatic learning on production traffic. An interpreter allowlist still permits code running inside that interpreter, including dynamic Python execution. Combine kernel evidence with tool-level authorization and constrained filesystem/network capabilities.</p>
+<h3>3.5 OpenShell: confined execution and effective-policy verification</h3>
+<div class="warning"><strong>Production adoption gate.</strong> NVIDIA identifies the Kubernetes Helm deployment path as experimental. Local validation can evaluate it; enterprise production adoption requires an explicit maturity decision, pinned-release support assessment and compensating controls or an alternative supported sandbox. This playbook does not turn an experimental deployment into a production guarantee. <a href="https://docs.nvidia.com/openshell/latest/kubernetes/setup">Upstream Kubernetes setup status</a>.</div>
+<p>The OpenShell adapter resolves an approved runtime image and supported compute driver, starts the sandbox through the supported lifecycle, and constructs its filesystem/process/network policy. It must report the effective policy, including provider contributions and applicable global configuration. Zetra’s intended organization-and-agent intersection is a compiler responsibility: OpenShell global policy replacement behavior must not be mistaken for intersection semantics. Fixed filesystem and process changes require a new sandbox rather than an assumed hot reload. <a href="https://docs.nvidia.com/openshell/dev/how-it-works/policies/overview">OpenShell policy behavior</a>.</p>
+<pre><code># Upstream shape; incomplete until required runtime paths are resolved.
+version: 1
+filesystem_policy:
+  read_only: [/usr, /etc, /app]
+  read_write: [/tmp/agent_scratch]
+network_policies:
+  approved_status_api:
+    endpoints:
+      - host: api.internal.example
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: {method: GET, path: /v1/status}
+    binaries:
+      - path: /usr/local/bin/python3.12</code></pre>
+<p>Use the schema and CLI belonging to the installed version, not the proposal’s <code>sandbox.network.rules</code> structure. Capture filesystem denials, direct-connect attempts, DNS behavior, alternate executables and provider binding. An allowed interpreter path means another program in that interpreter may share permission; do not treat it as a code-identity guarantee. Native TCP policy does not parse arbitrary database queries. Tool-name restrictions do not authorize tool arguments or business resources. <a href="https://docs.nvidia.com/openshell/latest/reference/policy-schema">Policy schema</a>, <a href="https://docs.nvidia.com/openshell/dev/how-it-works/policies/network-rules">Network rule semantics</a>.</p>
+<p>Advisor proposals remain untrusted suggestions. Keep automatic permission expansion disabled in governed environments. Where a prover is available, execute it against the approved boundary and parse structured result, reason, modeled domains and unsupported coverage. “Inconclusive” and “unsupported required domain” are release failures. A proof of modeled access containment is neither a proof of arbitrary business invariants nor a runtime enforcement test. MCP/GraphQL support must be checked per release. <a href="https://docs.nvidia.com/openshell/latest/how-it-works/policies/prover">OpenShell prover coverage</a>.</p>
+<pre><code>openshell-prover check candidate.yaml \
+  --boundary organization-boundary.yaml --output json
+# The CI adapter checks modeled-domain coverage, not only process exit status.</code></pre>
+<h3>3.6 agentgateway: authenticated semantic routes</h3>
+<p>Use agentgateway as an explicitly addressed, authenticated intermediary for model and MCP traffic. Choose central or per-tenant instances according to availability and isolation requirements. Configure TLS trust, listener authentication, workload identity mapping, backend authorization and approved credentials. Set the SDK’s base URL or transport to the approved route. Network and sandbox controls make direct backend connections fail. Do not rely on an iptables redirect to decrypt HTTPS; semantic checks require supported termination/transport and protocol visibility.</p>
+<p>The documented Kubernetes resources are <code>AgentgatewayPolicy</code>, <code>AgentgatewayBackend</code> and Gateway API resources, with version-specific scopes. The source proposal’s <code>ToolAccessPolicy</code>, <code>LLMGuard</code> and <code>TokenBudget</code> kinds are not a deployable contract. The proxy is implemented in Rust; Envoy-specific sidecar assumptions should not be used. <a href="https://agentgateway.dev/docs/kubernetes/latest/reference/api/">Kubernetes API reference</a>, <a href="https://agentgateway.dev/blog/2026-06-04-designing-agentgateway-unified-gateway/">Maintainer architecture explanation</a>.</p>
+<pre><code># Tool-name authorization; workload JWT authentication is configured separately.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: zetra-status-only
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: operations-mcp
+  backend:
+    mcp:
+      authorization:
+        action: Allow
+        policy:
+          matchExpressions:
+            - 'jwt.sub == "knowledge-assistant" &amp;&amp; mcp.tool.name == "read_status"'</code></pre>
+<p>Test subject, issuer, audience, expiry and route attachment. A matching string in a caller-controlled header is not authenticated identity. A Kubernetes ServiceAccount token does not automatically identify a business user or obtain a GitHub token. Backend credentials and workload credentials have distinct owners. The example follows <a href="https://agentgateway.dev/docs/kubernetes/latest/documentation/mcp/tool-access/">agentgateway tool access</a>. Validate Allow/Require/Deny combination semantics and default tool access before rollout; an unattached policy changes nothing.</p>
+<p>Enforce parameter/resource scope at the appropriate route or tool adapter. The MCP authorization scope does not expose all argument variables available in other policy scopes. Validate tenant, object ID, amount, destination and approval at the backend before committing. Prompt-injection detectors and DLP checks can supplement this boundary, but need measured failure rates and bypass tests. Their presence cannot guarantee safe prompts or outputs. Request and token budgets require a durable accounting service with defined reservation and concurrency behavior; test-suite averages only inform capacity planning.</p>
+<h3>3.7 Credential ownership and transport composition</h3>
+<p>Select one credential authority for each outbound hop. An agent can authenticate to a gateway using a short-lived workload credential; the gateway holds or obtains the provider credential. A gateway calling a tenant-specific tool uses an appropriately scoped delegated credential. A sandbox provider binding must not compete with gateway injection on the same request. Record which component owns TLS termination, header rewriting, refresh, redaction and revocation. The effective route diagram must include every hop and trust root.</p>
+<p>Keep raw upstream secrets out of agent environment variables, prompt context, Temporal history and ordinary traces. A provider placeholder is useful only if the upstream exchange and binding endpoints are verified. Some protocols cannot support transparent credential replacement. For those, use a separately governed tool service or a narrowly scoped credential with explicit residual risk. A vault integration is not complete until unauthorized destinations cannot receive a token and responses/errors cannot leak it.</p>
+<p>Validate rotation, expiry, revocation during an active stream, backend failure, denied token retrieval and policy cache outage. Audit workload-to-business-user delegation without exposing tokens. For multitenant tools, credential choice must be derived from validated tenant identity, not LLM-supplied arguments. Never create a shared broad backend credential merely to simplify routing.</p>
+<h3>3.8 Temporal: explicit durable coordination</h3>
+<p>Temporal coordinates retryable work, approvals, timers and recovery. Keep workflow code deterministic and move network calls, LLM decisions, clock-dependent external operations and side effects into activities. The framework-neutral adapter registers stable activity names, typed payloads and cancellation/heartbeat behavior. It cannot transparently make every arbitrary SDK durable. Treat each adapter as a supported product with replay, serialization and upgrade tests.</p>
+<p>Activities can execute more than once. An effect may have committed even when the worker failed before acknowledging it. Use an operation ID stable across retries, a transactional idempotency record at the receiver, and a reconciliation API. Store canonical argument and resource hashes with the operation; reject a retry that reuses the key with changed content. A local SQLite ledger demonstrates this protocol but cannot ensure atomicity with a remote database or payment service. <a href="https://github.com/temporalio/documentation/blob/main/docs/encyclopedia/activities/activity-definition.mdx">Temporal activity semantics</a>.</p>
+<pre><code># Framework-neutral pattern, not an automatic SDK wrapper.
+@workflow.defn
+class GovernedWorkflow:
+    @workflow.run
+    async def run(self, request: Request) -&gt; Result:
+        plan = await workflow.execute_activity(
+            propose_action, request,
+            start_to_close_timeout=timedelta(seconds=30),
+        )
+        # Approval must bind operation ID + canonical action + tenant + policy.
+        approved = await workflow.execute_activity(
+            verify_approval, plan,
+            start_to_close_timeout=timedelta(seconds=10),
+        )
+        return await workflow.execute_activity(
+            commit_idempotently, approved,
+            start_to_close_timeout=timedelta(seconds=30),
+        )</code></pre>
+<p>Signals or Updates can carry an approval decision but are not approver authentication. Authenticate the approval service and verify authorization at decision time and immediately before effect. Bound approval wait time, credential freshness, maximum attempts, execution duration and budget. Cancellation must propagate to activities and outbound requests, while the backend independently checks revocation for consequential operations. Already committed effects require compensation or reconciliation.</p>
+<p>Use external object storage for large payloads with scoped references, checksums and retention. Avoid secrets and sensitive full documents in history. Bound history size, use continue-as-new where appropriate and version workers so running histories remain replayable. A rollout or rollback must account for active histories, activity names and tool schema changes. Replaying a deterministic workflow is a different test from retrying an external effect or resuming after a real worker crash.</p>
+<h3>3.9 Telemetry: correlated, redacted, useful</h3>
+<p>Instrument explicit boundaries: intake, workflow, activity, model call, tool proposal, authorization, effect commit, gateway decision and policy change. Propagate trace context through supported transports; use durable run and operation IDs to join events even when replay or sampling creates multiple spans. Emit policy and release digests, workload identity, business function and a normalized decision reason. Redact before export, not only in a dashboard. Auto-instrumentation coverage depends on the chosen adapter.</p>
+<div data-diagram="telemetry"></div>
+<p>Use an OpenTelemetry collector as a controlled export point and Phoenix or another approved analysis backend for semantic traces. Export ordinary operational metrics separately from restricted payload evidence. Prompts, responses, tool arguments and retrieved documents stay off by default; opt-in diagnostic capture needs purpose, access control, retention and deletion. Logs should not contain Authorization headers or raw credentials. Kernel events are operational metadata and can still contain sensitive paths or destinations.</p>
+<p>Distinguish telemetry availability from security-control availability. During exporter failure, buffer within limits, report dropped data and alert; avoid silently disabling authorization. For high-tier actions whose execution requires an audit record, use a durable authorization/commit journal and fail closed when it cannot persist. Sampling rates and collector capacity must preserve required security decisions and incident reconstruction without claiming complete visibility from sampled traces.</p>
+<h3>3.10 Live qualification, activation and rollback</h3>
+<p>Qualification is a test matrix, not a component inventory. Record cluster UID or equivalent stable identifier, namespace, node class, runtime/kernel, CNI, adapter/chart/image/CRD versions and release digests. Run allowed paths to prove useful operation and forbidden paths to prove enforcement. A CLI discovery report identifies prerequisites; it must not promote them to passed controls. Store raw outcome references and summarize which controls are absent, present, tested or approved.</p>
+<table><thead><tr><th>Boundary</th><th>Positive and negative checks</th><th>Failure condition</th></tr></thead><tbody>
+<tr><td>Network and identity</td><td>Approved gateway request; direct provider/IP connection; external DNS; IPv6; invalid/expired/wrong-audience token.</td><td>Any bypass succeeds or identity comes from an untrusted field.</td></tr>
+<tr><td>MCP and backend</td><td>Allowed read; denied tool; allowed tool with wrong tenant/resource; modified approved arguments.</td><td>Tool policy ignored, resource scope bypassed or effect occurs before approval.</td></tr>
+<tr><td>Sandbox</td><td>Approved scratch write; prohibited file read/write; forbidden executable; network rule update and provider override.</td><td>Effective policy differs from reviewed policy or required protocol unsupported.</td></tr>
+<tr><td>Kernel</td><td>Scoped events and tested response; first-instruction violation; daemon failure; noisy event pressure.</td><td>Unqualified node, startup gap incompatible with requirements or missing mandatory events.</td></tr>
+<tr><td>Durability</td><td>Worker crash before/after effect acknowledgement; replay after upgrade; duplicate retries; revoked approval while waiting.</td><td>Duplicate external effect, changed action under same approval or nondeterministic history.</td></tr>
+<tr><td>Operations</td><td>Kill-switch fanout; stale policy cache; restart after revoke; telemetry outage; rollback with active work.</td><td>Unbounded revocation window or release restarts under revoked authority.</td></tr>
+</tbody></table>
+<p>In a local kind cluster, kernel behavior is the runtime VM’s Linux kernel, not the macOS host. Nested runtime features, Landlock availability and OCI/NRI integration may differ from production. A successful local test qualifies that tuple only. Do not install privileged node components on a shared cluster merely to obtain a passing report; prepare the exact change, scope, resource impact and cleanup plan for review.</p>
+<p>Promote by canary: first observe on a known-safe workload, then enforce with negative tests, then activate a bounded percentage of real traffic. The canary requires ownership, a stop path, latency/error/cost thresholds and an explicit observation window. Roll back image and policy as a bound release; never restore an old permissive policy without checking current organization boundaries and revocations. Capture failed release evidence rather than rewriting history to make the catalog appear healthy.</p>
+<p>For incident isolation, stop intake and revoke gateway/backend authority before scaling workloads down. Drain or cancel active workflows according to consequence and reconciliation state. For restart, require current catalog approval, unrevoked identity, compatible history and effective-policy acknowledgement. Production deployment is complete only when the governed behavior works and the forbidden behavior fails under realistic failure conditions.</p>
+</section>

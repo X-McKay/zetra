@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zetra-validation
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tetragon-guarded
+  namespace: zetra-validation
+  labels:
+    zetra.dev/agent: tetragon-fixture
+spec:
+  terminationGracePeriodSeconds: 1
+  automountServiceAccountToken: false
+  containers:
+    - name: agent
+      image: docker.io/library/alpine@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
+      command: ["/bin/sh", "-c", "printf 'synthetic-test-data' > /tmp/zetra-sensitive; sleep 7200"]
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tetragon-unselected
+  namespace: zetra-validation
+  labels:
+    zetra.dev/agent: unselected-fixture
+spec:
+  terminationGracePeriodSeconds: 1
+  automountServiceAccountToken: false
+  containers:
+    - name: agent
+      image: docker.io/library/alpine@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
+      command: ["/bin/sh", "-c", "printf 'synthetic-test-data' > /tmp/zetra-sensitive; sleep 7200"]
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 64Mi}

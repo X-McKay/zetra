@@ -1,0 +1,9 @@
+{
+  "scenarios": {
+    "schema.contract": "test_cases.KnowledgeTests.test_schema",
+    "input.untrusted": "test_cases.KnowledgeTests.test_untrusted_input",
+    "capability.denied": "test_cases.KnowledgeTests.test_capability_denied",
+    "budget.enforced": "test_cases.KnowledgeTests.test_budget",
+    "stop.enforced": "test_cases.KnowledgeTests.test_stop"
+  }
+}

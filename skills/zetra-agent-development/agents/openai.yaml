@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zetra Agent Development"
+  short_description: "Implement typed agents and executable scenario gates"
+  default_prompt: "Use $zetra-agent-development to implement this agent change and validate its required scenarios."

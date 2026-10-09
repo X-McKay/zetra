@@ -1,0 +1,62 @@
+{
+  "apiVersion": "zetra.dev/qualification-v1alpha1",
+  "context": "kind-zetra-validation",
+  "namespace": "default",
+  "status": "discovery-only-not-qualified",
+  "probes": {
+    "server": {
+      "status": "observed",
+      "result": {
+        "major": "1",
+        "minor": "35",
+        "emulationMajor": "1",
+        "emulationMinor": "35",
+        "minCompatibilityMajor": "1",
+        "minCompatibilityMinor": "34",
+        "gitVersion": "v1.35.8",
+        "gitCommit": "1c2e10a409eb1b03f2f28f401ce935312e20d9fb",
+        "gitTreeState": "clean",
+        "buildDate": "2026-08-20T15:16:16Z",
+        "goVersion": "go1.26.5",
+        "compiler": "gc",
+        "platform": "linux/arm64"
+      }
+    },
+    "crds": {
+      "status": "observed",
+      "result": [
+        "ciliumcidrgroups.cilium.io",
+        "ciliumclusterwidenetworkpolicies.cilium.io",
+        "ciliumendpoints.cilium.io",
+        "ciliumidentities.cilium.io",
+        "ciliuml2announcementpolicies.cilium.io",
+        "ciliumloadbalancerippools.cilium.io",
+        "ciliumnetworkpolicies.cilium.io",
+        "ciliumnodeconfigs.cilium.io",
+        "ciliumnodes.cilium.io",
+        "ciliumpodippools.cilium.io",
+        "sandboxes.agents.x-k8s.io",
+        "tracingpolicies.cilium.io",
+        "tracingpoliciesnamespaced.cilium.io"
+      ]
+    },
+    "pods": {
+      "status": "observed",
+      "result": []
+    },
+    "networkPolicies": {
+      "status": "observed",
+      "result": []
+    }
+  },
+  "requiredLiveTests": [
+    "Forbidden process/file/network denied before first agent instruction",
+    "Gateway identity, tool authorization, limits and revocation",
+    "OpenShell workload policy enforcement",
+    "Tetragon scoped observe/enforce and unsupported-hook handling",
+    "Temporal retry/replay and receiver idempotency",
+    "OTel end-to-end correlation and redaction",
+    "Kill switch revokes pending/in-flight actions"
+  ],
+  "createdAt": "2026-10-09T00:03:37.245111+00:00"
+}

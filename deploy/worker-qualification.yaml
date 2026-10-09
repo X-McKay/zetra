@@ -1,0 +1,100 @@
+# Disposable local qualification only. No Services or production release gate.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zetra-worker-qualification
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-pod-network
+  namespace: zetra-worker-qualification
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: zetra-worker-temporal
+  namespace: zetra-worker-qualification
+  labels:
+    app: zetra-worker-qualification
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 10
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: temporal-dev
+      image: docker.io/temporalio/temporal:1.9.1@sha256:a64c02bf5cf894202e32267927e37e6141f182bb6d1a669a3bb85b83f09915d3
+      imagePullPolicy: IfNotPresent
+      command: [temporal]
+      env:
+        # Official CLI's CGO-disabled Go resource detector needs a username
+        # when running under a numeric UID without a passwd entry.
+        - name: USER
+          value: zetra
+      args:
+        - server
+        - start-dev
+        - --ip
+        - 127.0.0.1
+        - --port
+        - '7233'
+        - --headless
+        - --namespace
+        - zetra-worker-lab
+        - --db-filename
+        - /tmp/temporal.db
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: '1'
+          memory: 768Mi
+      volumeMounts:
+        - name: temporal-state
+          mountPath: /tmp
+    - name: worker
+      image: localhost/zetra-worker@sha256:b8dc0f5920797713eb87c1f2450fc18d2d5db5ba7cbd85d4e72f33d2f4ca4462
+      imagePullPolicy: Never
+      args:
+        - --address
+        - 127.0.0.1:7233
+        - --namespace
+        - zetra-worker-lab
+        - --task-queue
+        - zetra-image-qualification
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: '1'
+          memory: 384Mi
+  volumes:
+    - name: temporal-state
+      emptyDir:
+        sizeLimit: 256Mi

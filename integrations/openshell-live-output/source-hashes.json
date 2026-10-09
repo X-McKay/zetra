@@ -1,0 +1,7 @@
+{
+  "src/zetra/runtime.py": "08979249a1ab18502818bbfcfde91b3d9d21a488ebabdb84bf7fe7e801d410e2",
+  "src/zetra/__init__.py": "54059a5154211fc0c8bdf6e6afd183eab688a0e88170851eb840e510bb0b85ef",
+  "examples/knowledge/src/knowledge/factory.py": "e3169cdfec6aa82f9a86ed13f6fb689469d6eb4f0d98218de7000598039292c7",
+  "examples/knowledge/src/knowledge/__init__.py": "f3863058f16107dc1a5ac9589fc47471f0d5c3729798acbbe796d3f8d3059146",
+  "integrations/openshell-probe.py": "4d9fb89f9afea69857cc1215bd9518feb0bc130c26a35d7dcc27f353d6584637"
+}

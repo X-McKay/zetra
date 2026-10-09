@@ -1,0 +1,4 @@
+{"agent": "knowledge-assistant", "image": "registry.invalid/zetra@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "container": "agent", "kind": "exec", "binary": "/usr/local/bin/python"}
+{"agent": "knowledge-assistant", "image": "registry.invalid/zetra@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "container": "agent", "kind": "file", "path": "/app/agent/agent.yaml", "mode": "read"}
+{"agent": "knowledge-assistant", "image": "registry.invalid/zetra@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "container": "agent", "kind": "connect", "address": "10.0.0.10", "port": 8443}
+{"agent": "knowledge-assistant", "image": "registry.invalid/zetra@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "container": "collector", "kind": "exec", "binary": "/bin/sh"}

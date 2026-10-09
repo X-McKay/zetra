@@ -1,0 +1,16 @@
+apiVersion: zetra.dev/v1alpha1
+kind: Agent
+metadata:
+  name: knowledge-assistant
+  owner: platform-team@example.invalid
+  businessFunction: engineering
+spec:
+  entrypoint: knowledge.factory:create_agent
+  capabilities: [knowledge.read]
+  dataClassification: public
+  autonomy: assist
+  execution: local
+  budgets:
+    maxSteps: 3
+    maxSeconds: 30
+    maxCostUsd: 0.05

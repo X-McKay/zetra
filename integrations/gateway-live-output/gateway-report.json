@@ -1,0 +1,230 @@
+{
+  "createdAt": "2026-10-09T00:05:09.911583+00:00",
+  "scope": "macOS-loopback-live-proxy-with-deterministic-MCP-backend",
+  "agentgatewayVersion": "1.6.0",
+  "binarySha256": "6cebe8bd57262edce23a65a376d2f5a27b97cdfef609740642edbe75e1e9c685",
+  "checks": [
+    {
+      "name": "missing-token",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 401,
+        "response": {
+          "raw": "authentication failure: no bearer token found"
+        }
+      }
+    },
+    {
+      "name": "wrong-issuer",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 401,
+        "response": {
+          "raw": "authentication failure: the token is invalid or malformed: Error(InvalidIssuer)"
+        }
+      }
+    },
+    {
+      "name": "wrong-audience",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 401,
+        "response": {
+          "raw": "authentication failure: the token is invalid or malformed: Error(InvalidAudience)"
+        }
+      }
+    },
+    {
+      "name": "expired-token-beyond-leeway",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 401,
+        "response": {
+          "raw": "authentication failure: the token is invalid or malformed: Error(ExpiredSignature)"
+        }
+      }
+    },
+    {
+      "name": "forged-signature",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 401,
+        "response": {
+          "raw": "authentication failure: the token is invalid or malformed: Error(InvalidSignature)"
+        }
+      }
+    },
+    {
+      "name": "valid-initialize",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 200,
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+              "tools": {}
+            },
+            "serverInfo": {
+              "name": "zetra-deterministic-receiver",
+              "version": "0.1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "tool-list-filtered",
+      "status": "passed",
+      "detail": {
+        "names": [
+          "read_status"
+        ]
+      }
+    },
+    {
+      "name": "allowed-read",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 200,
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 3,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "status: healthy"
+              }
+            ],
+            "isError": false
+          }
+        }
+      }
+    },
+    {
+      "name": "denied-write-not-forwarded",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 400,
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 4,
+          "error": {
+            "code": -32602,
+            "message": "Unknown tool: write_status"
+          }
+        },
+        "writes": 0
+      }
+    },
+    {
+      "name": "wrong-subject-denied",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 400,
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "error": {
+            "code": -32602,
+            "message": "Unknown tool: read_status"
+          }
+        }
+      }
+    },
+    {
+      "name": "reference-agent-temporal-gateway-chain",
+      "status": "passed",
+      "detail": {
+        "status": "passed",
+        "scope": "real-Temporal-test-server-reference-agent-real-gateway-MCP",
+        "result": {
+          "status": {
+            "content": [
+              {
+                "text": "status: healthy",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        },
+        "activityAttempts": [
+          1,
+          2
+        ],
+        "gatewayAudit": [
+          {
+            "event": "gateway.tool_call",
+            "tool": "read_status",
+            "releaseId": "zetra-local-gateway-1",
+            "runId": "83f84935-e43c-4049-b92c-0efed02facc3",
+            "operationId": "83f84935-e43c-4049-b92c-0efed02facc3:status-1",
+            "outcome": "allowed"
+          }
+        ],
+        "checks": [
+          "Reference agent returned actual MCP result",
+          "Read-only activity retried once",
+          "Run ID propagated into gateway adapter audit",
+          "Recorded history replayed"
+        ],
+        "notQualified": [
+          "Kubernetes Temporal service",
+          "production TLS/identity",
+          "write exactly-once effects"
+        ],
+        "temporalTestServerSha256": "3a9cd757fc118c0cf134c6fa16d5cf901a02985d02782a11029f7c2833e95cb6"
+      }
+    }
+  ],
+  "receiverCalls": [
+    {
+      "method": "initialize",
+      "tool": null
+    },
+    {
+      "method": "tools/list",
+      "tool": null
+    },
+    {
+      "method": "tools/call",
+      "tool": "read_status"
+    },
+    {
+      "method": "initialize",
+      "tool": null
+    },
+    {
+      "method": "initialize",
+      "tool": null
+    },
+    {
+      "method": "notifications/initialized",
+      "tool": null
+    },
+    {
+      "method": "tools/call",
+      "tool": "read_status"
+    }
+  ],
+  "receiverWrites": 0,
+  "collectorEndpoint": "127.0.0.1:14317",
+  "status": "passed",
+  "injectedTraceId": "7d3b11f0794d447590fbde234eed5264",
+  "notQualified": [
+    "production identity issuance",
+    "TLS transport",
+    "network/sandbox bypass prevention",
+    "production revocation and resource/tenant authorization",
+    "Kubernetes controller CRDs",
+    "paid model quality or billing",
+    "collector export requires separate log assertion"
+  ],
+  "observations": [
+    "An initial token expired by 60 seconds was accepted; default JWT clock leeway must be included in authority freshness objectives. The expiry gate here tests a token expired by one hour."
+  ]
+}

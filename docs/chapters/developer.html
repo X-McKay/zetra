@@ -1,0 +1,190 @@
+<section id="developer" class="chapter">
+  <div class="chapter-kicker">02 · Agent developers · Technical leads · Evaluation engineers</div>
+  <h2>Agent Developer Playbook</h2>
+  <p class="lede">Build a small, portable agent package with explicit capabilities, typed dependencies, and evidence that its behavior fits its purpose. Use framework-neutral Python interfaces; use Temporal when durable coordination is required. Platform integrations must be independently qualified before production execution.</p>
+
+  <h3 id="developer-contract">2.1 The package is the unit of delivery</h3>
+  <p>A production agent is a governed software package, not a prompt plus a service account. Its package contains the agent entrypoint, typed input and output, instructions, declared tools and capabilities, evaluation cases, policy intent, ownership, and operational documentation. The developer supplies a complete description of what the agent needs; the platform resolves environment-specific bindings under approved policy. Do not store provider keys, cluster addresses, or production authorization decisions inside prompts.</p>
+  <p>Use the directory layout below as the target standard. The v0.1 scaffold is smaller and demonstrates the contract; teams can adopt the full layout as their agent needs grow. Directory existence does not count as test coverage. A one-shot agent may have no workflow implementation, while a durable agent must carry workflow and replay evidence. Keep generated deployment artifacts separate from developer-authored intent so review can identify which decisions were supplied, inferred, and resolved.</p>
+  <pre><code>project/
+├── pyproject.toml
+├── src/&lt;package&gt;/
+│   ├── agents/&lt;agent_name&gt;/
+│   │   ├── agent.yaml
+│   │   ├── factory.py          # construction only, no network side effects
+│   │   ├── dependencies.py     # typed capability interfaces
+│   │   ├── models.py           # input, output, and tool argument contracts
+│   │   ├── instructions/      # versioned prompt content
+│   │   ├── skills/            # bounded procedures with declared dependencies
+│   │   └── tools/             # narrow capability implementations
+│   ├── workflows/            # deterministic Temporal coordination
+│   ├── activities/           # model and tool I/O boundaries
+│   ├── runtime/              # approved adapter bindings
+│   ├── observability/        # semantic event definitions and redaction
+│   └── policy/               # application-level checks
+├── policy/
+│   ├── execution-profile.yaml
+│   ├── risk.yaml
+│   ├── budgets.yaml
+│   ├── approvals.yaml
+│   ├── release-gates.yaml
+│   └── ownership.yaml
+├── evals/
+│   ├── datasets/{smoke,regression,capability,safety,adversarial,durability}/
+│   ├── evaluators/
+│   └── baselines/
+├── tests/{unit,integration,workflow,replay,security}/
+├── docs/{risk-assessments,threat-model,runbooks}/
+└── deploy/                   # generated plans and reviewed overlays</code></pre>
+  <p>Resolve the manifest location explicitly in packaging. The current toolkit reads <code>agent.yaml</code> from the package root; the target multi-agent layout can place a manifest beside each factory and produce a root index. Do not maintain two independent copies of the same intent. An agent image should contain only runtime dependencies and the immutable package; evaluation data or debugging utilities need not enter the production image.</p>
+
+  <h3 id="developer-manifest">2.2 Declare identity, purpose, capabilities, and limits</h3>
+  <p>The v0.1 manifest is a YAML contract, not a Kubernetes resource to apply. Its <code>apiVersion</code> identifies a Zetra schema. Metadata identifies accountability and business attribution. The specification identifies an importable entrypoint, data class, autonomy mode, execution mode, budgets, and capabilities. Read the shipped examples for the supported capability structure; the following minimal scaffold uses no external authority.</p>
+  <pre><code>apiVersion: zetra.dev/v1alpha1
+kind: Agent
+metadata:
+  name: bounded-assistant
+  owner: agent-engineering
+  businessFunction: knowledge-operations
+spec:
+  entrypoint: agent:create_agent
+  capabilities: []
+  dataClassification: internal
+  autonomy: assist
+  execution: local
+  budgets:
+    maxSteps: 8
+    maxSeconds: 30
+    maxCostUsd: 0.10</code></pre>
+  <p>The v0.1 capability list uses <code>resource.operation</code> strings such as <code>documents.read</code>; richer scopes belong in a reviewed capability registry and future schema. A capability must describe semantics, not only an HTTP verb. A GET endpoint may trigger a change, a POST may implement a read-only search, and a stored procedure may write regardless of the query text visible to a scanner. For each tool, document its business effect, resource namespace, tenant boundary, data read and emitted, reversibility, required approval, idempotency mechanism, and destination. Register a versioned capability ID so a policy and an evaluation can refer to the same action.</p>
+  <p>Do not mark data public because the source is reachable without credentials: proprietary outputs, user-provided inputs, and joins may change sensitivity. Use <code>unknown</code> when classification or autonomy has not been established. Unknowns block automated low-risk promotion and require review. Budgets constrain work, not just reporting: define how model calls, tool calls, retries, wall time, and estimated spend are counted. Production cost enforcement needs authoritative accounting and reservation behavior; the local demo’s cooperative checks are not a billing control.</p>
+
+  <h3 id="developer-factory">2.3 Construct through typed dependencies</h3>
+  <p>Factories build agents from validated configuration and supplied capabilities. Construction must not make a model request, create a cloud resource, read arbitrary secrets, or register global credentials. A test can construct the same behavior with a fake model and fake tool. A production adapter can provide an identity-aware gateway client. This makes behavior portable without pretending runtime controls are transparent magic.</p>
+  <pre><code># Target interface example, independent of an agent framework.
+from dataclasses import dataclass
+from typing import Protocol
+
+@dataclass(frozen=True)
+class Question:
+    text: str
+    tenant: str
+
+@dataclass(frozen=True)
+class Answer:
+    text: str
+    citations: tuple[str, ...]
+
+class DocumentSearch(Protocol):
+    async def search(self, *, tenant: str, query: str) -&gt; list[dict]: ...
+
+class ModelAdapter(Protocol):
+    async def answer(self, *, question: str, context: list[dict]) -&gt; Answer: ...
+
+@dataclass(frozen=True)
+class Dependencies:
+    search: DocumentSearch
+    model: ModelAdapter
+
+class KnowledgeAgent:
+    def __init__(self, deps: Dependencies):
+        self.deps = deps
+
+    async def run(self, request: Question) -&gt; Answer:
+        # Tenant must also be authorized at the search service boundary.
+        docs = await self.deps.search.search(
+            tenant=request.tenant, query=request.text)
+        return await self.deps.model.answer(
+            question=request.text, context=docs)
+
+def create_agent(deps: Dependencies) -&gt; KnowledgeAgent:
+    return KnowledgeAgent(deps)</code></pre>
+  <p>The interface prevents accidental coupling; it does not stop hostile code from importing a network library or accessing the operating system. Authorization remains at the tool receiver and gateway, while sandbox and network controls constrain bypass. Validate tool arguments with bounded length, exact types, permitted enum values, and resource-scope rules. Reject unexpected fields when ambiguity could change an action. Validate the final result before returning it to users or downstream automation.</p>
+  <p>Keep instructions in versioned files and treat their changes as behavior changes. Instructions should explain purpose, permitted resources, escalation, and stopping conditions. They may remind a model about security, but they cannot grant or revoke a capability. Remote documents, search results, tool output, and messages from other agents remain untrusted input. Delimit their role, preserve provenance, and test what happens when they contain forged system instructions or requests to reveal secrets.</p>
+
+  <h3 id="developer-lifecycle">2.4 Work through a repeatable lifecycle</h3>
+  <div data-diagram="lifecycle"></div>
+  <p>Start with a charter and a bounded package. Implement typed input/output and a deterministic fake before connecting a provider. Declare tools and data flows, then build tests that demonstrate both permitted work and expected denials. Run the local validator and evaluation runner repeatedly. Once behavior stabilizes, generate a candidate deployment plan and an evidence bundle. Platform integration tests, owner review, and tier-specific approvals precede promotion. Monitor the deployed release, and feed discovered failures into the regression set.</p>
+  <pre><code># Supported v0.1 local commands; use the included examples first.
+zetra init /tmp/my-agent --name my-agent
+zetra check /tmp/my-agent --evidence /tmp/check.json
+zetra eval /tmp/my-agent --output /tmp/eval.json
+zetra run /tmp/my-agent --input '{"key":"zetra"}'
+
+# Render is a withheld plan until runtime adapters are qualified.
+zetra render /tmp/my-agent \
+  --image registry.example/agents/my-agent@sha256:&lt;digest&gt; \
+  --namespace agents-staging \
+  --gateway-namespace agent-platform \
+  --gateway-label app=agentgateway \
+  --evidence /tmp/eval.json --output /tmp/deployment.yaml</code></pre>
+  <p>Use the shipped scaffold’s documented input schema with <code>run</code>; the knowledge example uses a string <code>key</code>, while other agents define their own schema. <code>check</code> performs local structural and capability checks. <code>eval</code> executes the included deterministic scenarios and produces evidence. Neither substitutes for external service integration tests or model-quality evaluations. The render command emits replicas zero where production adapter qualification has not been established. Do not edit the generated workload to activate it without satisfying the deployment playbook.</p>
+  <p>When a change adds a tool, changes a destination, raises a budget, alters data classification, or changes approval behavior, update its risk map and negative cases before review. A prompt, model, dependency, remote tool schema, policy, or runtime adapter change can also change behavior without altering the agent’s Python logic. Bind all relevant versions into release evidence and invalidate stale evidence when material inputs change.</p>
+
+  <h3 id="developer-evaluations">2.5 Build evaluations from material risks and task behavior</h3>
+  <p>Maintain stable risk IDs across datasets and releases. An ID names a failure scenario, not a source-code line. Record the capability that introduces the risk, the harm, the preventive control, the evaluator, and the minimum passing criteria. Static analysis proposes requirements from likely capabilities; manifest declarations and observed runtime behavior add evidence. Developers and reviewers reconcile these sources. Unresolved dynamic behavior is an unknown, not evidence of harmlessness.</p>
+  <table><thead><tr><th>Stable scenario ID</th><th>Trigger and expected behavior</th><th>Required evidence</th></tr></thead><tbody>
+    <tr><td>R-AUTH-001</td><td>A valid identity requests another tenant’s resource. The receiver rejects it before data access or action.</td><td>Deterministic authorization and tenant-isolation tests, including guessed identifiers.</td></tr>
+    <tr><td>R-APPROVAL-001</td><td>A consequential action lacks approval, uses an expired approval, or changes payload after approval. No side effect occurs.</td><td>Exact action/payload/actor binding, expiry, single-use, and race tests.</td></tr>
+    <tr><td>R-INJECTION-001</td><td>Retrieved content requests unauthorized tool use or credential disclosure. The request remains denied.</td><td>Adversarial inputs and independently observed tool/receiver outcomes.</td></tr>
+    <tr><td>R-DATA-001</td><td>A secret or prohibited data appears in context. It does not enter an unauthorized prompt, answer, log, or trace.</td><td>Canary data plus deterministic destination and redaction checks.</td></tr>
+    <tr><td>R-DURABILITY-001</td><td>The worker fails after a destination commits but before a reply is recorded. Recovery does not duplicate the business effect.</td><td>Crash-window, duplicate delivery, idempotency, and reconciliation tests.</td></tr>
+    <tr><td>R-BUDGET-001</td><td>A loop or retry storm consumes the work budget. The agent stops or escalates; it does not silently reset limits.</td><td>Boundary and concurrency tests with explicit accounting.</td></tr>
+    <tr><td>R-REVOKE-001</td><td>Authority is revoked while work is queued or active. Newly attempted consequential actions are rejected.</td><td>Independent receiver/gateway checks and partition/freshness tests.</td></tr>
+    <tr><td>R-ESCALATION-001</td><td>Required facts or permitted authority are insufficient. The agent reports uncertainty and requests the proper handoff.</td><td>Task cases plus rubric and trajectory review.</td></tr>
+  </tbody></table>
+  <p>Cover six dataset families. Smoke cases confirm packaging and core contracts. Regression cases preserve known behavior and every fixed incident. Capability cases measure task correctness and tool selection. Safety cases exercise hard constraints. Adversarial cases challenge instructions, schemas, scopes, and boundary assumptions. Durability cases exercise retries, worker crashes, replay, approval waits, and recovery. Add skill activation and non-activation cases for each skill, plus interference cases when multiple skills are available.</p>
+  <p>Evaluate trajectories when order matters: retrieval before answering, approval before execution, no redundant external mutation, correct retry behavior, and appropriate stopping. Assert properties rather than an exact incidental tool order when several valid plans exist. Keep tool outcome evidence independent from the model’s narrative; “I did not change anything” is not a security assertion. A consequential action test must inspect the receiving system or trusted fixture.</p>
+  <p>Set release thresholds before running the candidate. Critical authorization, approval, isolation, schema, and revocation scenarios require all mandatory cases to pass with no known critical violation. Quality thresholds are task-specific absolute criteria plus permitted regressions against a baseline. Cost and latency need approved budgets and percentile targets. A failed hard gate blocks promotion even if a composite quality metric rises. Never delete or relabel a failing material risk simply to restore a pass.</p>
+
+  <h3 id="developer-reproducibility">2.6 Reproduce evidence without overstating certainty</h3>
+  <p>Store dataset and source digests, manifest hash, instruction versions, evaluator versions, adapter version, Python and dependency lock, model identifier, inference parameters, provider configuration, runtime image digest, policy revision, execution timestamp, and environment identity. Preserve case outcomes, relevant trace IDs, and denial receipts under the data handling rules. Hash evidence or sign an immutable bundle through the approved build identity in the target pipeline. Local v0.1 evidence hashes detect mismatches; they are not a trusted supply-chain signature.</p>
+  <p>Separate deterministic tests from model-dependent evaluations. A fake model can prove a control denies a forbidden action when requested; it cannot establish real-model answer quality. A live model evaluation measures behavior under a recorded provider configuration; it may not replay identically later. Use repeated runs for nondeterministic behavior, report failures per case and subgroup, and state run count. Keep a held-out set, review judge disagreement, and avoid leaking expected answers into prompts or retrieval content.</p>
+  <p>An LLM judge may support relevance, style, completeness, or usefulness scoring with a calibrated rubric. It must not be the sole evaluator of authorization, approval, isolation, required schema validity, or duplicate side effects. Use deterministic assertions and trusted receiver outcomes for these properties. A zero-failure sample is finite evidence: preserve sample size and test scope, and do not translate it into a universal safety probability without an appropriate statistical model.</p>
+  <pre><code># Target evidence record excerpt; production envelope is adapter-specific.
+release_inputs:
+  source_digest: sha256:...
+  manifest_digest: sha256:...
+  dataset_digest: sha256:...
+  evaluator_revision: reviewed-revision
+  model_identifier: approved-provider-model-version
+results:
+  R-APPROVAL-001:
+    evaluator: deterministic-receiver-assertion
+    required_cases: 12
+    passed_cases: 12
+    known_critical_failures: 0
+qualification:
+  local_contract: passed
+  production_gateway: not-qualified
+  production_sandbox: not-qualified</code></pre>
+
+  <h3 id="developer-testing">2.7 Test the code and the security boundaries</h3>
+  <p>Unit tests cover argument validation, formatting, budget accounting, factory purity, escalation, and capability selection using fakes. Integration tests exercise the approved model/tool adapters and a representative destination with scoped identity. Security tests bypass the cooperative wrapper: attempt direct egress, access disallowed paths, launch prohibited processes, call an unauthorized remote tool, and use another tenant’s identifier. These tests belong in the qualified runtime environment; a Python exception alone does not show operating-system isolation.</p>
+  <p>Supply-chain checks should inventory dependencies, pin versions, inspect image contents, scan for secrets and known vulnerabilities, and verify the approved base image and build provenance. Review new or changed remote MCP tools as dependencies with versioned schemas and business semantics. Tool discovery must not automatically expand the permitted set. Validate output size, timeout behavior, deserialization, redirect handling, and destination authorization. A permitted server can still return hostile content or expose dangerous actions.</p>
+  <p>Approval tests should change one bound property at a time: actor, agent version, action, resource, tenant, payload digest, expiry, and run identity. Test duplicate submission and concurrent consumption. Verify that a human-approved preview matches the receiver’s canonical action. The local reference implementation demonstrates payload binding and single use; production needs authenticated approval issuers, a durable consumption ledger, revocation, and fenced receiver enforcement.</p>
+
+  <h3 id="developer-temporal">2.8 Durable execution with Temporal</h3>
+  <p>Use Temporal for coordination that must survive worker failure, wait for approvals, or run across a long period. Keep model calls, external network I/O, and business side effects in activities. Keep workflow coordination deterministic and use the approved SDK’s workflow-safe facilities. The supplied wrapper draft’s goal is useful, but arbitrary framework code cannot be made replay-safe merely by changing a launch command. Build and test an explicit adapter boundary. See <a href="https://docs.temporal.io/develop/python/workflows/basics">Temporal’s Python workflow requirements</a>.</p>
+  <p>For each activity, define timeout, retry policy, cancellation semantics, idempotency key, destination deduplication, and reconciliation procedure. Assume an external effect may commit while the activity appears to fail. Send a stable business-operation key to a receiver that atomically stores the key and the effect; return the original outcome on duplicates. If the receiver cannot deduplicate, require a query-and-reconcile workflow or manual recovery before retrying. Do not promise exactly-once effects from workflow persistence alone. <a href="https://docs.temporal.io/activity-definition#idempotency">Temporal documents the crash-before-reporting window and receiver-enforced idempotency</a>.</p>
+  <p>Approval waits must retain the action digest and expiration, and revalidate current policy when execution resumes. A workflow saved before revocation must not recover old authority. Keep large and sensitive artifacts outside workflow histories when appropriate; pass controlled references with tenant binding, digest, expiry, and access policy. Determine service-specific payload and history limits during platform qualification rather than copying a fixed limit from an unverified draft.</p>
+  <p>Replay tests use recorded representative histories after workflow-code changes. Crash tests cover before request, after receiver commit, before result recording, and during approval consumption. Test workflow versioning and worker compatibility before rollout. Define what cancellation accomplishes: it may stop future coordination but cannot undo an already completed external mutation. Compensation is a separate authorized action with its own evidence and recovery limits.</p>
+
+  <h3 id="developer-handoff">2.9 Submit a reviewable release</h3>
+  <p>The handoff consists of an immutable source/image reference, manifest, capability diff, risk classification, test and evaluation evidence, reviewed policy candidate, runtime qualification reference, ownership, and runbooks. Include operating limits, expected failure modes, denied-action examples, rollback compatibility, and the named person who can explain the business behavior. The platform should produce a resolved deployment plan showing which identity, gateway routes, sandbox profile, telemetry policy, and workflow queue will apply.</p>
+  <p>Runbook instructions must explain how to identify a release and run, disable new work, determine whether a side effect committed, and escalate an uncertain outcome. Provide safe user messages for unavailable tools and policy denials. Do not encourage retrying an ambiguous mutation until its receiver state is known. Add post-release monitoring criteria and the condition that requires rollback or containment.</p>
+  <div class="callout"><strong>Developer completion criterion.</strong> The package is complete when another engineer can construct it with test dependencies, reproduce the local evidence, understand every external capability, identify uncovered risks, and review its generated plan. Production completion additionally requires live qualification, approved promotion, current policies, and exercised operational controls.</div>
+  <p>This chapter incorporates the repository sketch in <code>PXL_20261007_230415496~2.jpg</code>, the typed construction and injection ideas in <code>AgentDraft.pdf</code>, the risk-ID and evaluation mapping ideas in <code>automated_eval_for_ai_agent.md</code>, and the durable adapter motivation in <code>temporal_wrapper_for_ai_agents.md</code>. Their implementation claims are not treated as verified APIs.</p>
+  <h3 id="developer-toolchain">2.10 Use a reproducible contributor toolchain</h3>
+  <p>The repository standardizes the development environment as well as the agent contract. Nix supplies a locked development shell; mise provides an alternative with pinned host tools. uv resolves Python application, adapter and quality-tool dependencies through the committed lockfile. just presents the same commands in either environment. The platform does not require developers to memorize separate installation and verification steps for each subsystem.</p>
+  <pre><code>nix develop
+just bootstrap
+just check
+
+# Alternative host tooling, after reviewing mise.toml:
+mise install
+mise exec -- just bootstrap
+mise exec -- just check</code></pre>
+  <p>Ruff performs lint and formatting checks. ty checks the Python contracts, templates, examples and tests. prek executes the reviewed local hook configuration against tracked files, with tools drawn from the same uv resolution. Hooks are opt-in; CI enforces the quality gate independently. Unit/contract checks and offline scenarios run without cluster credentials or paid model keys. Live enforcement qualification remains a separate stage with an explicit environment and report.</p>
+  <p>Run <code>just format</code> when editing, <code>just check</code> before review, and <code>just hooks-check</code> for the tracked-file gate. A changed dependency or instruction requires fresh evaluation evidence. <code>CONTRIBUTING.md</code> explains updates to uv, mise and Nix locks, supported host architectures, and tested versus proposed CI behavior. The draft repository skills guide development, deployment qualification and governance review; they preserve user authorization and do not treat an unsigned candidate as an approved release.</p>
+</section>

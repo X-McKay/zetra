@@ -1,0 +1,649 @@
+2026-10-09T00:05:02.167439064Z 2026-10-09T00:05:02.167Z	info	otelconftelemetry/tracer.go:47	Internal trace telemetry disabled	{"resource": {"service.instance.id": "e8841728-f4b1-4e2a-ab44-bb87b80cec29", "service.name": "otelcol", "service.version": "0.162.0"}}
+2026-10-09T00:05:02.168472754Z 2026-10-09T00:05:02.168Z	info	service@v0.162.0/service.go:233	Starting otelcol...	{"resource": {"service.instance.id": "e8841728-f4b1-4e2a-ab44-bb87b80cec29", "service.name": "otelcol", "service.version": "0.162.0"}, "Version": "0.162.0", "NumCPU": 4}
+2026-10-09T00:05:02.168483212Z 2026-10-09T00:05:02.168Z	info	extensions/extensions.go:43	Starting extensions...	{"resource": {"service.instance.id": "e8841728-f4b1-4e2a-ab44-bb87b80cec29", "service.name": "otelcol", "service.version": "0.162.0"}}
+2026-10-09T00:05:02.168614423Z 2026-10-09T00:05:02.168Z	info	otlpreceiver@v0.162.0/otlp.go:120	Starting GRPC server	{"resource": {"service.instance.id": "e8841728-f4b1-4e2a-ab44-bb87b80cec29", "service.name": "otelcol", "service.version": "0.162.0"}, "otelcol.component.id": "otlp", "otelcol.component.kind": "receiver", "endpoint": "[::]:4317"}
+2026-10-09T00:05:02.168618132Z 2026-10-09T00:05:02.168Z	info	service@v0.162.0/service.go:256	Everything is ready. Begin running and processing data.	{"resource": {"service.instance.id": "e8841728-f4b1-4e2a-ab44-bb87b80cec29", "service.name": "otelcol", "service.version": "0.162.0"}}
+2026-10-09T00:05:08.173833072Z 2026-10-09T00:05:08.173Z	info	Traces	{"resource": {"service.instance.id": "e8841728-f4b1-4e2a-ab44-bb87b80cec29", "service.name": "otelcol", "service.version": "0.162.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 21}
+2026-10-09T00:05:08.174205282Z 2026-10-09T00:05:08.174Z	info	ResourceSpans #0
+2026-10-09T00:05:08.174209823Z Resource SchemaURL: 
+2026-10-09T00:05:08.174210865Z Resource attributes:
+2026-10-09T00:05:08.174211740Z      -> service.version: Str(1.6.0)
+2026-10-09T00:05:08.174212573Z      -> telemetry.sdk.language: Str(rust)
+2026-10-09T00:05:08.174213823Z      -> deployment.environment: Str(disposable-local-kind)
+2026-10-09T00:05:08.174214698Z      -> service.name: Str(zetra-live-gateway)
+2026-10-09T00:05:08.174215615Z      -> host.name: Str(default.default.svc.cluster.local)
+2026-10-09T00:05:08.174216448Z      -> telemetry.sdk.name: Str(opentelemetry)
+2026-10-09T00:05:08.174217240Z      -> telemetry.sdk.version: Str(0.33.0)
+2026-10-09T00:05:08.174218115Z ScopeSpans #0
+2026-10-09T00:05:08.174218990Z ScopeSpans SchemaURL: 
+2026-10-09T00:05:08.174219823Z InstrumentationScope agentgateway 
+2026-10-09T00:05:08.174220615Z Span #0
+2026-10-09T00:05:08.174221490Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174222407Z     Parent ID      : 191984c55660bd98
+2026-10-09T00:05:08.174223157Z     ID             : 582f58fa9f0a0f55
+2026-10-09T00:05:08.174224240Z     Name           : POST /*
+2026-10-09T00:05:08.174225032Z     Kind           : Server
+2026-10-09T00:05:08.174225823Z     Start time     : 2026-10-09 00:05:02.790581 +0000 UTC
+2026-10-09T00:05:08.174226615Z     End time       : 2026-10-09 00:05:02.791802 +0000 UTC
+2026-10-09T00:05:08.174227365Z     Status code    : Error
+2026-10-09T00:05:08.174228490Z     Status message : authentication failure: no bearer token found
+2026-10-09T00:05:08.174229282Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174230032Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174230782Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174231698Z Attributes:
+2026-10-09T00:05:08.174232532Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174233407Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174234198Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174248865Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174259698Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174260698Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174261573Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174262365Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174263198Z      -> http.response.status_code: Int(401)
+2026-10-09T00:05:08.174263948Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174264740Z      -> span.id: Str(582f58fa9f0a0f55)
+2026-10-09T00:05:08.174265532Z      -> protocol: Str(http)
+2026-10-09T00:05:08.174266282Z      -> reason: Str(JwtAuth)
+2026-10-09T00:05:08.174267115Z      -> duration: Str(1ms)
+2026-10-09T00:05:08.174267865Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174268615Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174269365Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174270157Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174270907Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174271823Z      -> error.type: Str(JwtAuth)
+2026-10-09T00:05:08.174272698Z Span #1
+2026-10-09T00:05:08.174273615Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174274448Z     Parent ID      : 24c40f2a27ebbe0c
+2026-10-09T00:05:08.174275407Z     ID             : 8febf5d63716da8a
+2026-10-09T00:05:08.174276240Z     Name           : POST /*
+2026-10-09T00:05:08.174277032Z     Kind           : Server
+2026-10-09T00:05:08.174277782Z     Start time     : 2026-10-09 00:05:02.792545 +0000 UTC
+2026-10-09T00:05:08.174278490Z     End time       : 2026-10-09 00:05:02.793059 +0000 UTC
+2026-10-09T00:05:08.174279240Z     Status code    : Error
+2026-10-09T00:05:08.174282823Z     Status message : authentication failure: the token is invalid or malformed: Error(InvalidIssuer)
+2026-10-09T00:05:08.174285323Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174286115Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174286907Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174287657Z Attributes:
+2026-10-09T00:05:08.174288490Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174289240Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174289990Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174290865Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174291657Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174292365Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174293115Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174293823Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174294573Z      -> http.response.status_code: Int(401)
+2026-10-09T00:05:08.174295365Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174296073Z      -> span.id: Str(8febf5d63716da8a)
+2026-10-09T00:05:08.174296823Z      -> protocol: Str(http)
+2026-10-09T00:05:08.174297573Z      -> reason: Str(JwtAuth)
+2026-10-09T00:05:08.174298282Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174298990Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174299740Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174300448Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174301240Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174301948Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174302698Z      -> error.type: Str(JwtAuth)
+2026-10-09T00:05:08.174303448Z Span #2
+2026-10-09T00:05:08.174304198Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174304948Z     Parent ID      : e7713d59cf455be9
+2026-10-09T00:05:08.174305657Z     ID             : eaef2a18624fd785
+2026-10-09T00:05:08.174311490Z     Name           : POST /*
+2026-10-09T00:05:08.174313323Z     Kind           : Server
+2026-10-09T00:05:08.174314115Z     Start time     : 2026-10-09 00:05:02.793354 +0000 UTC
+2026-10-09T00:05:08.174314865Z     End time       : 2026-10-09 00:05:02.793416 +0000 UTC
+2026-10-09T00:05:08.174315698Z     Status code    : Error
+2026-10-09T00:05:08.174317948Z     Status message : authentication failure: the token is invalid or malformed: Error(InvalidAudience)
+2026-10-09T00:05:08.174318740Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174319615Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174320407Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174321157Z Attributes:
+2026-10-09T00:05:08.174321907Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174322740Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174323490Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174324365Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174325073Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174325865Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174326615Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174327490Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174328323Z      -> http.response.status_code: Int(401)
+2026-10-09T00:05:08.174329073Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174329865Z      -> span.id: Str(eaef2a18624fd785)
+2026-10-09T00:05:08.174330657Z      -> protocol: Str(http)
+2026-10-09T00:05:08.174331407Z      -> reason: Str(JwtAuth)
+2026-10-09T00:05:08.174332115Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174332865Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174333573Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174334407Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174335282Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174337823Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174338698Z      -> error.type: Str(JwtAuth)
+2026-10-09T00:05:08.174339532Z Span #3
+2026-10-09T00:05:08.174340323Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174341073Z     Parent ID      : 54277c5aa17d57e3
+2026-10-09T00:05:08.174341823Z     ID             : a873d3d1485bf16f
+2026-10-09T00:05:08.174342573Z     Name           : POST /*
+2026-10-09T00:05:08.174343282Z     Kind           : Server
+2026-10-09T00:05:08.174343990Z     Start time     : 2026-10-09 00:05:02.793634 +0000 UTC
+2026-10-09T00:05:08.174344740Z     End time       : 2026-10-09 00:05:02.793686 +0000 UTC
+2026-10-09T00:05:08.174345490Z     Status code    : Error
+2026-10-09T00:05:08.174346282Z     Status message : authentication failure: the token is invalid or malformed: Error(ExpiredSignature)
+2026-10-09T00:05:08.174347073Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174347823Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174348532Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174349282Z Attributes:
+2026-10-09T00:05:08.174350115Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174350907Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174351615Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174352365Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174353240Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174354032Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174354949Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174368532Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174371115Z      -> http.response.status_code: Int(401)
+2026-10-09T00:05:08.174373282Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174374074Z      -> span.id: Str(a873d3d1485bf16f)
+2026-10-09T00:05:08.174374782Z      -> protocol: Str(http)
+2026-10-09T00:05:08.174376615Z      -> reason: Str(JwtAuth)
+2026-10-09T00:05:08.174377449Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174378199Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174378907Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174379657Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174380365Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174381157Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174381907Z      -> error.type: Str(JwtAuth)
+2026-10-09T00:05:08.174382615Z Span #4
+2026-10-09T00:05:08.174383407Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174384157Z     Parent ID      : d20e2d12918e3941
+2026-10-09T00:05:08.174384907Z     ID             : d5f0ef0fdecaa036
+2026-10-09T00:05:08.174385657Z     Name           : POST /*
+2026-10-09T00:05:08.174386365Z     Kind           : Server
+2026-10-09T00:05:08.174387074Z     Start time     : 2026-10-09 00:05:02.79909 +0000 UTC
+2026-10-09T00:05:08.174387824Z     End time       : 2026-10-09 00:05:02.799155 +0000 UTC
+2026-10-09T00:05:08.174388574Z     Status code    : Error
+2026-10-09T00:05:08.174399615Z     Status message : authentication failure: the token is invalid or malformed: Error(InvalidSignature)
+2026-10-09T00:05:08.174400449Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174401240Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174402115Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174402865Z Attributes:
+2026-10-09T00:05:08.174403615Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174404407Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174405115Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174405907Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174406699Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174407532Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174408282Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174409074Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174409949Z      -> http.response.status_code: Int(401)
+2026-10-09T00:05:08.174410699Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174411490Z      -> span.id: Str(d5f0ef0fdecaa036)
+2026-10-09T00:05:08.174412282Z      -> protocol: Str(http)
+2026-10-09T00:05:08.174413032Z      -> reason: Str(JwtAuth)
+2026-10-09T00:05:08.174413782Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174414490Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174415199Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174415949Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174416657Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174417365Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174418074Z      -> error.type: Str(JwtAuth)
+2026-10-09T00:05:08.174418824Z Span #5
+2026-10-09T00:05:08.174419574Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174423865Z     Parent ID      : dc0d546ca0c83fe5
+2026-10-09T00:05:08.174424699Z     ID             : 4abf80d0d38c1ef0
+2026-10-09T00:05:08.174425532Z     Name           : initialize
+2026-10-09T00:05:08.174426240Z     Kind           : Server
+2026-10-09T00:05:08.174427074Z     Start time     : 2026-10-09 00:05:02.799474 +0000 UTC
+2026-10-09T00:05:08.174427865Z     End time       : 2026-10-09 00:05:02.801663 +0000 UTC
+2026-10-09T00:05:08.174428657Z     Status code    : Unset
+2026-10-09T00:05:08.174430574Z     Status message : 
+2026-10-09T00:05:08.174431324Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174432074Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174432782Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174433574Z Attributes:
+2026-10-09T00:05:08.174434282Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174435032Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174435824Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174436615Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174437490Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174438324Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174439032Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174439740Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174440449Z      -> http.response.status_code: Int(200)
+2026-10-09T00:05:08.174441157Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174441907Z      -> span.id: Str(4abf80d0d38c1ef0)
+2026-10-09T00:05:08.174442615Z      -> jwt.sub: Str(knowledge-assistant)
+2026-10-09T00:05:08.174443324Z      -> protocol: Str(mcp)
+2026-10-09T00:05:08.174444032Z      -> mcp.method.name: Str(initialize)
+2026-10-09T00:05:08.174444865Z      -> mcp.session.id: Str(f8f56f4c-e3dc-4696-9167-8cb7f8383a4f)
+2026-10-09T00:05:08.174445615Z      -> duration: Str(2ms)
+2026-10-09T00:05:08.174446324Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174447032Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174447740Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174448490Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174449240Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174449990Z Span #6
+2026-10-09T00:05:08.174450782Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174451532Z     Parent ID      : 4abf80d0d38c1ef0
+2026-10-09T00:05:08.174452282Z     ID             : acdcfa25d66b2a5e
+2026-10-09T00:05:08.174452990Z     Name           : initialize fixture
+2026-10-09T00:05:08.174453699Z     Kind           : Client
+2026-10-09T00:05:08.174454449Z     Start time     : 2026-10-09 00:05:02.800211 +0000 UTC
+2026-10-09T00:05:08.174456157Z     End time       : 2026-10-09 00:05:02.801429 +0000 UTC
+2026-10-09T00:05:08.174456990Z     Status code    : Unset
+2026-10-09T00:05:08.174457699Z     Status message : 
+2026-10-09T00:05:08.174458449Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174459157Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174459865Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174460657Z Attributes:
+2026-10-09T00:05:08.174461407Z      -> agentgateway.outbound.kind: Str(Primary)
+2026-10-09T00:05:08.174462157Z      -> agentgateway.outbound.subtype: Str(Mcp)
+2026-10-09T00:05:08.174462907Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174463615Z      -> mcp.method.name: Str(initialize)
+2026-10-09T00:05:08.174464365Z Span #7
+2026-10-09T00:05:08.174465157Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174466074Z     Parent ID      : 611c9cc8f7bced51
+2026-10-09T00:05:08.174466907Z     ID             : 7ec05f26cd6f2557
+2026-10-09T00:05:08.174467615Z     Name           : tools/list
+2026-10-09T00:05:08.174468365Z     Kind           : Server
+2026-10-09T00:05:08.174469115Z     Start time     : 2026-10-09 00:05:02.80195 +0000 UTC
+2026-10-09T00:05:08.174472657Z     End time       : 2026-10-09 00:05:02.80259 +0000 UTC
+2026-10-09T00:05:08.174475157Z     Status code    : Unset
+2026-10-09T00:05:08.174475990Z     Status message : 
+2026-10-09T00:05:08.174477740Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174478449Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174479157Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174479907Z Attributes:
+2026-10-09T00:05:08.174480699Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174481365Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174482115Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174482824Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174483532Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174484240Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174484949Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174485657Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174486449Z      -> http.response.status_code: Int(200)
+2026-10-09T00:05:08.174487157Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174487907Z      -> span.id: Str(7ec05f26cd6f2557)
+2026-10-09T00:05:08.174488574Z      -> jwt.sub: Str(knowledge-assistant)
+2026-10-09T00:05:08.174489324Z      -> protocol: Str(mcp)
+2026-10-09T00:05:08.174490074Z      -> mcp.method.name: Str(tools/list)
+2026-10-09T00:05:08.174491157Z      -> mcp.session.id: Str(eyJ0IjoibWNwIiwicyI6W3sidCI6ImZpeHR1cmUifV0sInIiOiI3OGMzYjdmMS1hZmI0LTQyZTUtYWM0YS1iMzZjYjVkM2Y5NzAifQ)
+2026-10-09T00:05:08.174491907Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174492657Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174493365Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174494199Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174494949Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174495657Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174497490Z Span #8
+2026-10-09T00:05:08.174498282Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174500865Z     Parent ID      : 7ec05f26cd6f2557
+2026-10-09T00:05:08.174501657Z     ID             : 8ceced3c834fc479
+2026-10-09T00:05:08.174502449Z     Name           : tools/list fixture
+2026-10-09T00:05:08.174503282Z     Kind           : Client
+2026-10-09T00:05:08.174504074Z     Start time     : 2026-10-09 00:05:02.80209 +0000 UTC
+2026-10-09T00:05:08.174504824Z     End time       : 2026-10-09 00:05:02.802482 +0000 UTC
+2026-10-09T00:05:08.174505574Z     Status code    : Unset
+2026-10-09T00:05:08.174506491Z     Status message : 
+2026-10-09T00:05:08.174507282Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174508032Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174508866Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174509741Z Attributes:
+2026-10-09T00:05:08.174510616Z      -> agentgateway.outbound.kind: Str(Primary)
+2026-10-09T00:05:08.174511366Z      -> agentgateway.outbound.subtype: Str(Mcp)
+2026-10-09T00:05:08.174512116Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174512991Z      -> mcp.method.name: Str(tools/list)
+2026-10-09T00:05:08.174513741Z Span #9
+2026-10-09T00:05:08.174514574Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174515407Z     Parent ID      : 1832a38ce633fb2e
+2026-10-09T00:05:08.174516241Z     ID             : 505ce703664abee8
+2026-10-09T00:05:08.174516991Z     Name           : tools/call
+2026-10-09T00:05:08.174517741Z     Kind           : Server
+2026-10-09T00:05:08.174518491Z     Start time     : 2026-10-09 00:05:02.802847 +0000 UTC
+2026-10-09T00:05:08.174519199Z     End time       : 2026-10-09 00:05:02.803444 +0000 UTC
+2026-10-09T00:05:08.174519949Z     Status code    : Unset
+2026-10-09T00:05:08.174520699Z     Status message : 
+2026-10-09T00:05:08.174521491Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174522991Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174523741Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174524491Z Attributes:
+2026-10-09T00:05:08.174525241Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174525949Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174526699Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174527407Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174528157Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174528907Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174529616Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174530366Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174531657Z      -> http.response.status_code: Int(200)
+2026-10-09T00:05:08.174532407Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174533157Z      -> span.id: Str(505ce703664abee8)
+2026-10-09T00:05:08.174533949Z      -> jwt.sub: Str(knowledge-assistant)
+2026-10-09T00:05:08.174534699Z      -> protocol: Str(mcp)
+2026-10-09T00:05:08.174535407Z      -> mcp.method.name: Str(tools/call)
+2026-10-09T00:05:08.174536116Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174536824Z      -> mcp.resource.type: Str(tool)
+2026-10-09T00:05:08.174537574Z      -> gen_ai.tool.name: Str(read_status)
+2026-10-09T00:05:08.174538366Z      -> mcp.session.id: Str(eyJ0IjoibWNwIiwicyI6W3sidCI6ImZpeHR1cmUifV0sInIiOiI3OGMzYjdmMS1hZmI0LTQyZTUtYWM0YS1iMzZjYjVkM2Y5NzAifQ)
+2026-10-09T00:05:08.174539074Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174539824Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174540532Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174541282Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174541991Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174542699Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174543407Z Span #10
+2026-10-09T00:05:08.174544157Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174544907Z     Parent ID      : 505ce703664abee8
+2026-10-09T00:05:08.174545657Z     ID             : 8a07ff75b7d3c27f
+2026-10-09T00:05:08.174546407Z     Name           : tools/call fixture_read_status
+2026-10-09T00:05:08.174547116Z     Kind           : Client
+2026-10-09T00:05:08.174547907Z     Start time     : 2026-10-09 00:05:02.802974 +0000 UTC
+2026-10-09T00:05:08.174548657Z     End time       : 2026-10-09 00:05:02.803388 +0000 UTC
+2026-10-09T00:05:08.174553949Z     Status code    : Unset
+2026-10-09T00:05:08.174555157Z     Status message : 
+2026-10-09T00:05:08.174555949Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174556699Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174557532Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174558282Z Attributes:
+2026-10-09T00:05:08.174559074Z      -> agentgateway.outbound.kind: Str(Primary)
+2026-10-09T00:05:08.174559866Z      -> agentgateway.outbound.subtype: Str(Mcp)
+2026-10-09T00:05:08.174560657Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174561491Z      -> mcp.method.name: Str(tools/call)
+2026-10-09T00:05:08.174562324Z      -> gen_ai.tool.name: Str(read_status)
+2026-10-09T00:05:08.174563157Z Span #11
+2026-10-09T00:05:08.174564032Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174564907Z     Parent ID      : 930371e61be8d787
+2026-10-09T00:05:08.174565616Z     ID             : 9be69d4650764208
+2026-10-09T00:05:08.174566366Z     Name           : tools/call
+2026-10-09T00:05:08.174567074Z     Kind           : Server
+2026-10-09T00:05:08.174567824Z     Start time     : 2026-10-09 00:05:02.803689 +0000 UTC
+2026-10-09T00:05:08.174569324Z     End time       : 2026-10-09 00:05:02.803783 +0000 UTC
+2026-10-09T00:05:08.174570074Z     Status code    : Error
+2026-10-09T00:05:08.174570824Z     Status message : mcp: Unknown tool: write_status
+2026-10-09T00:05:08.174571532Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174572241Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174573116Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174573866Z Attributes:
+2026-10-09T00:05:08.174574699Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174575407Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174576157Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174576907Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174577616Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174578366Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174579074Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174579824Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174580574Z      -> http.response.status_code: Int(400)
+2026-10-09T00:05:08.174581324Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174582074Z      -> span.id: Str(9be69d4650764208)
+2026-10-09T00:05:08.174582907Z      -> jwt.sub: Str(knowledge-assistant)
+2026-10-09T00:05:08.174583699Z      -> protocol: Str(mcp)
+2026-10-09T00:05:08.174584449Z      -> mcp.method.name: Str(tools/call)
+2026-10-09T00:05:08.174587282Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174589699Z      -> mcp.resource.type: Str(tool)
+2026-10-09T00:05:08.174590616Z      -> gen_ai.tool.name: Str(write_status)
+2026-10-09T00:05:08.174591449Z      -> mcp.session.id: Str(eyJ0IjoibWNwIiwicyI6W3sidCI6ImZpeHR1cmUifV0sInIiOiI3OGMzYjdmMS1hZmI0LTQyZTUtYWM0YS1iMzZjYjVkM2Y5NzAifQ)
+2026-10-09T00:05:08.174592241Z      -> reason: Str(MCP)
+2026-10-09T00:05:08.174592949Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174593657Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174594366Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174595116Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174595824Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174596574Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174597282Z      -> error.type: Str(MCP)
+2026-10-09T00:05:08.174598032Z Span #12
+2026-10-09T00:05:08.174598782Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174599532Z     Parent ID      : 14c125f27a008334
+2026-10-09T00:05:08.174600282Z     ID             : b10abf32ea4c7109
+2026-10-09T00:05:08.174600991Z     Name           : initialize
+2026-10-09T00:05:08.174601741Z     Kind           : Server
+2026-10-09T00:05:08.174602449Z     Start time     : 2026-10-09 00:05:02.810011 +0000 UTC
+2026-10-09T00:05:08.174603199Z     End time       : 2026-10-09 00:05:02.810526 +0000 UTC
+2026-10-09T00:05:08.174603949Z     Status code    : Unset
+2026-10-09T00:05:08.174604657Z     Status message : 
+2026-10-09T00:05:08.174605407Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174606116Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174606824Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174607574Z Attributes:
+2026-10-09T00:05:08.174608282Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174609032Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174609741Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174610491Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174611241Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174611991Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174612699Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174621491Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174623074Z      -> http.response.status_code: Int(200)
+2026-10-09T00:05:08.174623949Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174624699Z      -> span.id: Str(b10abf32ea4c7109)
+2026-10-09T00:05:08.174625449Z      -> jwt.sub: Str(other-agent)
+2026-10-09T00:05:08.174626199Z      -> protocol: Str(mcp)
+2026-10-09T00:05:08.174626907Z      -> mcp.method.name: Str(initialize)
+2026-10-09T00:05:08.174627699Z      -> mcp.session.id: Str(171b8228-4ce3-4510-8d20-8ec20e64ae30)
+2026-10-09T00:05:08.174628449Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174629157Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174629866Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174630574Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174631282Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174632032Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174632782Z Span #13
+2026-10-09T00:05:08.174633491Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174634241Z     Parent ID      : b10abf32ea4c7109
+2026-10-09T00:05:08.174634949Z     ID             : 1b6b0a45aad64be5
+2026-10-09T00:05:08.174635699Z     Name           : initialize fixture
+2026-10-09T00:05:08.174636407Z     Kind           : Client
+2026-10-09T00:05:08.174637116Z     Start time     : 2026-10-09 00:05:02.81009 +0000 UTC
+2026-10-09T00:05:08.174637824Z     End time       : 2026-10-09 00:05:02.810496 +0000 UTC
+2026-10-09T00:05:08.174638532Z     Status code    : Unset
+2026-10-09T00:05:08.174639324Z     Status message : 
+2026-10-09T00:05:08.174640032Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174640782Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174641532Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174642241Z Attributes:
+2026-10-09T00:05:08.174642991Z      -> agentgateway.outbound.kind: Str(Primary)
+2026-10-09T00:05:08.174643741Z      -> agentgateway.outbound.subtype: Str(Mcp)
+2026-10-09T00:05:08.174644449Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174645199Z      -> mcp.method.name: Str(initialize)
+2026-10-09T00:05:08.174645907Z Span #14
+2026-10-09T00:05:08.174646657Z     Trace ID       : 7d3b11f0794d447590fbde234eed5264
+2026-10-09T00:05:08.174647366Z     Parent ID      : 4a13c6feaa6e3d45
+2026-10-09T00:05:08.174648116Z     ID             : 47bdf927634e9f16
+2026-10-09T00:05:08.174648824Z     Name           : tools/call
+2026-10-09T00:05:08.174649574Z     Kind           : Server
+2026-10-09T00:05:08.174650282Z     Start time     : 2026-10-09 00:05:02.810781 +0000 UTC
+2026-10-09T00:05:08.174650991Z     End time       : 2026-10-09 00:05:02.810869 +0000 UTC
+2026-10-09T00:05:08.174651699Z     Status code    : Error
+2026-10-09T00:05:08.174656657Z     Status message : mcp: Unknown tool: read_status
+2026-10-09T00:05:08.174657824Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174658616Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174659449Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174660324Z Attributes:
+2026-10-09T00:05:08.174661116Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174661908Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174662658Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174663408Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174664158Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174664866Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174665616Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174666366Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174667908Z      -> http.response.status_code: Int(400)
+2026-10-09T00:05:08.174668699Z      -> trace.id: Str(7d3b11f0794d447590fbde234eed5264)
+2026-10-09T00:05:08.174669408Z      -> span.id: Str(47bdf927634e9f16)
+2026-10-09T00:05:08.174670241Z      -> jwt.sub: Str(other-agent)
+2026-10-09T00:05:08.174670991Z      -> protocol: Str(mcp)
+2026-10-09T00:05:08.174671741Z      -> mcp.method.name: Str(tools/call)
+2026-10-09T00:05:08.174672491Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174673241Z      -> mcp.resource.type: Str(tool)
+2026-10-09T00:05:08.174673949Z      -> gen_ai.tool.name: Str(read_status)
+2026-10-09T00:05:08.174678158Z      -> mcp.session.id: Str(eyJ0IjoibWNwIiwicyI6W3sidCI6ImZpeHR1cmUifV0sInIiOiI2NGQwNTU4Mi01MzM1LTQ3ZmYtODMwOS0xYjNiMDZkYjg4Y2EifQ)
+2026-10-09T00:05:08.174680491Z      -> reason: Str(MCP)
+2026-10-09T00:05:08.174681283Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174681991Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174682699Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174683449Z      -> zetra.release.id: Str()
+2026-10-09T00:05:08.174684158Z      -> zetra.run.id: Str()
+2026-10-09T00:05:08.174684908Z      -> zetra.operation.id: Str()
+2026-10-09T00:05:08.174685658Z      -> error.type: Str(MCP)
+2026-10-09T00:05:08.174686491Z Span #15
+2026-10-09T00:05:08.174687283Z     Trace ID       : b9e30238cba847e057397058030ba047
+2026-10-09T00:05:08.174688033Z     Parent ID      : 
+2026-10-09T00:05:08.174688824Z     ID             : 506eb435a1dae07f
+2026-10-09T00:05:08.174689574Z     Name           : initialize
+2026-10-09T00:05:08.174690408Z     Kind           : Server
+2026-10-09T00:05:08.174691116Z     Start time     : 2026-10-09 00:05:03.398985 +0000 UTC
+2026-10-09T00:05:08.174691908Z     End time       : 2026-10-09 00:05:03.399579 +0000 UTC
+2026-10-09T00:05:08.174692616Z     Status code    : Unset
+2026-10-09T00:05:08.174693324Z     Status message : 
+2026-10-09T00:05:08.174694074Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174695033Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174695741Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174696574Z Attributes:
+2026-10-09T00:05:08.174697408Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174698116Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174699158Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174699866Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174700616Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174701324Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174702033Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174702783Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174703491Z      -> http.response.status_code: Int(200)
+2026-10-09T00:05:08.174704241Z      -> trace.id: Str(b9e30238cba847e057397058030ba047)
+2026-10-09T00:05:08.174704949Z      -> span.id: Str(506eb435a1dae07f)
+2026-10-09T00:05:08.174705616Z      -> jwt.sub: Str(knowledge-assistant)
+2026-10-09T00:05:08.174706366Z      -> protocol: Str(mcp)
+2026-10-09T00:05:08.174707074Z      -> mcp.method.name: Str(initialize)
+2026-10-09T00:05:08.174707824Z      -> mcp.session.id: Str(9005f14f-0e23-44fd-9493-0a94205dcadb)
+2026-10-09T00:05:08.174708533Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174709283Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174709991Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174710699Z      -> zetra.release.id: Str(zetra-local-gateway-1)
+2026-10-09T00:05:08.174711449Z      -> zetra.run.id: Str(83f84935-e43c-4049-b92c-0efed02facc3)
+2026-10-09T00:05:08.174716699Z      -> zetra.operation.id: Str(83f84935-e43c-4049-b92c-0efed02facc3:status-1)
+2026-10-09T00:05:08.174720324Z Span #16
+2026-10-09T00:05:08.174722866Z     Trace ID       : b9e30238cba847e057397058030ba047
+2026-10-09T00:05:08.174723699Z     Parent ID      : 506eb435a1dae07f
+2026-10-09T00:05:08.174724449Z     ID             : eeb232e8cb4eee15
+2026-10-09T00:05:08.174725158Z     Name           : initialize fixture
+2026-10-09T00:05:08.174725908Z     Kind           : Client
+2026-10-09T00:05:08.174726616Z     Start time     : 2026-10-09 00:05:03.399172 +0000 UTC
+2026-10-09T00:05:08.174727324Z     End time       : 2026-10-09 00:05:03.399537 +0000 UTC
+2026-10-09T00:05:08.174728033Z     Status code    : Unset
+2026-10-09T00:05:08.174728783Z     Status message : 
+2026-10-09T00:05:08.174729533Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174730241Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174730949Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174731658Z Attributes:
+2026-10-09T00:05:08.174732408Z      -> agentgateway.outbound.kind: Str(Primary)
+2026-10-09T00:05:08.174733158Z      -> agentgateway.outbound.subtype: Str(Mcp)
+2026-10-09T00:05:08.174733866Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174734616Z      -> mcp.method.name: Str(initialize)
+2026-10-09T00:05:08.174735324Z Span #17
+2026-10-09T00:05:08.174736074Z     Trace ID       : c76d0a0171a4889f8400f7dd281cef1f
+2026-10-09T00:05:08.174736824Z     Parent ID      : 
+2026-10-09T00:05:08.174737533Z     ID             : c3f36b70ef5b490d
+2026-10-09T00:05:08.174738241Z     Name           : notifications/initialized
+2026-10-09T00:05:08.174738949Z     Kind           : Server
+2026-10-09T00:05:08.174739699Z     Start time     : 2026-10-09 00:05:03.399907 +0000 UTC
+2026-10-09T00:05:08.174740449Z     End time       : 2026-10-09 00:05:03.400332 +0000 UTC
+2026-10-09T00:05:08.174741158Z     Status code    : Unset
+2026-10-09T00:05:08.174741866Z     Status message : 
+2026-10-09T00:05:08.174742616Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174743324Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174744033Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174744741Z Attributes:
+2026-10-09T00:05:08.174745491Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174746199Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174746908Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174747616Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174748366Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174749033Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174749741Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174750491Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174751199Z      -> http.response.status_code: Int(202)
+2026-10-09T00:05:08.174751908Z      -> trace.id: Str(c76d0a0171a4889f8400f7dd281cef1f)
+2026-10-09T00:05:08.174752699Z      -> span.id: Str(c3f36b70ef5b490d)
+2026-10-09T00:05:08.174753824Z      -> jwt.sub: Str(knowledge-assistant)
+2026-10-09T00:05:08.174754616Z      -> protocol: Str(mcp)
+2026-10-09T00:05:08.174761324Z      -> mcp.method.name: Str(notifications/initialized)
+2026-10-09T00:05:08.174762408Z      -> mcp.session.id: Str(eyJ0IjoibWNwIiwicyI6W3sidCI6ImZpeHR1cmUifV0sInIiOiI5YWFlYjZkNC0zMDZmLTRhNDUtYWY2OC1lOGM1MDM5ZjMyZWMifQ)
+2026-10-09T00:05:08.174763199Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174763991Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174764741Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174765574Z      -> zetra.release.id: Str(zetra-local-gateway-1)
+2026-10-09T00:05:08.174767491Z      -> zetra.run.id: Str(83f84935-e43c-4049-b92c-0efed02facc3)
+2026-10-09T00:05:08.174768366Z      -> zetra.operation.id: Str(83f84935-e43c-4049-b92c-0efed02facc3:status-1)
+2026-10-09T00:05:08.174769116Z Span #18
+2026-10-09T00:05:08.174769908Z     Trace ID       : c76d0a0171a4889f8400f7dd281cef1f
+2026-10-09T00:05:08.174770658Z     Parent ID      : c3f36b70ef5b490d
+2026-10-09T00:05:08.174771408Z     ID             : edad0cc975ac029a
+2026-10-09T00:05:08.174772283Z     Name           : notifications/initialized fixture
+2026-10-09T00:05:08.174773074Z     Kind           : Client
+2026-10-09T00:05:08.174773824Z     Start time     : 2026-10-09 00:05:03.400012 +0000 UTC
+2026-10-09T00:05:08.174774574Z     End time       : 2026-10-09 00:05:03.40032 +0000 UTC
+2026-10-09T00:05:08.174775324Z     Status code    : Unset
+2026-10-09T00:05:08.174776074Z     Status message : 
+2026-10-09T00:05:08.174776824Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174777658Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174778449Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174779366Z Attributes:
+2026-10-09T00:05:08.174780283Z      -> agentgateway.outbound.kind: Str(Primary)
+2026-10-09T00:05:08.174781033Z      -> agentgateway.outbound.subtype: Str(Mcp)
+2026-10-09T00:05:08.174781783Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174782533Z      -> mcp.method.name: Str(notifications/initialized)
+2026-10-09T00:05:08.174783283Z Span #19
+2026-10-09T00:05:08.174783991Z     Trace ID       : fbccc9f39a5c26dd6c7c9b9c01996a0d
+2026-10-09T00:05:08.174784741Z     Parent ID      : 
+2026-10-09T00:05:08.174785574Z     ID             : 7ddbbc0796af8e36
+2026-10-09T00:05:08.174786324Z     Name           : tools/call
+2026-10-09T00:05:08.174787116Z     Kind           : Server
+2026-10-09T00:05:08.174787866Z     Start time     : 2026-10-09 00:05:03.400604 +0000 UTC
+2026-10-09T00:05:08.174788699Z     End time       : 2026-10-09 00:05:03.400956 +0000 UTC
+2026-10-09T00:05:08.174789408Z     Status code    : Unset
+2026-10-09T00:05:08.174790116Z     Status message : 
+2026-10-09T00:05:08.174790949Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174791658Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174792449Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174793199Z Attributes:
+2026-10-09T00:05:08.174793949Z      -> gateway: Str(default/default)
+2026-10-09T00:05:08.174794658Z      -> listener: Str(mcp)
+2026-10-09T00:05:08.174795366Z      -> route: Str(internal/default)
+2026-10-09T00:05:08.174796074Z      -> client.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174805408Z      -> http.request.method: Str(POST)
+2026-10-09T00:05:08.174806699Z      -> server.address: Str(127.0.0.1)
+2026-10-09T00:05:08.174807491Z      -> url.path: Str(/mcp)
+2026-10-09T00:05:08.174808366Z      -> network.protocol.version: Str(1.1)
+2026-10-09T00:05:08.174809199Z      -> http.response.status_code: Int(200)
+2026-10-09T00:05:08.174809908Z      -> trace.id: Str(fbccc9f39a5c26dd6c7c9b9c01996a0d)
+2026-10-09T00:05:08.174810616Z      -> span.id: Str(7ddbbc0796af8e36)
+2026-10-09T00:05:08.174811324Z      -> jwt.sub: Str(knowledge-assistant)
+2026-10-09T00:05:08.174812074Z      -> protocol: Str(mcp)
+2026-10-09T00:05:08.174812783Z      -> mcp.method.name: Str(tools/call)
+2026-10-09T00:05:08.174813491Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174814241Z      -> mcp.resource.type: Str(tool)
+2026-10-09T00:05:08.174814950Z      -> gen_ai.tool.name: Str(read_status)
+2026-10-09T00:05:08.174815700Z      -> mcp.session.id: Str(eyJ0IjoibWNwIiwicyI6W3sidCI6ImZpeHR1cmUifV0sInIiOiI5YWFlYjZkNC0zMDZmLTRhNDUtYWY2OC1lOGM1MDM5ZjMyZWMifQ)
+2026-10-09T00:05:08.174817283Z      -> duration: Str(0ms)
+2026-10-09T00:05:08.174818075Z      -> url.scheme: Str(http)
+2026-10-09T00:05:08.174818783Z      -> server.port: Int(18300)
+2026-10-09T00:05:08.174819575Z      -> zetra.release.id: Str(zetra-local-gateway-1)
+2026-10-09T00:05:08.174820325Z      -> zetra.run.id: Str(83f84935-e43c-4049-b92c-0efed02facc3)
+2026-10-09T00:05:08.174821075Z      -> zetra.operation.id: Str(83f84935-e43c-4049-b92c-0efed02facc3:status-1)
+2026-10-09T00:05:08.174821783Z Span #20
+2026-10-09T00:05:08.174822533Z     Trace ID       : fbccc9f39a5c26dd6c7c9b9c01996a0d
+2026-10-09T00:05:08.174823241Z     Parent ID      : 7ddbbc0796af8e36
+2026-10-09T00:05:08.174823991Z     ID             : 6228b6cae0da0d27
+2026-10-09T00:05:08.174824700Z     Name           : tools/call fixture_read_status
+2026-10-09T00:05:08.174825450Z     Kind           : Client
+2026-10-09T00:05:08.174826200Z     Start time     : 2026-10-09 00:05:03.400681 +0000 UTC
+2026-10-09T00:05:08.174826908Z     End time       : 2026-10-09 00:05:03.400934 +0000 UTC
+2026-10-09T00:05:08.174827616Z     Status code    : Unset
+2026-10-09T00:05:08.174828366Z     Status message : 
+2026-10-09T00:05:08.174829075Z     DroppedAttributesCount: 0
+2026-10-09T00:05:08.174829825Z     DroppedEventsCount: 0
+2026-10-09T00:05:08.174830575Z     DroppedLinksCount: 0
+2026-10-09T00:05:08.174831283Z Attributes:
+2026-10-09T00:05:08.174832033Z      -> agentgateway.outbound.kind: Str(Primary)
+2026-10-09T00:05:08.174832783Z      -> agentgateway.outbound.subtype: Str(Mcp)
+2026-10-09T00:05:08.174833491Z      -> mcp.target: Str(fixture)
+2026-10-09T00:05:08.174834241Z      -> mcp.method.name: Str(tools/call)
+2026-10-09T00:05:08.174834950Z      -> gen_ai.tool.name: Str(read_status)
+2026-10-09T00:05:08.174838366Z 	{"resource": {"service.instance.id": "e8841728-f4b1-4e2a-ab44-bb87b80cec29", "service.name": "otelcol", "service.version": "0.162.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces"}

@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zetra-network-test
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client
+  namespace: zetra-network-test
+  labels: {zetra.dev/agent: network-fixture}
+spec:
+  terminationGracePeriodSeconds: 1
+  automountServiceAccountToken: false
+  containers:
+    - name: agent
+      image: docker.io/library/alpine@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
+      command: ["sleep", "7200"]
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: approved-server
+  namespace: zetra-network-test
+  labels: {zetra.dev/target: approved}
+spec:
+  terminationGracePeriodSeconds: 1
+  automountServiceAccountToken: false
+  containers:
+    - name: server
+      readinessProbe:
+        httpGet: {path: /, port: 8080}
+        periodSeconds: 1
+      image: docker.io/library/python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
+      command: ["/bin/sh", "-c", "mkdir /tmp/www; printf 'approved-fixture' > /tmp/www/index.html; python -m http.server 8080 --directory /tmp/www --bind 0.0.0.0"]
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: forbidden-server
+  namespace: zetra-network-test
+  labels: {zetra.dev/target: forbidden}
+spec:
+  terminationGracePeriodSeconds: 1
+  automountServiceAccountToken: false
+  containers:
+    - name: server
+      readinessProbe:
+        httpGet: {path: /, port: 8080}
+        periodSeconds: 1
+      image: docker.io/library/python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
+      command: ["/bin/sh", "-c", "mkdir /tmp/www; printf 'forbidden-fixture' > /tmp/www/index.html; python -m http.server 8080 --directory /tmp/www --bind 0.0.0.0"]
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 64Mi}

@@ -1,0 +1,11 @@
+{
+  "scenarios": {
+    "schema.contract": "test_cases.ActionTests.test_schema",
+    "input.untrusted": "test_cases.ActionTests.test_untrusted_input",
+    "capability.denied": "test_cases.ActionTests.test_capability_denied",
+    "budget.enforced": "test_cases.ActionTests.test_budget",
+    "stop.enforced": "test_cases.ActionTests.test_stop",
+    "approval.bound": "test_cases.ActionTests.test_approval_binding",
+    "idempotency.retry": "test_cases.ActionTests.test_idempotent_retry"
+  }
+}

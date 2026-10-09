@@ -1,0 +1,10 @@
+{
+  "scenarios": {
+    "schema.contract": "test_cases.GatewayReadTests.test_schema",
+    "input.untrusted": "test_cases.GatewayReadTests.test_untrusted_input",
+    "capability.denied": "test_cases.GatewayReadTests.test_capability_denied",
+    "budget.enforced": "test_cases.GatewayReadTests.test_budget",
+    "stop.enforced": "test_cases.GatewayReadTests.test_stop",
+    "gateway.authorization": "test_cases.GatewayReadTests.test_gateway_authorization_contract"
+  }
+}

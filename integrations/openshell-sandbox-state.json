@@ -1,0 +1,94 @@
+{
+  "annotations": {
+    "internal.openshell.ai/auth-epoch": "1",
+    "internal.openshell.ai/compute-driver": "kubernetes",
+    "internal.openshell.ai/compute-runtime-identity": "kubernetes://zetra-openshell/81744e04-e5de-4cb4-88b6-3ec1983e5bcc/66b0a6e3-5ade-4c1e-90b3-e21a8da36502",
+    "internal.openshell.ai/gateway-token-id": "7caa5536-8c56-4f56-95df-68fab463a55b",
+    "internal.openshell.ai/runtime-generation": "f650dbfc-264c-47dc-b13a-9f74f35e1cf5"
+  },
+  "conditions": [
+    {
+      "last_transition_time": "2026-10-09T00:08:25Z",
+      "message": "Sandbox is not suspended",
+      "reason": "NotSuspended",
+      "status": "False",
+      "type": "Suspended"
+    },
+    {
+      "last_transition_time": "",
+      "message": "Supervisor session connected",
+      "reason": "DependenciesReady",
+      "status": "True",
+      "type": "Ready"
+    },
+    {
+      "last_transition_time": "2026-10-09T00:08:29Z",
+      "message": "",
+      "reason": "PodScheduled",
+      "status": "True",
+      "type": "PodScheduled"
+    },
+    {
+      "last_transition_time": "",
+      "message": "",
+      "reason": "ConfigurationAccepted",
+      "status": "True",
+      "type": "ConfigurationReady"
+    }
+  ],
+  "configuration_admission": {
+    "config_revision": 4787852757384789215,
+    "error": "",
+    "policy_hash": "4f1991b4e4a21fb8a047e7af2da5577841b1994598c8fdcdc635e0eb9776b965",
+    "policy_version": 1,
+    "provider_env_revision": 3176606324465211593,
+    "state": "accepted"
+  },
+  "created_at": "2026-10-09 00:08:25",
+  "created_from_workload_template": null,
+  "current_policy_version": 1,
+  "endpoint_statuses": [],
+  "exit_code": null,
+  "id": "8b22800d-7df9-419e-9a46-3de99ba85ad1",
+  "labels": {},
+  "name": "zetra-strict",
+  "phase": "Ready",
+  "policy": {
+    "filesystem_policy": {
+      "include_workdir": true,
+      "read_only": [
+        "/bin",
+        "/usr",
+        "/lib",
+        "/proc",
+        "/dev/urandom",
+        "/etc",
+        "/var/log"
+      ],
+      "read_write": [
+        "/sandbox",
+        "/tmp",
+        "/dev/null"
+      ]
+    },
+    "landlock": {
+      "compatibility": "hard_requirement"
+    },
+    "version": 1
+  },
+  "policy_source": "sandbox",
+  "provisioning": {
+    "attempt_id": "6c17383d-39d7-4816-ae03-02b62edd46b9",
+    "cleanup_completed_time": null,
+    "cleanup_error": "",
+    "cleanup_retry_time": null,
+    "configuration_change_id": "49ce5c898896275d43d2f09b3d4dc223d543a235dfb3ec0758a195b0e1e9c81e",
+    "configuration_change_time": "2026-10-09T00:08:25.354Z",
+    "deadline": null,
+    "first_rejection_time": null,
+    "timeout_time": null
+  },
+  "resource_version": 22,
+  "revision": 1,
+  "workspace": "default"
+}

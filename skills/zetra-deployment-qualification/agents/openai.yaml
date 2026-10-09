@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zetra Deployment Qualification"
+  short_description: "Verify deployment boundaries with real negative tests"
+  default_prompt: "Use $zetra-deployment-qualification to qualify this release on the authorized validation environment."

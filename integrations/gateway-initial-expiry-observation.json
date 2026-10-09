@@ -1,0 +1,184 @@
+{
+  "createdAt": "2026-10-08T23:59:31.333972+00:00",
+  "scope": "macOS-loopback-live-proxy-with-deterministic-MCP-backend",
+  "agentgatewayVersion": "1.6.0",
+  "binarySha256": "6cebe8bd57262edce23a65a376d2f5a27b97cdfef609740642edbe75e1e9c685",
+  "checks": [
+    {
+      "name": "missing-token",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 401,
+        "response": {
+          "raw": "authentication failure: no bearer token found"
+        }
+      }
+    },
+    {
+      "name": "wrong-issuer",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 401,
+        "response": {
+          "raw": "authentication failure: the token is invalid or malformed: Error(InvalidIssuer)"
+        }
+      }
+    },
+    {
+      "name": "wrong-audience",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 401,
+        "response": {
+          "raw": "authentication failure: the token is invalid or malformed: Error(InvalidAudience)"
+        }
+      }
+    },
+    {
+      "name": "expired-token",
+      "status": "failed",
+      "detail": {
+        "httpStatus": 200,
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+              "tools": {}
+            },
+            "serverInfo": {
+              "name": "zetra-deterministic-receiver",
+              "version": "0.1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "forged-signature",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 401,
+        "response": {
+          "raw": "authentication failure: the token is invalid or malformed: Error(InvalidSignature)"
+        }
+      }
+    },
+    {
+      "name": "valid-initialize",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 200,
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+              "tools": {}
+            },
+            "serverInfo": {
+              "name": "zetra-deterministic-receiver",
+              "version": "0.1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "tool-list-filtered",
+      "status": "passed",
+      "detail": {
+        "names": [
+          "read_status"
+        ]
+      }
+    },
+    {
+      "name": "allowed-read",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 200,
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 3,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "status: healthy"
+              }
+            ],
+            "isError": false
+          }
+        }
+      }
+    },
+    {
+      "name": "denied-write-not-forwarded",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 400,
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 4,
+          "error": {
+            "code": -32602,
+            "message": "Unknown tool: write_status"
+          }
+        },
+        "writes": 0
+      }
+    },
+    {
+      "name": "wrong-subject-denied",
+      "status": "passed",
+      "detail": {
+        "httpStatus": 400,
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "error": {
+            "code": -32602,
+            "message": "Unknown tool: read_status"
+          }
+        }
+      }
+    }
+  ],
+  "receiverCalls": [
+    {
+      "method": "initialize",
+      "tool": null
+    },
+    {
+      "method": "initialize",
+      "tool": null
+    },
+    {
+      "method": "tools/list",
+      "tool": null
+    },
+    {
+      "method": "tools/call",
+      "tool": "read_status"
+    },
+    {
+      "method": "initialize",
+      "tool": null
+    }
+  ],
+  "receiverWrites": 0,
+  "collectorEndpoint": null,
+  "status": "failed",
+  "notQualified": [
+    "production identity issuance",
+    "TLS transport",
+    "network/sandbox bypass prevention",
+    "production revocation and resource/tenant authorization",
+    "Kubernetes controller CRDs",
+    "paid model quality or billing",
+    "collector export requires separate log assertion"
+  ]
+}

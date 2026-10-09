@@ -1,0 +1,41 @@
+{
+  "status": "passed",
+  "scope": "real-Temporal-test-server-reference-agent-real-gateway-MCP",
+  "result": {
+    "status": {
+      "content": [
+        {
+          "text": "status: healthy",
+          "type": "text"
+        }
+      ],
+      "isError": false
+    }
+  },
+  "activityAttempts": [
+    1,
+    2
+  ],
+  "gatewayAudit": [
+    {
+      "event": "gateway.tool_call",
+      "tool": "read_status",
+      "releaseId": "zetra-local-gateway-1",
+      "runId": "83f84935-e43c-4049-b92c-0efed02facc3",
+      "operationId": "83f84935-e43c-4049-b92c-0efed02facc3:status-1",
+      "outcome": "allowed"
+    }
+  ],
+  "checks": [
+    "Reference agent returned actual MCP result",
+    "Read-only activity retried once",
+    "Run ID propagated into gateway adapter audit",
+    "Recorded history replayed"
+  ],
+  "notQualified": [
+    "Kubernetes Temporal service",
+    "production TLS/identity",
+    "write exactly-once effects"
+  ],
+  "temporalTestServerSha256": "3a9cd757fc118c0cf134c6fa16d5cf901a02985d02782a11029f7c2833e95cb6"
+}

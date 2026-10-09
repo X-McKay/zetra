@@ -1,0 +1,98 @@
+{
+  "apiVersion": "zetra.dev/live-boundary-report-v1alpha1",
+  "checkedAt": "2026-10-09T00:10:46.930113+00:00",
+  "status": "failed",
+  "context": "kind-zetra-validation",
+  "nodes": [
+    {
+      "name": "zetra-validation-control-plane",
+      "kernel": "7.1.10-200.fc44.aarch64",
+      "runtime": "containerd://2.3.4",
+      "architecture": "arm64"
+    }
+  ],
+  "versions": {
+    "tetragon": "1.7.1",
+    "cilium": "1.20.2"
+  },
+  "checks": [
+    {
+      "id": "ebpf-policy-loaded",
+      "status": "passed",
+      "loadedPolicyList": "ID   NAME                       STATE     FILTERID   NAMESPACE          SENSORS          KERNELMEMORY   MODE      NPOST   NENFORCE   NMONITOR\n2    zetra-fixture-file-guard   enabled   2          zetra-validation   generic_kprobe   675.54 kB      enforce   4       4          0"
+    },
+    {
+      "id": "ebpf-unrelated-read-allowed",
+      "status": "passed",
+      "exitCode": 0
+    },
+    {
+      "id": "ebpf-unselected-pod-unaffected",
+      "status": "passed",
+      "exitCode": 0
+    },
+    {
+      "id": "ebpf-selected-sensitive-read-killed",
+      "status": "passed",
+      "exitCode": 137,
+      "outputBytes": 0
+    },
+    {
+      "id": "ebpf-event-identity-action-correlated",
+      "status": "passed",
+      "events": [
+        {
+          "kind": "process_kprobe",
+          "podUid": "8ccfcb11-cf6a-4f18-9aa7-e9ee21f46b65",
+          "image": "docker.io/library/alpine@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412",
+          "binary": "/bin/cat",
+          "path": "/tmp/zetra-sensitive",
+          "action": "KPROBE_ACTION_SIGKILL",
+          "policy": "zetra-fixture-file-guard"
+        },
+        {
+          "kind": "process_kprobe",
+          "podUid": "8ccfcb11-cf6a-4f18-9aa7-e9ee21f46b65",
+          "image": "docker.io/library/alpine@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412",
+          "binary": "/bin/cat",
+          "path": "/tmp/zetra-sensitive",
+          "action": "KPROBE_ACTION_SIGKILL",
+          "policy": "zetra-fixture-file-guard"
+        }
+      ]
+    },
+    {
+      "id": "network-baseline-target-reachable",
+      "status": "failed",
+      "exitCode": 1
+    },
+    {
+      "id": "network-approved-peer-allowed",
+      "status": "passed",
+      "exitCode": 0
+    },
+    {
+      "id": "network-forbidden-direct-peer-denied",
+      "status": "passed",
+      "exitCode": 1,
+      "outputBytes": 0
+    }
+  ],
+  "fixtureHashes": {
+    "tetragon-fixture.yaml": "684769129ce6c2fc950eb51f98269b9bf1daa400649d5179205bba65080c23d7",
+    "tetragon-policy.yaml": "7c0f9f0cf087d049ab180ff9c04dd0f7d0c20a9484a88277ddb6c3064a14c070",
+    "network-fixture.yaml": "8c19f263bcb8da066ed7a411c86514333fe75f00e9d7d8a407ab833af58853ab",
+    "network-policy.yaml": "f36691b8d0873e1542b804a8685a0f9efa50454a5a29ef55a17c76d855434ebd"
+  },
+  "openControls": [
+    "eBPF policy readiness before first workload instruction",
+    "IPv6/DNS/external-provider bypass",
+    "node-agent/CNI outage behavior",
+    "event-loss and kernel compatibility across production nodes"
+  ],
+  "limitations": [
+    "Selected synthetic fixture only; no blanket kernel sandbox guarantee.",
+    "Sigkill response verified for security_file_permission on recorded kernel.",
+    "Normalized records are unsigned observation; denied access cannot authorize a capability."
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "checkedAt": "2026-10-09T00:27:59.152726+00:00",
+  "status": "passed",
+  "scope": "Actual OCI worker in disposable Kubernetes pod with loopback Temporal development server",
+  "context": "kind-zetra-validation",
+  "kubernetesNamespace": "zetra-worker-qualification",
+  "pod": "zetra-worker-temporal",
+  "workerImage": "localhost/zetra-worker@sha256:b8dc0f5920797713eb87c1f2450fc18d2d5db5ba7cbd85d4e72f33d2f4ca4462",
+  "temporal": {
+    "cli": "1.9.1",
+    "server": "1.32.0",
+    "namespace": "zetra-worker-lab",
+    "connection": "Pod-local loopback plaintext; host client uses loopback-only port-forward"
+  },
+  "workflow": {
+    "id": "zetra-oci-kubernetes-7b10a4d8-d1c9-4983-b7f6-d3b8df500a46",
+    "taskQueue": "zetra-image-qualification",
+    "result": {
+      "answer": "Zetra means ZEro-TRust Agents.",
+      "source": "approved-knowledge-fixture"
+    },
+    "events": 11,
+    "historySHA256": "f17eefc9149e0ce41e11d1876e211614e9366514ffc88e7d562c16e775e33828",
+    "replay": "passed using temporalio 1.34.0 Replayer and actual recorded history",
+    "historyArtifact": "integrations/evidence/worker-temporal-kubernetes-history.json"
+  },
+  "podSecurityContext": {
+    "fsGroup": 10001,
+    "runAsGroup": 10001,
+    "runAsNonRoot": true,
+    "runAsUser": 10001,
+    "seccompProfile": {
+      "type": "RuntimeDefault"
+    }
+  },
+  "workerSecurityContext": {
+    "allowPrivilegeEscalation": false,
+    "capabilities": {
+      "drop": [
+        "ALL"
+      ]
+    },
+    "readOnlyRootFilesystem": true
+  },
+  "automountServiceAccountToken": false,
+  "containerStatuses": [
+    {
+      "allocatedResources": {
+        "cpu": "100m",
+        "memory": "256Mi"
+      },
+      "containerID": "containerd://46d32f46359a07f2e4872f062337b6afb7d2f1240061a4e3e59106613d3147a9",
+      "image": "sha256:0b0fe9806c4426a737c2cce630339919b3fdd27d9a3799da6e0df29daabf2a9e",
+      "imageID": "docker.io/temporalio/temporal@sha256:a64c02bf5cf894202e32267927e37e6141f182bb6d1a669a3bb85b83f09915d3",
+      "lastState": {},
+      "name": "temporal-dev",
+      "ready": true,
+      "resources": {
+        "limits": {
+          "cpu": "1",
+          "memory": "768Mi"
+        },
+        "requests": {
+          "cpu": "100m",
+          "memory": "256Mi"
+        }
+      },
+      "restartCount": 0,
+      "started": true,
+      "state": {
+        "running": {
+          "startedAt": "2026-10-09T00:25:39Z"
+        }
+      },
+      "user": {
+        "linux": {
+          "gid": 10001,
+          "supplementalGroups": [
+            10001
+          ],
+          "uid": 10001
+        }
+      },
+      "volumeMounts": [
+        {
+          "mountPath": "/tmp",
+          "name": "temporal-state"
+        }
+      ]
+    },
+    {
+      "allocatedResources": {
+        "cpu": "100m",
+        "memory": "128Mi"
+      },
+      "containerID": "containerd://3a633c6b8be839cc092d75f0e05e8b41a994f1fea8d8e7839d8cdf60523064f5",
+      "image": "localhost/zetra-worker:0.1-lab",
+      "imageID": "docker.io/library/import-2026-10-09@sha256:b8dc0f5920797713eb87c1f2450fc18d2d5db5ba7cbd85d4e72f33d2f4ca4462",
+      "lastState": {},
+      "name": "worker",
+      "ready": true,
+      "resources": {
+        "limits": {
+          "cpu": "1",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "cpu": "100m",
+          "memory": "128Mi"
+        }
+      },
+      "restartCount": 0,
+      "started": true,
+      "state": {
+        "running": {
+          "startedAt": "2026-10-09T00:25:40Z"
+        }
+      },
+      "user": {
+        "linux": {
+          "gid": 10001,
+          "supplementalGroups": [
+            10001
+          ],
+          "uid": 10001
+        }
+      }
+    }
+  ],
+  "imageCorrelation": {
+    "capturedBeforeCleanup": true,
+    "liveContainerID": "3a633c6b8be839cc092d75f0e05e8b41a994f1fea8d8e7839d8cdf60523064f5",
+    "liveContainerdImageReference": "localhost/zetra-worker:0.1-lab",
+    "liveContainerdAliasTargetDigest": "sha256:f2245a1a696d0ebec49cc3cb0fb145b6b5bd9953000bc0a3e48d0f305f2fd240",
+    "liveCRIImageReference": "docker.io/library/import-2026-10-09@sha256:b8dc0f5920797713eb87c1f2450fc18d2d5db5ba7cbd85d4e72f33d2f4ca4462",
+    "liveCRIConfigImageID": "sha256:4052966b888a888880def2837c3a69ce1e8798eab44484108d4a75ac4ecc1787",
+    "indexDigest": "sha256:b8dc0f5920797713eb87c1f2450fc18d2d5db5ba7cbd85d4e72f33d2f4ca4462",
+    "platformManifestDigest": "sha256:f2245a1a696d0ebec49cc3cb0fb145b6b5bd9953000bc0a3e48d0f305f2fd240",
+    "configImageID": "sha256:4052966b888a888880def2837c3a69ce1e8798eab44484108d4a75ac4ecc1787",
+    "indexContentHashVerified": true,
+    "manifestContentHashVerified": true,
+    "liveConfigMatchesFinalBuild": true,
+    "reasonForDifferentDigestForms": "CRI deduplicates image config IDs and preserves its preferred tag/import name in live container metadata. The live CRI imageRef digest equals the retained OCI index; its descriptor selects the ARM64 manifest, which references the final config. The containerd alias target and each content hash were checked independently."
+  },
+  "limitations": [
+    "Single pod development server with ephemeral SQLite; not production HA, persistence or mTLS qualification",
+    "Controlled public-data knowledge fixture; no live model or external tool execution",
+    "NetworkPolicy is configured; this workflow does not independently negative-test network enforcement",
+    "This separate fixture does not change the native renderer's withheld replica count or production authorization",
+    "History replay covers this execution, not all production histories or cross-version migrations"
+  ],
+  "cleanup": {
+    "portForward": "terminated",
+    "namespace": "deleted after live image correlation and workflow evidence collection"
+  },
+  "startupAdjustments": [
+    "Temporal CLI1.9.1 Go resource detector requires USER=zetra under numeric UID10001 without passwd entry; applied only to disposable dev sidecar",
+    "Concurrent worker/dev-server startup may cause a transient worker restart; actual counts are recorded"
+  ]
+}

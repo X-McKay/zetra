@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "zetra.dev/local-platform-bootstrap-v1alpha1",
+  "status": "passed",
+  "createdAt": "2026-10-09T00:22:18.908779+00:00",
+  "context": "kind-zetra-validation",
+  "node": "zetra-validation-control-plane",
+  "scope": "disposable-local-platform-bootstrap-readiness",
+  "fixtureOnly": true,
+  "scriptSha256": "54e98936d4f50d13aba4c8d0e774ed9f8dd2163f3e62cb943e09a9511e15341b",
+  "releaseActions": {
+    "cilium": "skipped",
+    "tetragon": "skipped",
+    "agent-sandbox": "skipped",
+    "openshell": "skipped"
+  },
+  "versions": {
+    "cilium": "1.20.2",
+    "tetragon": "1.7.1",
+    "agentSandbox": "1.0.6",
+    "openshell": "0.1.2"
+  },
+  "artifactHashes": {
+    "cilium-1.20.2.tgz": "b2afd87b7f75f875f92a14559f14f59b7babbb479d968e3fd625a20bf30ec20e",
+    "tetragon-1.7.1.tgz": "79ec0f7d35b6fcad99ca317348deac136c00b674430c28be17aa818d2015c632",
+    "openshell-aarch64-apple-darwin.tar.gz": "cdde7e92bd7eac664031cf171cfe80d29e7f122a6674917b25a4ce0bcbc33466",
+    "agent-sandbox-1.0.6.yaml": "b995db5839f2bdca3a24b8bbefdec405df662d6dd223eec8f5dc74098c974231",
+    "helm-chart-0.1.2.tgz": "b9250541d47c5ce4cfcfeb6a652ddcbd1f444a33e151ff43b16daec5d013ff04"
+  },
+  "cliSha256": "789093ba9278271f2617642cadfabe58d3c08f9f8a5a11c29dcbd4ab60d6611f",
+  "checks": [
+    "explicit-loopback-local-target",
+    "artifact-checksums",
+    "pinned-release-and-required-values",
+    "cilium-ready",
+    "tetragon-ready-and-crds-established",
+    "agent-sandbox-ready-and-crd-established",
+    "openshell-ready-and-preflight-enabled"
+  ],
+  "localAccommodations": {
+    "allowUnauthenticatedUsers": true,
+    "enableUserNamespaces": false,
+    "appArmorProfile": "Unconfined",
+    "enableMtls": true,
+    "telemetryEnabled": false
+  },
+  "limitations": [
+    "Readiness is not boundary-enforcement qualification",
+    "No production principal authentication or AppArmor/user namespace qualification",
+    "Fresh installation into a second empty cluster has not been tested"
+  ]
+}

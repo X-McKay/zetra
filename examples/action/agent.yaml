@@ -1,0 +1,16 @@
+apiVersion: zetra.dev/v1alpha1
+kind: Agent
+metadata:
+  name: approved-ticket
+  owner: service-team@example.invalid
+  businessFunction: service-operations
+spec:
+  entrypoint: action.factory:create_agent
+  capabilities: [ticket.write]
+  dataClassification: internal
+  autonomy: supervised
+  execution: local
+  budgets:
+    maxSteps: 3
+    maxSeconds: 30
+    maxCostUsd: 0.05

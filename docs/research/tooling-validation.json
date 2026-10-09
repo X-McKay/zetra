@@ -1,0 +1,177 @@
+{
+  "checkedAt": "2026-10-09T00:11:15.738926+00:00",
+  "status": "passed",
+  "scope": "Local contributor tooling on Apple Silicon macOS; not production qualification or a GitHub workflow execution",
+  "host": {
+    "os": "Darwin",
+    "architecture": "arm64"
+  },
+  "pythonResolution": {
+    "lockfile": "uv.lock",
+    "packagesResolved": 11,
+    "ruff": "0.16.10",
+    "ty": "0.0.85",
+    "prek": "0.5.5",
+    "PyYAML": "6.0.3",
+    "temporalio": "1.34.0"
+  },
+  "nix": {
+    "nixpkgsRevision": "39ad350a0602fa0a58a544344e3e9187526ea45c",
+    "declaredSystems": [
+      "aarch64-darwin",
+      "aarch64-linux",
+      "x86_64-linux"
+    ],
+    "allSystemsEvaluation": "passed; builds skipped",
+    "realizedSystem": "aarch64-darwin",
+    "shellTools": {
+      "python": "3.12.15",
+      "uv": "0.12.22",
+      "just": "1.58.0",
+      "nixfmt": "1.5.0",
+      "actionlint": "1.7.12",
+      "shellcheck": "0.11.0"
+    },
+    "commands": [
+      "nix flake lock path:/Users/al/git/zetra",
+      "nix flake check path:/Users/al/git/zetra --no-build --all-systems",
+      "nix develop path:/Users/al/git/zetra --command just bootstrap",
+      "nix develop path:/Users/al/git/zetra --command just check",
+      "nix develop path:/Users/al/git/zetra --command nixfmt --check flake.nix",
+      "nix develop path:/Users/al/git/zetra --command just ci-lint",
+      "nix develop path:/Users/al/git/zetra --command just shell-lint"
+    ],
+    "notTested": [
+      "Linux shell realization locally",
+      "Intel macOS (unsupported by current locked Nixpkgs)"
+    ]
+  },
+  "mise": {
+    "runtimeVersion": "2026.8.5",
+    "pins": {
+      "python": "3.12.13",
+      "uv": "0.12.7",
+      "just": "1.58.0",
+      "actionlint": "1.7.12",
+      "shellcheck": "0.11.0"
+    },
+    "commandsPassed": [
+      "mise exec -- just bootstrap",
+      "mise exec -- just lock-check ci-lint shell-lint hooks-config"
+    ],
+    "isolation": "Used process-scoped MISE_TRUSTED_CONFIG_PATHS, MISE_STATE_DIR and MISE_CACHE_DIR; no persistent trust or global version defaults changed"
+  },
+  "checks": [
+    {
+      "check": "Ruff lint and format",
+      "status": "passed",
+      "pythonFiles": 45
+    },
+    {
+      "check": "ty package, templates, tests, examples, scripts and integrations",
+      "status": "passed",
+      "targetPython": "3.11"
+    },
+    {
+      "check": "unittest suite",
+      "status": "passed",
+      "tests": 20,
+      "python": "3.12.13"
+    },
+    {
+      "check": "minimum-supported interpreter suite",
+      "status": "passed",
+      "tests": 20,
+      "python": "3.11.16",
+      "environment": ".tools/venv311"
+    },
+    {
+      "check": "three controlled reference-agent evaluations and evidence checks",
+      "status": "passed",
+      "examples": [
+        "knowledge",
+        "action",
+        "gateway-read"
+      ]
+    },
+    {
+      "check": "HTML regeneration and document checks",
+      "status": "passed",
+      "documents": 7
+    },
+    {
+      "check": "GitHub Actions actionlint with ShellCheck",
+      "status": "passed"
+    },
+    {
+      "check": "gateway reproduction script ShellCheck",
+      "status": "passed"
+    },
+    {
+      "check": "justfile format",
+      "status": "passed"
+    },
+    {
+      "check": "prek configuration",
+      "status": "passed"
+    },
+    {
+      "check": "prek explicit-file execution",
+      "status": "passed",
+      "hooks": [
+        "ruff-check",
+        "ruff-format",
+        "ty",
+        "lock-check",
+        "toolkit-tests",
+        "documentation"
+      ]
+    }
+  ],
+  "prek": {
+    "installedGitHooks": false,
+    "allTrackedFilesRun": true,
+    "reason": "All six hooks passed over the finalized staged repository"
+  },
+  "ci": {
+    "configured": true,
+    "executedOnGitHub": false,
+    "actionPinsVerifiedViaOfficialGitHubAPI": true,
+    "pythonMatrix": [
+      "3.11.16",
+      "3.12.13"
+    ],
+    "credentials": "No cluster or model credentials"
+  },
+  "logs": [
+    ".tools/nix-quality-gate.log",
+    ".tools/host-lint-check.log",
+    ".tools/python311-tests.log"
+  ],
+  "limitations": [
+    "Tooling checks do not establish runtime enforcement, production model performance or deployment authorization",
+    "mise and Nix have different host tool patch versions; application and Python quality tools share uv.lock",
+    "Nix build backend dependency constraints are declared in pyproject.toml; uv.lock pins application, optional and development dependencies"
+  ],
+  "artifactHashes": {
+    "uv.lock": "4e32b5f82f5d5f4dd1728dcf9f0fb7060ed12f10dc505b47b477f20bcd209fc9",
+    "flake.lock": "14d44735ca202180f658658f937ef090e829e965468c364ef0c3eff5775d3531",
+    "flake.nix": "cdf476b878d76beb12743c37a1131c2874bccb62f4ba5cc847417be75ec020fb",
+    "mise.toml": "6def7a194d4e9a04852f9039c1d317794dd623555be795c9371ab1dcfbca5bdd",
+    ".pre-commit-config.yaml": "1be7dd3df2f7a6b7c7e9a80b7e9422d3a63533ed265cb6c00db00df012763474",
+    ".github/workflows/ci.yml": "fe467f426cc4df90aa3d1b15298a74f449cb66a7b1d1e03461c90eed8ee30478"
+  },
+  "finalValidation": {
+    "checkedAt": "2026-10-09T00:29:07.078822+00:00",
+    "status": "passed",
+    "contributorGate": "nix develop path:/Users/al/git/zetra --command just check",
+    "log": ".tools/final-quality-gate.log",
+    "unitTests": 21,
+    "minimumPython": "3.11.16",
+    "minimumPythonTests": 21,
+    "pythonFilesChecked": 56,
+    "documentCount": 7,
+    "prekAllTrackedFiles": "passed: all six hooks, including finalized integration files",
+    "githubCI": "Configured; not yet executed when this pre-publication report was recorded"
+  }
+}

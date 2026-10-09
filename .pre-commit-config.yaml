@@ -1,0 +1,38 @@
+minimum_pre_commit_version: '3.2.0'
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff lint
+        entry: uv run --locked --all-extras ruff check
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: Ruff format check
+        entry: uv run --locked --all-extras ruff format --check
+        language: system
+        types_or: [python, pyi]
+      - id: ty
+        name: ty type contracts
+        entry: uv run --locked --all-extras ty check
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+      - id: lock-check
+        name: uv lock consistency
+        entry: uv lock --check
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+      - id: toolkit-tests
+        name: Toolkit invariant tests
+        entry: uv run --locked --all-extras python -m unittest discover -s tests
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+      - id: documentation
+        name: HTML playbook structure
+        entry: uv run --locked python scripts/check_docs.py
+        language: system
+        files: ^(docs/|scripts/(build_playbooks|check_docs)\.py)
+        pass_filenames: false

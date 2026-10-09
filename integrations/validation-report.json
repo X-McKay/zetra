@@ -1,0 +1,198 @@
+{
+  "apiVersion": "zetra.dev/lab-evidence-index-v1alpha1",
+  "status": "passed",
+  "scope": "Recorded local fixture and contributor checks; hybrid host/kind topology",
+  "authorizesDeployment": false,
+  "productionQualified": false,
+  "components": [
+    {
+      "component": "contributor-tooling",
+      "report": "docs/research/tooling-validation.json",
+      "sha256": "e1ece934fb9a573b44cb7974e0e42cf31dbdbcbfee9d4311f72be4c75d10f5cd",
+      "status": "passed",
+      "scope": "Local contributor tooling on Apple Silicon macOS; not production qualification or a GitHub workflow execution",
+      "checkCount": 11,
+      "openControls": [
+        "Tooling checks do not establish runtime enforcement, production model performance or deployment authorization",
+        "mise and Nix have different host tool patch versions; application and Python quality tools share uv.lock",
+        "Nix build backend dependency constraints are declared in pyproject.toml; uv.lock pins application, optional and development dependencies"
+      ]
+    },
+    {
+      "component": "document-rendering",
+      "report": "docs/research/document-qa.json",
+      "sha256": "a22d3133d677ee405e4db64e0dae1bfea0b9aa1969b16441dca8deb7ac8ea678",
+      "status": "passed",
+      "scope": [],
+      "checkCount": 6,
+      "openControls": []
+    },
+    {
+      "component": "kernel-and-network",
+      "report": "integrations/evidence/kernel-network-report.json",
+      "sha256": "46641288b76f3249fd85d690f993a6819ce9c84bfa4e8ff2686930fe9be29955",
+      "status": "passed",
+      "scope": [
+        "Selected synthetic fixture only; no blanket kernel sandbox guarantee.",
+        "Sigkill response verified for security_file_permission on recorded kernel.",
+        "Normalized records are unsigned observation; denied access cannot authorize a capability."
+      ],
+      "checkCount": 8,
+      "openControls": [
+        "eBPF policy readiness before first workload instruction",
+        "IPv6/DNS/external-provider bypass",
+        "node-agent/CNI outage behavior",
+        "event-loss and kernel compatibility across production nodes"
+      ]
+    },
+    {
+      "component": "openshell",
+      "report": "integrations/openshell-live-output/report.json",
+      "sha256": "91e0427e1be5873d12e78ff1e6aaa283cbb4406827f0b54051e5e3c87394d6a8",
+      "status": "passed",
+      "scope": "actual-OpenShell-supervised-reference-agent-in-disposable-kind",
+      "checkCount": 0,
+      "openControls": [
+        "production principal authentication; local gateway permits unauthenticated users after mTLS transport",
+        "user namespace isolation (disabled in this local tuple)",
+        "provider credential exchange",
+        "allowed external L7 routes",
+        "policy revocation/hot reload",
+        "multi-tenant/business authorization",
+        "first-instruction race or privileged-node compromise",
+        "AppArmor protection (server.appArmorProfile=Unconfined in the local chart)"
+      ]
+    },
+    {
+      "component": "gateway",
+      "report": "integrations/gateway-live-output/gateway-report.json",
+      "sha256": "e932d7a9b703042ec9cf0bd82f7547c60e428928704e53abeab856cc404cd03e",
+      "status": "passed",
+      "scope": "macOS-loopback-live-proxy-with-deterministic-MCP-backend",
+      "checkCount": 11,
+      "openControls": [
+        "production identity issuance",
+        "TLS transport",
+        "network/sandbox bypass prevention",
+        "production revocation and resource/tenant authorization",
+        "Kubernetes controller CRDs",
+        "paid model quality or billing",
+        "collector export requires separate log assertion"
+      ]
+    },
+    {
+      "component": "temporal-gateway-chain",
+      "report": "integrations/gateway-live-output/temporal-gateway-report.json",
+      "sha256": "c66b39483ec5c8678014660d7aa5aa6f4b95959819f14b84b6691d7250c1ccf3",
+      "status": "passed",
+      "scope": "real-Temporal-test-server-reference-agent-real-gateway-MCP",
+      "checkCount": 4,
+      "openControls": [
+        "Kubernetes Temporal service",
+        "production TLS/identity",
+        "write exactly-once effects"
+      ]
+    },
+    {
+      "component": "telemetry",
+      "report": "integrations/gateway-live-output/telemetry-report.json",
+      "sha256": "52ea89107a6e05383f0639bca084e2af98c585e6df7ea4d6190628dca737937c",
+      "status": "passed",
+      "scope": "macOS-reference-agent-and-Temporal-test-server-to-native-gateway-to-MCP-fixture-to-kind-OTel-collector-via-loopback-port-forward",
+      "checkCount": 8,
+      "openControls": [
+        "single shared Temporal/gateway trace DAG",
+        "production telemetry access/retention",
+        "universal secret redaction",
+        "TLS exporter authentication",
+        "all components in Kubernetes"
+      ]
+    },
+    {
+      "component": "temporal-local-replay",
+      "report": "integrations/evidence/temporal-local-test.json",
+      "sha256": "024d445605ca41ede0c92f7e2b82093a667c25573d561d1a49b81c4d2719836a",
+      "status": "passed",
+      "scope": "local-real-temporal-test-server",
+      "checkCount": 4,
+      "openControls": [
+        "Read-only agent only",
+        "Not Kubernetes or sandbox qualification",
+        "No production approval/write adapter",
+        "Ephemeral server did not advertise failed-activity heartbeat preservation; heartbeat semantics untested"
+      ]
+    },
+    {
+      "component": "worker-image",
+      "report": "integrations/evidence/worker-image.json",
+      "sha256": "e3d1b069c8c4934db6b83fe412491e218bc518c774cfc22c6c43cb9680508b15",
+      "status": "passed",
+      "scope": "Built and locally loaded OCI worker image; production approval is withheld",
+      "checkCount": 3,
+      "openControls": [
+        "ARM64 only tested; no amd64 build",
+        "No registry publication, signature verification, SBOM or vulnerability qualification",
+        "Local image tests do not establish OpenShell containment, gateway authorization or production Temporal mTLS",
+        "Native release renderer continues to withhold worker activation until mandatory integrations qualify"
+      ]
+    },
+    {
+      "component": "native-render-server",
+      "report": "integrations/evidence/render-server-report.json",
+      "sha256": "8a1e6a916f2168be18a235dd399e43cea1cc31431c7c691444a4825d1ef5ae5f",
+      "status": "passed",
+      "scope": "Native Kubernetes API server dry-run of a withheld release candidate",
+      "checkCount": 3,
+      "openControls": [
+        "No workload activation",
+        "No signed admission verification",
+        "No gateway or Temporal environment binding"
+      ]
+    },
+    {
+      "component": "kubernetes-worker-temporal",
+      "report": "integrations/evidence/worker-temporal-kubernetes-report.json",
+      "sha256": "465fe518c0351225cf5fc1584429d9035e2a2fc0d075aec43ddc575199dcfbfd",
+      "status": "passed",
+      "scope": "Actual OCI worker in disposable Kubernetes pod with loopback Temporal development server",
+      "checkCount": 0,
+      "openControls": [
+        "Single pod development server with ephemeral SQLite; not production HA, persistence or mTLS qualification",
+        "Controlled public-data knowledge fixture; no live model or external tool execution",
+        "NetworkPolicy is configured; this workflow does not independently negative-test network enforcement",
+        "This separate fixture does not change the native renderer's withheld replica count or production authorization",
+        "History replay covers this execution, not all production histories or cross-version migrations"
+      ]
+    },
+    {
+      "component": "platform-bootstrap",
+      "report": "integrations/evidence/platform-bootstrap.json",
+      "sha256": "37f4013d678a2e134f0452e7477efc09b71f9a62d48eaa66279a58a6212141c4",
+      "status": "passed",
+      "scope": "disposable-local-platform-bootstrap-readiness",
+      "checkCount": 7,
+      "openControls": [
+        "Readiness is not boundary-enforcement qualification",
+        "No production principal authentication or AppArmor/user namespace qualification",
+        "Fresh installation into a second empty cluster has not been tested"
+      ]
+    }
+  ],
+  "interpretation": [
+    "Checks overlap; check counts are not independent statistical samples.",
+    "Hashes bind recorded reports, not trusted provenance, freshness or signer identity.",
+    "Installation and read-only discovery are not enforcement tests.",
+    "See each report and reproduction guide for its actual topology and limitations."
+  ],
+  "productionGates": [
+    "Authenticated enterprise identities, approvers and workload credential exchange",
+    "TLS and tenant/resource authorization on every production hop",
+    "Signed build, evaluation, integration and catalog attestations with admission enforcement",
+    "Distributed revocation, kill switches and durable concurrent budget accounting",
+    "Production Kubernetes Temporal service and worker crash/recovery qualification",
+    "OpenShell Kubernetes maturity decision and production isolation tuple",
+    "Kernel/CNI startup, outage, event-loss and bypass tests on every supported node tuple",
+    "Real model capability, quality, adversarial and business-outcome evaluation",
+    "Governed catalog/CD publication and business-function telemetry access/retention"
+  ]
+}

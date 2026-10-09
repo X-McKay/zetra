@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=75,<83"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zetra"
+version = "0.1.0"
+description = "Framework-neutral, fail-closed agent development and governance starter toolkit"
+requires-python = ">=3.11"
+dependencies = ["PyYAML>=6.0.2,<7"]
+
+[project.optional-dependencies]
+temporal = ["temporalio>=1.18,<2"]
+
+[project.scripts]
+zetra = "zetra.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["zetra*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+zetra = ["templates/knowledge/agent.yaml", "templates/knowledge/src/knowledge/*.py", "templates/knowledge/tests/*.py", "templates/knowledge/evals/*.json"]
+
+[dependency-groups]
+dev = [
+    "prek>=0.5.5",
+    "ruff>=0.16.10",
+    "ty>=0.0.85",
+    "types-pyyaml>=6.0.12.20260906",
+]
+
+[tool.uv]
+required-version = ">=0.12.7,<0.13"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = [".tools", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.ty.environment]
+python-version = "3.11"
+extra-paths = ["examples/knowledge/src", "examples/action/src", "examples/gateway-read/src"]
+
+[tool.ty.src]
+include = ["src", "tests", "examples", "scripts", "integrations"]

@@ -1,0 +1,76 @@
+{
+  "scope": "actual-OpenShell-supervised-Python-sandbox",
+  "uid": 10001,
+  "cwd": "/sandbox",
+  "checks": [
+    {
+      "name": "scratch-write-read",
+      "status": "passed",
+      "detail": {}
+    },
+    {
+      "name": "outside-read-denied",
+      "status": "passed",
+      "detail": {
+        "errno": 13,
+        "exception": "PermissionError",
+        "mode": "0o644",
+        "path": "/var/lib/dpkg/status"
+      }
+    },
+    {
+      "name": "outside-write-denied",
+      "status": "passed",
+      "detail": {
+        "errno": 13,
+        "exception": "PermissionError",
+        "mode": "0o1777",
+        "path": "/var/tmp/zetra-forbidden-write"
+      }
+    },
+    {
+      "name": "etc-write-denied",
+      "status": "passed",
+      "detail": {
+        "errno": 13,
+        "exception": "PermissionError",
+        "mode": "0o755",
+        "path": "/etc/zetra-forbidden-write"
+      }
+    },
+    {
+      "name": "unapproved-http-denied",
+      "status": "passed",
+      "detail": {
+        "exception": "URLError",
+        "httpStatus": null,
+        "reason": "<urlopen error [Errno 13] Permission denied>"
+      }
+    },
+    {
+      "name": "direct-egress-denied",
+      "status": "passed",
+      "detail": {
+        "errno": 13,
+        "exception": "PermissionError",
+        "reason": "[Errno 13] Permission denied"
+      }
+    },
+    {
+      "name": "actual-offline-reference-agent",
+      "status": "passed",
+      "detail": {
+        "result": {
+          "answer": "Zetra means ZEro-TRust Agents.",
+          "source": "approved-knowledge-fixture"
+        }
+      }
+    }
+  ],
+  "status": "passed",
+  "limitations": [
+    "No principal authentication or production credential exchange test",
+    "etc write denial alone may also be DAC; outside read/write use world-accessible locations",
+    "No automatic permission expansion or business authorization is implied"
+  ]
+}
