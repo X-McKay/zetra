@@ -16,7 +16,9 @@ Four inputs per agent, and a generated lock file. The recommended shape (variant
 agents/incident_triage/              # importable package name; matches agentctl rule AGENT034
 ├── agent.yaml                       # identity, purpose, capabilities, skills, MCP, budgets, approvals
 ├── contracts.py                     # Input, Output and action payload models (zetra.Contract)
-├── tools.py                         # @read and @action functions; actions are pure payload builders
+├── tools/                           # one file per tool; file name = tool name
+│   ├── create_ticket.py             #   @action: a pure payload builder
+│   └── summarize_status.py          #   @read
 ├── skills/<name>/SKILL.md           # Agent Skills, validated and digest-pinned at build
 ├── instructions/incident_triage.md  # versioned prompt text
 ├── tests/test_incident_triage.py    # scripted-model tests via the zetra pytest plugin
@@ -85,20 +87,28 @@ class TriageResult(Contract):
 
 There is **no developer-defined deps class by default**. The platform stamps a frozen `RunDeps` (`principal`, `tenant`, `business_key`, `release`, `run`, `deadline`, optional static `settings` validated from the manifest) from the authenticated start request and the bundle, never from caller JSON. Clients that cannot be serialized are `Binding`s (`Binding("knowledge", KnowledgeStore)`) that each worker resolves from mounted platform configuration at startup; `zetra run` and the test harness supply local bindings, and the worker refuses to start if one is missing. A `Binding` of receiver kind cannot be read from developer code at all. The compiler rejects any `SecretStr`, client object, `bytes` or unbounded `str` in deps, and caps serialized deps at 8 KiB because PydanticAI copies deps into every activity payload.
 
-### 2.3 `tools.py`
+### 2.3 `tools/`
+
+One file per tool, and the file name is the tool name, the same rule Agent Skills apply to `SKILL.md` directories. The compiler discovers `tools/*.py`, requires exactly one decorated function per file whose name matches the file, and rejects anything else in the directory (helper modules belong in a shared package, not next to tools). A tool is therefore a reviewable unit on its own: its diff, its lock entry and its generated scenarios all have the same name.
 
 ```python
-from zetra import action, read
-from .contracts import Ticket
-
-@read("mcp.read_status")                      # MCP tools need no Python; this is how a local read looks
-async def summarize_status(status: str) -> str: ...
+# tools/create_ticket.py
+from zetra import action
+from ..contracts import Ticket
 
 @action("ticket.write", receiver="tickets")
 def create_ticket(title: str, body: str) -> Ticket:
     """Propose one investigation ticket. A human approves this exact payload;
     the platform's `tickets` receiver commits it at most once per incident."""
     return Ticket(title=title, body=body)
+```
+
+```python
+# tools/summarize_status.py
+from zetra import read
+
+@read("mcp.read_status")                      # a local read; MCP tools themselves need no Python at all
+async def summarize_status(status: str) -> str: ...
 ```
 
 Two decorators replace the seven-argument `@tool` of revision 1, because most argument combinations were invalid and needed rules to reject them. `@read(capability)` marks a tool whose Activity may retry freely. `@action(capability, receiver=, approval="human"|"policy")` marks a consequential or reversible write, and its body is a **pure, synchronous, deterministic payload builder**: it may only construct the payload contract model from its arguments (an AST rule; time, randomness and I/O are compile errors). The developer never sees a grant, an idempotency key or a receiver client. The SDK owns the whole path from proposal to commit (section 4.3), so "approve A, commit B", grant reuse and commit-without-approval are unreachable from agent code. Decorator arguments must be literals so `zetra check` reads them without importing the module. Retry safety and effect reversibility are properties of the **receiver contract**, not of each function, and are read from the receiver's `describe()` at worker start and from the receiver catalogue at build.
@@ -160,7 +170,7 @@ Two upstream facts constrain everything below. **Approval is not authorization**
  ─────────────────            ─────────────────────────────────────────              ──────────────
  agent.yaml        ──┐        1 strict manifest -> AgentSpec + capability stack        ZetraAgentWorkflow
  contracts.py      ──┼──►     2 AST-scan tools; bind policy metadata; no imports  ──►   ├─ signal stop · update approve · queries
- tools.py          ──┤        3 validate + digest skills, MCP schemas, instructions      ├─ agent.iter() -> model / tool / validate activities
+ tools/*.py        ──┤        3 validate + digest skills, MCP schemas, instructions      ├─ agent.iter() -> model / tool / validate activities
  skills/           ──┘        4 derive risk tier -> required scenarios                  │     └─ ZetraToolset -> receiver prepare/commit, gateway MCP
                               5 emit AgentBundle (digest = release_id) + zetra.lock      └─ reconcile · compensate · continue-as-new
                               6 diff frozen identifiers against previous lock          worker: one release per deployment, codec, mTLS
@@ -174,7 +184,7 @@ Errors follow the deep dive's shape: one violated requirement, its evidence, the
 
 ```text
 error[ZT-TOOL-003]: create_ticket needs capability ticket.write, which incident-triage is not granted
-  --> agents/incident_triage/tools.py:6   @action("ticket.write", receiver="tickets")
+  --> agents/incident_triage/tools/create_ticket.py:5   @action("ticket.write", receiver="tickets")
    requirement  deny by default: a tool's capability must appear in spec.capabilities
    evidence     agent.yaml:17   capabilities: [mcp.read_status]
    next         add ticket.write to spec.capabilities. Consequence: risk floor T1 -> T2; new required
