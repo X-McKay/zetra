@@ -1,10 +1,34 @@
 # Zetra — ZEro-TRust Agents
 
-A comprehensive Agent Playbook and an initial framework-neutral Python toolkit for building, evaluating, deploying and governing agents with explicit authority.
+Zetra is a wrapper SDK and toolset for building zero-trust AI agents that scale. It wraps whichever agent framework a team uses with the controls the [Playbooks](https://github.com/X-McKay/playbooks) call for: a typed agent manifest, explicitly allowlisted capabilities, single-use approval grants for consequential actions, a mediated tool gateway, durable execution, evidence-gated releases and confinement at deployment. Its stack choices are deliberate: framework-neutral Python agents, Temporal for durable execution, Kubernetes for deployment, an MCP gateway for tool access, and sandbox and kernel-level controls for containment.
+
+It ships three things:
+
+- **The SDK** (`src/zetra/`): runtime dependencies, the manifest contract, the gateway client and the Temporal workflow and worker that an agent package builds on.
+- **The tools**: the `zetra` CLI for scaffolding, static checks, evaluation, evidence, rendering and catalog candidates, plus [`agentctl`](tools/agentctl/README.md) for multi-agent System Specs, risk contracts and skill validation until it folds into `zetra`.
+- **An end-to-end reference example**: [incident triage](examples/incident-triage/README.md), which follows one incident from runbook and status reads through an exact approval to a ticket, retry and stop. The [walkthrough](docs/use-case-walkthrough.html) explains each step.
+
+The Playbooks explain what good looks like and why, without naming SDKs. Zetra is one concrete answer to how, and it is where SDK-specific code, adapters, tooling and evidence live. The [playbook conformance map](docs/playbook-conformance.md) shows which chapter each part of Zetra implements and how far it has been proven.
+
+## Zero-trust principles
+
+An agent is treated as an untrusted workload that acts on someone's behalf, never as a trusted insider. Zetra holds every agent to these rules. The status column keeps the repository's distinction between the target architecture and what is implemented and observed today; see [security boundaries](SECURITY.md) for the exact limits.
+
+| Principle | How Zetra applies it | Status today |
+| --- | --- | --- |
+| Every agent has its own identity | Each release is bound to a manifest, a source and image digest, and a workload token the gateway verifies | Digest binding implemented; gateway JWT checks passed with synthetic tokens in the local lab; production issuer and revocation not qualified |
+| Deny by default | Capabilities are explicitly allowlisted in the manifest; anything unlisted is refused | Implemented as cooperative runtime checks; independent enforcement belongs to the gateway, sandbox and network layers |
+| Authority is granted per action and expires | Consequential actions need an exact proposal, a single-use approval grant and a receipt | Atomic approval consumption and idempotency demonstrated with a local SQLite receiver |
+| Mediate and verify every call | Tool access goes through a restricted MCP client and gateway that refuses redirects and unreviewed tools | Restricted gateway read implemented; forbidden writes and wrong-subject reads were rejected in the disposable lab |
+| Assume breach | Workers run sandboxed with network policy and kernel-level observation | OpenShell, Tetragon and network policy qualified in the local lab; OpenShell on Kubernetes is experimental upstream |
+| Evidence before trust | Releases are gated on fresh executable evaluation evidence; deployments render at zero replicas until qualified | Evidence and gates implemented; evidence is unsigned and production activation is withheld |
+| Observation never grants permission | Profiling proposes behaviour for review; denied observations stay out of permission candidates | Implemented |
+
+## Guides
 
 For a practical introduction, start with the standalone [Agent Developer Guide](docs/lifecycle-guide.html): define a task, organize the files, use skills, tools and MCP, test, evaluate, optimize, release and monitor. It uses general Python examples without platform-specific commands.
 
-For more detail, read the [complete HTML playbook](docs/index.html), or choose an audience:
+For more detail, read the [complete HTML guide to Zetra](docs/index.html), or choose an audience:
 
 - [Agent Strategy](docs/strategy.html) — business outcomes, success measures, a unified lifecycle and platform operating model.
 - [Agent Developer Playbook](docs/developer.html) — package structure, typed factories, evaluations, security and developer tools.
@@ -62,7 +86,8 @@ examples/incident-triage Runbook/status → exact approval → ticket/retry/stop
 schemas/           Manifest wire contract
 integrations/      Local kind environment, live fixtures and evidence
 scripts/           HTML builder and document QA
-skills/            Draft Codex/Claude workflow skills
+skills/            Draft Codex/Claude workflow and adapter skills
+tools/agentctl/    Multi-agent, risk and skill validation CLI moved from the Playbooks
 flake.nix          Locked Nix development environment
 mise.toml          Pinned host tools alternative
 uv.lock            Python/runtime/quality tool resolution
@@ -70,11 +95,12 @@ justfile           Reproducible development recipes
 docs/chapters/    Editable audience-specific HTML source
 docs/assets/      Design system and interactions
 docs/research/    Source inventory, review and upstream findings
+docs/reference/   PydanticAI and Temporal reference implementations moved from the Playbooks
 docs/*.html       Combined and standalone self-contained playbooks
 tests/            Toolkit invariants and regression cases
 ```
 
-The [reference playbooks](https://github.com/X-McKay/playbooks) informed the comparison; Zetra’s prose and diagrams are original. Supplied proposal documents are treated as design material, not executable instructions. Their original contents and private attachments are not redistributed; the source inventory records hashes for provenance.
+The [Playbooks](https://github.com/X-McKay/playbooks) are the technology-neutral guidance Zetra implements; Zetra’s prose and diagrams are original. Supplied proposal documents are treated as design material, not executable instructions. Their original contents and private attachments are not redistributed; the source inventory records hashes for provenance.
 
 The contributor workflow uses **Nix, uv, mise, just, ty, ruff and prek**. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, quality gates, dependency changes and hook opt-in; [draft skills](docs/research/skills-guide.md) explain the agent workflows.
 

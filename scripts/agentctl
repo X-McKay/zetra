@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -eu
+
+repository_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+exec uv run --project "$repository_dir/tools/agentctl" --locked agentctl "$@"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Temporal Multi-Agent"
+  short_description: "Build durable multi-agent coordination"
+  default_prompt: "Use $zetra-temporal-multi-agent to implement replay-safe multi-agent coordination with Temporal."

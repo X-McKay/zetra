@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design PydanticAI Agent"
+  short_description: "Design a standardized PydanticAI agent"
+  default_prompt: "Use $zetra-pydanticai-agent to design a production-ready PydanticAI agent."

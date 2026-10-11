@@ -81,8 +81,20 @@ developer-starter:
 incident-triage:
     PYTHONPATH=src:examples/incident-triage/src uv run --locked python examples/incident-triage/demo.py
 
+# Run the agentctl CLI from its own locked project (Python 3.12+).
+agentctl *args:
+    uv run --project tools/agentctl --locked agentctl {{ args }}
+
+# Lint, test and validate skills with agentctl until it folds into zetra.
+agentctl-check:
+    uv lock --project tools/agentctl --check
+    uv run --project tools/agentctl --locked ruff check tools/agentctl
+    uv run --project tools/agentctl --locked ruff format --check tools/agentctl
+    uv run --project tools/agentctl --locked python -m unittest discover -s tools/agentctl/tests
+    uv run --project tools/agentctl --locked agentctl --no-animations skills validate skills
+
 # Run all repository gates. Live enforcement remains a separate qualification.
-check: lock-check lint typecheck ci-lint shell-lint test docs examples
+check: lock-check lint typecheck ci-lint shell-lint test docs examples agentctl-check
 
 # Check pre-commit configuration; does not install hooks.
 hooks-config:
