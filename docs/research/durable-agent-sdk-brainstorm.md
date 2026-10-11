@@ -7,6 +7,7 @@ Companion to [the SDK proposal](durable-agent-sdk-proposal.md) and [the research
 | Developer-facing API | What is the smallest, hardest-to-misuse way to write an agent? | Manifest compiles to an `AgentSpec`; `@read`/`@action` with pure payload builders; platform-stamped `RunDeps` and `Binding`s; a committed `zetra.lock`; coded compile errors |
 | Red team | What does a compromised worker still get past? | Receiver `prepare`/`commit` with receiver-held trust anchors; one release per worker identity; run tickets; mandatory codec; gateway-enforced budgets; 28 scenario IDs |
 | Temporal runtime design | What exactly do the generated workflow and worker do? | `RunState` with phases and nine outcomes; Update validator checks; activity-config matrix; workflow-minted operation IDs; continue-as-new and codec design; worker refusal list; 12 spike items |
+| Manifest variants | Which authored shape for the agent file is most straightforward? | Five complete side-by-side packages; spec plus sidecars chosen; strict loading before `AgentSpec`, retired `instrument` rule, `Input`/`Output` binding |
 | Verification and evidence | How is "secure, robust, high quality" made checkable without boilerplate? | Attack-plus-independent-observer scenarios with positive controls; three test tiers; evidence v2 as an in-toto statement; replay gate; PR and nightly CI shape; agentctl fold-in on Python 3.11 |
 
 
@@ -1477,3 +1478,272 @@ Each catalog entry carries `explain(observations)` hints, and the AST scanner ca
 - Is `ResolveModelId` keyed by `deps.run_id` enough to inject scripts under `TemporalDurability`, or is a test registry through `models=` cleaner? The spike should decide.
 - The public test signing key and fixture codec key must never be accepted by a production receiver. That needs its own deny-list test.
 - A zero-failure sample over N cases is finite evidence. The record states N and scope and makes no probability claim (playbook 2.6).
+
+---
+
+## Manifest variants: five complete packages compared
+
+Written after the walkthrough chose to start from a plain PydanticAI Agent Spec. The full example packages (61 files) are not committed; the comparison and each variant's README are reproduced here.
+
+#### Comparison
+
+These are five complete authorings of the same agent: it reads status through gateway MCP, uses
+the `checkout-runbook` skill and proposes one approval-gated ticket. Each variant directory
+holds every authored file at its repository path, plus a README of 250 words or fewer.
+`contracts.py`, `tools/`, the skill and the test are byte-identical across variants, so a diff
+between two directories shows only the manifest choice. `_shared/` holds the platform capability
+registry that variants 1 to 4 use and an illustrative generated `zetra.lock`. No repository file
+was edited.
+
+| Directory | Agent package, besides code | Repository or platform files it adds |
+| --- | --- | --- |
+| `spec-plus-sidecars/` | `agent.yaml`, `governance.yaml` | root `ownership.yaml` |
+| `agent-md/` | `AGENT.md` | root `ownership.yaml` |
+| `code-first/` | `agent.py`, `governance.py`, generated `agent.yaml` | root `ownership.yaml`, `.gitattributes` |
+| `extends/` | `agent.yaml` with `extends: assistant`, `governance.yaml` | `agents/_base/assistant.yaml`, root `ownership.yaml` |
+| `spec-only/` | `agent.yaml` | `platform/teams.yaml`, `platform/agent-overrides.yaml`, a registry with load-bearing classes, CODEOWNERS as the owner source |
+
+#### Comparison
+
+A script counted significant lines: not blank, not comment-only, module docstrings excluded.
+"Definition" is the manifest and governance files. "Per agent" adds the instructions plus the
+55 shared lines (contracts, two tools, skill, test). "Once" is repository or platform files
+shared by all agents.
+
+| Criterion | 1 spec-plus-sidecars | 2 agent-md | 3 code-first | 4 extends | 5 spec-only |
+| --- | --- | --- | --- | --- | --- |
+| Familiarity to a PydanticAI user | High. `agent.yaml` is upstream syntax, byte for byte; two tiny Zetra files | Low to medium. It looks like upstream's Markdown sub-agent files, but upstream's parser reads only `name`, `description`, `tools` and no full YAML. A false friend | Medium. Python is familiar, but upstream users write `Agent(...)`, not `AgentSpec(...)`; the `zetra.spec` entries are new | Medium to high. Upstream syntax plus one key; the merge rules are upstream's `from_spec` rules | Highest. The package holds an upstream spec and nothing Zetra-specific beyond the decorators and contracts that every variant has |
+| Lines: definition / per agent / once | 13 / 79 / 8 | 10 / 78 / 6 | 21 (+20 generated) / 87 / 9 | 10 / 76 / 21 (12-line base) | 12 / 78 / 20 (+1 CODEOWNERS line per agent) |
+| Reviewability of authority changes | Good. `governance.yaml`, `ownership.yaml` and `zetra.lock` route to governance reviewers; spec and tool authority show in the lock. Facts sit in three files | Weakest routing. Prompt prose and authority share one file, so CODEOWNERS cannot separate them; the lock diff carries everything | Weak. Authority is in Python, and the generated YAML diff is either collapsed (`linguist-generated`) or a duplicate | Good per agent. A base edit changes every agent at once and needs a fleet-wide bundle-diff; an agent's effective config needs the resolved view | Good per agent (spec lines, decorators, lock). Classification and ownership change only in platform pull requests, which list every affected agent |
+| Misuse resistance | High. Classification is explicit, the loader is strict, and the sidecars never reach PydanticAI. Gap: an agent-level `ownership.yaml` silently replaces the root one | Medium-low. Prompt editors can change capabilities in passing; the name `AGENT.md` collides with coding-assistant instruction files | Low-medium. Python runs at build time unless AST rules cut it down to literals; hand edits to the generated file (caught as stale) | Medium. Hidden interactions: the base's `Thinking` plus an agent's `temperature: 0.1` is rejected by Claude models. A base edit reaches every agent; bare names and one level block path traversal | High per agent: the developer cannot misdeclare classification or ownership. Systemic risk: one under-classified registry entry under-classifies a fleet, and input data is not a capability |
+| Tooling (schema, IDE) | Upstream `agent_schema.json` with `GatewayMCP` registered, plus two small Zetra schemas | Custom work. The YAML language server does not validate Markdown frontmatter, so it needs an editor integration or `zetra check` on save | pyright only. `zetra.spec` typed entries must be generated per pinned PydanticAI version and custom capability | A Zetra schema (upstream's plus `extends`: upstream's forbids extra keys, so `extends` shows as an error), and a resolved-view command | Upstream schema only in the package. The platform needs CODEOWNERS resolution and schemas for teams and the registry |
+| Fit with the repository (v1alpha1, agentctl) | The proposal baseline. `zetra migrate` splits v1alpha1. agentctl's `agent.yaml` glob and AGENT034 hold; its `metadata.*` rules (AGENT008 to 017) move to `governance.yaml` | Poorest. agentctl's validators glob `agent.yaml` and need a new loader (the skills frontmatter parser can be reused). AGENT034 holds through frontmatter `name` | agentctl reads the generated `agent.yaml`. It breaks the compiler contract that build imports only `contracts.py` | agentctl's glob is unaffected (`_base/assistant.yaml` has another name). AGENT0xx checks must run on the merged spec, not the file | Migrate drops classification and owner after checking them against the derived values. Mismatches, and tighter v1alpha1 budgets, become override entries. AGENT008 to 017 move to platform files |
+
+Line counts do not decide this. Per-agent totals are 76 to 87 lines in all five variants, and
+the definition files differ by at most 11 lines. That matches the developer-API brainstorm:
+size does not separate the shapes. Where facts live and who reviews them does.
+
+#### Ranked recommendation
+
+1. **spec-only, plus a `governance.yaml` that exists only by exception** (variant 5 with the one
+   useful part of variant 1). This answers the owner's complaint directly: a new agent is
+   `agent.yaml` plus code, with nothing to learn beyond upstream. Ownership comes from
+   CODEOWNERS and `platform/teams.yaml`. Classification is the highest of three things: the
+   team's floor, the classes of the capabilities used, and an optional raise on the Input
+   contract. `governance.yaml` appears only when needed, and it only tightens: it may raise
+   classification or risk, lower budgets and record exceptions, never the reverse. The safe
+   self-service changes stay local, and exceptions keep their CODEOWNERS route. This fixes the
+   two real flaws of pure spec-only: confidential input under-classified, and a platform pull
+   request needed just to lower a budget. The costs: the platform must ship `teams.yaml` and
+   CODEOWNERS resolution with the registry. The brainstorm's rule "classification is explicit"
+   also becomes "derived, explicitly raisable", which the owner should decide on purpose.
+2. **spec-plus-sidecars as written.** Choose this if classification must stay a per-agent
+   declaration. It differs from option 1 by one line and by where ownership lives. The lock's
+   per-fact provenance makes up for the facts being scattered.
+3. **extends, later, on top of option 1 or 2.** It does not answer the governance question. With
+   one or two agents it only adds indirection; with a fleet it gives one reviewed place for model
+   policy, timeouts and telemetry. Adopt it only with a resolved view and a compiler check of the
+   merged spec against the resolved model profile.
+4. **agent-md, as a generated view rather than an authored format.** Reading one file is a real
+   benefit. But as an authored format it loses the CODEOWNERS split and collides with two
+   conventions (upstream's Markdown agent files and coding-assistant instruction files). Instead,
+   offer `zetra explain --agent`, which prints the spec, governance and instructions as one page.
+5. **code-first, kept off the golden path.** It has the best IDE support, but it doubles every
+   diff, puts authority in the file type reviewers read least carefully, and widens what the
+   compiler imports. Teams that generate agents in bulk can already call `AgentSpec.to_file` in
+   their own scripts and commit variant 1 or 5 files.
+
+#### Findings to feed back into the proposal
+
+Checked against pydantic-ai `main` on 2026-10-11 (raw GitHub: `agent/spec.py`, `agent/__init__.py`,
+`capabilities/instrumentation.py`, `docs/agent-spec.md`, `docs/harness/subagents.md`,
+`docs/capabilities/thinking.md`).
+
+- **`AgentSpec` does not reject unknown keys at runtime.** It is a plain `BaseModel`; only the
+  generated JSON Schema class sets `extra='forbid'`. So upstream loading silently ignores
+  `extends`, `governance` or a misspelled key like `model_setting`. In every variant, Zetra's
+  strict loader is the only guard and must run first.
+- **`AgentSpec` on `main` has no `instrument` field.** The reference table in
+  `docs/agent-spec.md` and research note 1.1 still list one. agentctl's AGENT031 requires
+  `instrument: true`, a key upstream would ignore. Telemetry in a spec is the `Instrumentation`
+  capability (`{include_content: false}`, and no `id`, so two instances resolve to one).
+- **Upstream's Markdown and TOML agent files are a narrow format.** The `SubAgents` parser reads
+  `name`, `description` and `tools` (or `allowed-tools`), ignores `model`, and does not support
+  full YAML frontmatter. There is no upstream path from `AGENT.md` to an `AgentSpec`.
+- **There is no upstream serializer from a capability instance to a spec entry.** Code-first
+  therefore needs Zetra-generated typed entries.
+- **Claude requires `temperature` of exactly 1 when thinking is on** (upstream Thinking doc).
+  Base defaults and agent settings can collide where the author cannot see it.
+- **Nits found while writing the files:**
+  - The status read's capability ID is `mcp.read_status` in `tools/summarize_status.py` and
+    v1alpha1, but `mcp.status.read_status` in the ZT-TOOL-003 example. The variants use
+    `mcp.read_status`.
+  - The "Input and Output by convention" rule needs a binding. The variants end `contracts.py`
+    with `Input = Incident` and `Output = TriageResult`.
+  - `summarize_status` had `...` as its body; the variants give it a real pure body.
+  - agentctl's AGENT006 requires a list for `instructions`, so it rejects the block string the
+    proposal uses.
+
+#### agentctl's current golden path (reference, not a variant)
+
+agentctl's scaffold already writes an `AgentSpec` with governance under upstream's `metadata:`
+key (`metadata.owner`, `risk_tier`, `model_policy`, `budgets` and more; AGENT008 to 017). The
+brainstorm rejected this shape: `metadata` is free-form, gets copied into every activity, and
+lets typos pass silently. All five variants require moving those rules. Variants 1, 3, 4 and 5
+keep the `agent.yaml` file that agentctl looks for.
+
+
+### Variant 1: spec plus sidecars (revision 3 as written)
+
+**Developer writes.** `agent.yaml` (a plain upstream `AgentSpec`, 12 lines), `governance.yaml`
+(one line: `data_classification`), contracts, tools, skill, instructions, test. `ownership.yaml`
+is inherited from the repository root.
+
+**Derived.** Capability allowlist (decorators plus `GatewayMCP` entries), approval policy
+(registry), autonomy, risk tier, execution profile, budgets, digests, frozen identifiers: all
+written to `zetra.lock` with provenance.
+
+**Loads.** Zetra's strict YAML loader (unknown and duplicate keys fail with line numbers), then
+`AgentSpec.from_dict` and `Agent.from_spec(spec, deps_type=RunDeps, output_type=Output,
+toolsets=[...], capabilities=stack, custom_capability_types=[GatewayMCP], instructions=<instructions/*.md>)`.
+Governance files never reach PydanticAI.
+
+**Reviewer sees.** Authority changes land in three places: `GatewayMCP` lines in `agent.yaml`,
+decorator arguments in `tools/`, and `governance.yaml`. CODEOWNERS routes `governance.yaml`,
+`ownership.yaml` and `zetra.lock` to governance reviewers, so a Python-only authority change
+still needs them through the lock diff.
+
+**Pros.** The spec is byte-for-byte upstream. Ownership of governance is separable in
+CODEOWNERS. Classification is an explicit declaration, as the brainstorm required.
+
+**Cons.** Three YAML files with three schemas for one agent; facts are scattered (owner in the
+root, classification beside the spec, approval policy in the platform). A newcomer asks "where
+do I set X?" for most governance fields.
+
+**Misuse risks.** A copied `ownership.yaml` silently overrides the root. A developer adds
+`metadata:` or `budgets:` to `agent.yaml` (refused, but only by Zetra's loader, since upstream
+`AgentSpec` ignores unknown keys).
+
+
+### Variant 5: spec only (no governance files in the package)
+
+**Developer writes.** `agent.yaml` (identical to variant 1), contracts, tools, skill,
+instructions, test. Nothing else.
+
+**Derived.** Owner: the single CODEOWNERS team matching `agent.yaml`. Business function,
+operational owner, contact: `platform/teams.yaml`. Data classification: the highest of the team's
+floor, every used capability's registry class, and an optional
+`class Incident(Contract, data_classification=...)` raise. Approval, autonomy, tier and budgets
+as in variant 1. Rare overrides: `platform/agent-overrides.yaml`.
+
+**Loads.** Exactly as variant 1. The spec is the only authored YAML. `zetra build` also reads
+CODEOWNERS, `teams.yaml` and the registry, and records each derived fact with its provenance.
+
+**Reviewer sees.** Agent pull requests show authority changes as `GatewayMCP` lines, decorator
+arguments and the `zetra.lock` diff (a classification that rises because a capability was added
+shows there). Classification and ownership move only through platform pull requests, and
+`bundle-diff` lists every agent they affect.
+
+**Pros.** Closest to "it is just an Agent Spec". Classification follows the data the agent
+touches instead of a self-declared label. Ownership has one source (CODEOWNERS).
+
+**Cons.** Input data is not a capability: an agent fed confidential input through public tools is
+under-classified unless the Input contract raises it, which inverts the brainstorm's "explicit
+classification" rule. Lowering a budget needs a platform pull request.
+
+**Misuse risks.** An under-classified registry entry silently under-classifies a fleet.
+CODEOWNERS edits change ownership, so CODEOWNERS needs governance review itself.
+
+
+### Variant 4: `extends` a repository base spec
+
+**Developer writes.** A 9-line `agent.yaml` with `extends: assistant` plus what is specific to
+this agent. `governance.yaml`, contracts, tools,
+skill, instructions and test as in variant 1. The platform team writes
+`agents/_base/assistant.yaml` once for the fleet: model policy, `model_settings`, retries,
+timeouts, `Thinking`, `Instrumentation` and two safety instructions.
+
+**Derived.** The merged spec (`resolved-spec.yaml` shows it with sources), then everything
+variant 1 derives.
+
+**Loads.** Zetra strict-loads both files, allows one level and bare base names resolved only under
+`agents/_base/`, and applies upstream's documented `Agent.from_spec` merge rules with the base as
+the spec and the agent as overrides. One merged `AgentSpec` goes to `Agent.from_spec` and the lock.
+`extends` is not an upstream field.
+
+**Reviewer sees.** Agent diffs are small and specific. A base edit changes every agent at once;
+`bundle-diff` must list each affected agent's lock change in the same pull request.
+
+**Pros.** Shortest agent file; fleet-wide defaults change in one reviewed place; mirrors
+`extends` in tsconfig and ESLint.
+
+**Cons.** Indirection: "where does `timeout: 60` come from?" needs the base or the lock. A child
+cannot change a base capability's arguments (a repeated capability type is refused), so variants
+of the base multiply. Upstream's `agent_schema.json` forbids extra keys, so `extends` shows as an
+editor error without a Zetra schema.
+
+**Misuse risks.** Hidden interactions: an agent adding `temperature: 0.1` (as variants 1 to 3
+do) next to the base's `Thinking` builds a spec Claude-family models reject. Plain
+`AgentSpec.from_file` ignores unknown keys, so it would silently drop `extends`.
+
+
+### Variant 2: one `AGENT.md` (frontmatter plus Markdown body)
+
+**Developer writes.** `AGENT.md`: YAML frontmatter holding `AgentSpec` fields plus a
+`governance:` block, and the instructions as the body, the way `SKILL.md` and Claude-style
+sub-agent files work. No `agent.yaml`, `governance.yaml` or `instructions/`.
+
+**Mapping to `AgentSpec`.** `name`, `description`, `model`, `model_settings`, `retries`,
+`end_strategy`, `tool_timeout`, `capabilities` pass through unchanged. The body becomes
+`instructions`. `governance:` and an optional `ownership:` are removed before validation and go to
+`zetra.lock`. Frontmatter `instructions`, `metadata`, `deps_schema` and `output_schema` are refused.
+
+**Loads.** Zetra splits the file, parses frontmatter with its strict YAML loader, then
+`AgentSpec.from_dict(front | {"instructions": body})` and `Agent.from_spec(...)` as in variant 1.
+Upstream `SubAgents(agent_folders=...)` cannot load it: that parser reads only `name`,
+`description` and `tools`, ignores `model`, and does not support full YAML frontmatter.
+
+**Reviewer sees.** One file per agent. But a prompt edit and an authority edit are the same file,
+so CODEOWNERS cannot route them apart. Governance review relies on the `zetra.lock` diff.
+
+**Pros.** Fewest files; reads top to bottom; familiar to Claude Code and Agent Skills
+authors.
+
+**Cons.** Looks like upstream's Markdown agent format but is not it (a false friend for PydanticAI
+users). No YAML-language-server schema in frontmatter without extra editor setup. agentctl's
+`agent.yaml` validators need a new loader.
+
+**Misuse risks.** Prompt authors change capabilities in passing. Some coding-agent tools read
+`AGENT.md` or `AGENTS.md` as their own instructions, so a runtime prompt can leak into a developer's
+assistant (a name like `incident-triage.agent.md` avoids it). A stray `---` in the body.
+
+
+### Variant 3: code first (`agent.py` builds the spec)
+
+**Developer writes.** `agent.py`: one `spec = AgentSpec(...)` built from typed values
+(`ModelSettings`, `zetra.spec.Skills`, `GatewayMCP`, `approved(...)`); `governance.py`: one
+`Governance(...)`. Contracts, tools, skill, instructions and test as in variant 1.
+
+**Derived.** `agent.yaml`, generated by `AgentSpec.to_file(schema_path=None)` and committed
+(the file here is real PyYAML output in upstream's field order). Everything else goes to
+`zetra.lock` as in variant 1; `governance.py` produces no YAML.
+
+**Loads.** `zetra build` imports `agent.py` and `governance.py` in its build sandbox. The runtime
+loads the generated spec through `AgentSpec.from_file` and `Agent.from_spec(...)`. Upstream has
+no capability-instance-to-spec serializer, so `zetra.spec` must ship typed spec entries generated
+from each capability's `from_spec` signature (the source upstream already uses for
+`agent_schema.json`).
+
+**Reviewer sees.** Two diffs for every spec change: the Python and the generated YAML. Authority
+facts sit in Python, which the proposal itself says reviewers read less carefully, so review
+again leans on `zetra.lock`.
+
+**Pros.** Best IDE support with no schema setup: pyright checks kwargs, `Literal` policy names
+autocomplete, renames refactor. Natural for teams that write `Agent(...)` in Python today.
+
+**Cons.** Breaks the compiler contract that build imports only `contracts.py`. Generated YAML
+reads worse than hand-written YAML (see the quoted `instructions`). An AST-only rule keeps it
+safe but makes it YAML in Python syntax.
+
+**Misuse risks.** Loops, `os.environ`, f-strings or helper imports creep into `agent.py` unless
+ZT-SPEC rules forbid them. Someone edits the generated `agent.yaml` by hand.

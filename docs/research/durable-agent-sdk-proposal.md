@@ -54,7 +54,7 @@ Zetra adds the four things upstream cannot express in a spec, each through an up
 3. **`GatewayMCP`.** A Zetra capability type registered through `custom_capability_types`, the documented way to add spec-expressible capabilities. It is the only route to MCP, and its entries declare the tool allowlist per server.
 4. **Long instructions from `instructions/*.md`**, appended after the spec's own `instructions`, which is upstream's merge order. A spec with no `instructions` key and one file in that directory is the common case.
 
-And Zetra refuses spec features that bypass the gateway or the model policy: raw `MCP`, `WebFetch`, `WebSearch`, `LocalWorkspace`, `NativeTool`, `Skills` pointing outside the package, any `model` not of the form `approved:*`, `extra_body` or `extra_headers`. Such a spec cannot run through plain `Agent.from_file` outside Zetra either, because `approved:*` does not resolve and `GatewayMCP` is not registered there; that is the intent.
+And Zetra refuses spec features that bypass the gateway or the model policy: raw `MCP`, `WebFetch`, `WebSearch`, `LocalWorkspace`, `NativeTool`, `Skills` pointing outside the package, any `model` not of the form `approved:*`, `extra_body` or `extra_headers`. Such a spec cannot run through plain `Agent.from_file` outside Zetra either, because `approved:*` does not resolve and `GatewayMCP` is not registered there; that is the intent. Two upstream facts shape the loader: `AgentSpec` does not reject unknown keys at runtime (only its generated JSON Schema is strict), so Zetra validates the file against the pinned spec schema before handing it to PydanticAI and a misspelled key is a compile error rather than a silent no-op; and `AgentSpec` on `main` has no `instrument` field, so telemetry is never declared in the spec and Zetra attaches `Instrumentation` itself.
 
 Governance facts live beside the spec in two small files, following the `policy/ownership.yaml` idea in the developer playbook's target layout, so the spec stays pure and the people who own governance can own those files in `CODEOWNERS`:
 
@@ -64,8 +64,11 @@ data_classification: internal
 # rarely written: budgets: {...}   risk: {raise_to: T3, reason: ...}   exceptions: [...]
 ```
 
+`governance.yaml` may only tighten: raise the classification or the risk tier, lower budgets, record exceptions. Lowering a classification or raising a budget above the tier default is a compile error, so the file is safe to let developers edit while `CODEOWNERS` routes it for governance review.
+
 ```yaml
-# ownership.yaml at the repository root; an agent-level copy overrides it
+# ownership.yaml at the repository root; an agent-level copy overrides it, and `zetra check`
+# reports that override as a finding so a change of owner is never silent
 owner: service-operations@example.invalid
 business_function: service-operations
 operational_owner: oncall-service-ops
@@ -108,6 +111,8 @@ class TriageResult(Contract):
     status: Literal["ticket_created", "needs_review", "declined"]
     ticket_id: str | None = None
     evidence: list[str]
+
+Input, Output = Incident, TriageResult       # the two names the compiler binds
 ```
 
 `contracts.py` may import only `pydantic`, `typing`, `enum`, `datetime` and `zetra.Contract` (rule `ZT-CON-001`), which makes it safe for `zetra check` to import for schema export and serializability checks while still never importing tool code. Fields with a `pattern` need `examples=` so generated tests never synthesize values from regular expressions.
@@ -213,7 +218,7 @@ Errors follow the deep dive's shape: one violated requirement, its evidence, the
 error[ZT-TOOL-003]: create_ticket uses capability ticket.write, which the capability registry does not define
   --> agents/incident_triage/tools/create_ticket.py:5   @action("ticket.write")
    requirement  deny by default: every tool capability must have a registry entry (effect, receiver, approval)
-   evidence     platform/capabilities.yaml@v7 defines ticket.read, mcp.status.read_status
+   evidence     platform/capabilities.yaml@v7 defines ticket.read, mcp.read_status
    next         request a registry entry for ticket.write from the platform owners. Consequence once granted:
                 risk floor T1 -> T2; new required scenarios approval.bound, idempotency.retry; the entry's
                 receiver must be bound at worker start
@@ -462,7 +467,7 @@ Four rules (from the evidence brainstorm): every case pairs an **attack with an 
 - **Evidence v2.** An in-toto Statement whose subject is the bundle digest, with a JCS digest so it can be signed later unchanged. It records source, bundle, skill, MCP schema, dataset and history digests; evaluator and catalogue digests; the pins for pydantic-ai, harness, evals and temporalio; model policy resolution; per-scenario expected, generated and authored case counts, run counts and not-run cases; the embedded release report; replay results and the identifier diff; lab links by hash. Freshness is per scope (deterministic 24 h bound to the source digest; live 7 days bound to bundle, dataset and evaluator digests; replay 24 h; lab links until linked versions change). `zetra check --evidence` rebuilds the bundle statically, recomputes the expected case IDs so a dropped case is caught, re-runs the release check and requires the scope set the tier demands (T2 adds replay and live model; T3 adds lab link and receiver conformance).
 - **Replay gate.** Every Temporal-tier run writes its history; `zetra replay record` keeps one scripted, canary-scanned, size-capped history per shape (golden, approve, stop, expire, retry-after-crash, continue-as-new, one approve shape per consequential tool) under `evals/histories/`, encrypted with the public fixture codec key so replay exercises the codec. `zetra replay` builds the `Replayer` through the worker's own factory, diffs frozen identifiers against the previous lock, and fails on any replay failure or on a breaking diff without a passing replay of the previous release's histories.
 - **CI.** On every pull request with no model keys: toolkit on 3.11 and 3.12 plus mutant self-tests; an agents matrix running `just agent-gate` (check, scripted eval in both tiers, replay, `check --evidence`); `bundle-diff` against the base branch writing the capability, tier and identifier diff to the job summary; agentctl until folded in; nix. Nightly on the default branch in a protected environment: live evals with `repeat` from the policy against a recorded provider configuration, and a weekly upgrade canary for the four pins that reports and never pushes. Lab work stays off CI behind `just lab-agent`, indexed by `just evidence-index`.
-- **agentctl fold-in.** `validate`, `skills validate` and `risk validate` become stages of `zetra check`; `release check` runs inside `zetra eval`; about 183 diagnostic codes keep their meaning behind a `codes.yaml` registry with a golden test; a scan found no 3.12-only syntax, so the plan is to run agentctl's tests on 3.11, port it into `zetra` with `jsonschema` core and `rich` behind a `zetra[ui]` extra, and keep the 3.11 floor.
+- **agentctl fold-in.** `validate`, `skills validate` and `risk validate` become stages of `zetra check`; `release check` runs inside `zetra eval`; about 183 diagnostic codes keep their meaning behind a `codes.yaml` registry with a golden test, except that the `metadata.*` rules (AGENT008 to AGENT017) move to `governance.yaml` and `ownership.yaml`, AGENT006 must accept upstream's `str | list[str]` instructions, and AGENT031 (`instrument: true`) is retired because the field no longer exists upstream; a scan found no 3.12-only syntax, so the plan is to run agentctl's tests on 3.11, port it into `zetra` with `jsonschema` core and `rich` behind a `zetra[ui]` extra, and keep the 3.11 floor.
 - **Inner loop targets** (unmeasured): check on save under 1 s; affected in-process cases under 3 s; Temporal-tier cases 20 to 40 s on pre-push; a tier change prints the scenarios it adds; a failing case prints the risk ID, the attempt, expected and observed fixture state, the likely source line and a reproduce command.
 
 ## 8. Roadmap (rough, for discussion)
