@@ -4,8 +4,8 @@ These documents moved here from the [Playbooks](https://github.com/X-McKay/playb
 
 | Document | Origin in the Playbooks |
 | --- | --- |
-| [Agent reference implementation](agent-reference-implementation.md) | Agent Playbook, chapter 12 |
-| [Temporal execution standard](temporal-execution.md) | Agent Playbook, chapter 6 |
+| [Agent reference implementation](agent-reference-implementation.md) | Agent Playbook, chapter 13 |
+| [Temporal execution standard](temporal-execution.md) | Agent Playbook, chapter 9 |
 | [Multi-agent reference implementation](multi-agent-reference-implementation.md) | Multi-Agent Systems Playbook, chapter 12 |
 | [Temporal durable coordination](temporal-durable-coordination.md) | Multi-Agent Systems Playbook, chapter 6 |
 | [Agent references](agent-references.md) | Agent Playbook, references |
