@@ -10,15 +10,15 @@ Today a Zetra agent is a hand-written `factory.py` returning an object with `run
 
 ## 2. What a developer writes
 
-A PydanticAI Agent Spec, three code-adjacent inputs (contracts, tools, skills), a test and a generated lock. The developer-API brainstorm measured the decorator shape at 74 lines for an approval-gated write agent with a test, against 436 today; the alternatives it tried (class-based, pure manifest) were within a few lines, so the shape was chosen for misuse resistance, not size.
+A PydanticAI Agent Spec, three code-adjacent inputs (contracts, tools, skills), a test and a generated lock. The developer-API brainstorm measured the decorator shape at 74 lines for a write agent with a human-approved tool and a test, against 436 today; the alternatives it tried (class-based, pure manifest) were within a few lines, so the shape was chosen for misuse resistance, not size.
 
 ```text
 agents/incident_triage/              # importable package name; matches agentctl rule AGENT034
 ├── agent.yaml                       # a PydanticAI Agent Spec, unchanged upstream syntax
 ├── contracts.py                     # Input, Output and action payload models (zetra.Contract)
 ├── tools/                           # one file per tool; file name = tool name
-│   ├── create_ticket.py             #   @action: a pure payload builder
-│   └── summarize_status.py          #   @read
+│   ├── create_ticket.py             #   @approval @tool("ticket.write"): a pure payload builder
+│   └── summarize_status.py          #   @tool("status.read")
 ├── skills/<name>/SKILL.md           # Agent Skills, validated and digest-pinned at build
 ├── instructions/incident_triage.md  # versioned prompt text
 ├── tests/test_incident_triage.py    # scripted-model tests via the zetra pytest plugin
@@ -47,7 +47,7 @@ capabilities:
 
 Zetra adds the four things upstream cannot express in a spec, each through an upstream extension point:
 
-1. **Tools from `tools/`.** Callable tools are not spec-expressible upstream (issues #5266, #5471). Zetra discovers one `@read` or `@action` per file and attaches them as the agent's toolset.
+1. **Tools from `tools/`.** Callable tools are not spec-expressible upstream (issues #5266, #5471). Zetra discovers one `@tool` per file and attaches them as the agent's toolset.
 2. **Contracts from `contracts.py`.** `Input`, `Output` and action payloads by convention, passed as `output_type` and `deps_type=RunDeps`, which `Agent.from_spec` already accepts. Upstream template strings such as `{{tenant}}` in instructions resolve against `RunDeps` for free.
 3. **`GatewayMCP`.** A Zetra capability type registered through `custom_capability_types`, the documented way to add spec-expressible capabilities. It is the only route to MCP, and its entries declare the tool allowlist per server.
 4. **Long instructions from `instructions/*.md`**, appended after the spec's own `instructions`, which is upstream's merge order. A spec with no `instructions` key and one file in that directory is the common case.
@@ -58,11 +58,11 @@ Everything else is derived and written to `zetra.lock`, which is the **resolved 
 
 | Fact | Source |
 | --- | --- |
-| Zetra capability allowlist | derived from the `@read`/`@action` decorators and `GatewayMCP` entries; a second `capabilities` list would collide with the spec's own key |
-| Approval | every `@action` requires a human approval; approvers and TTL are one project-wide setting in `zetra.toml` for now |
+| Zetra capability allowlist | derived from the `@tool` decorators and `GatewayMCP` entries; a second `capabilities` list would collide with the spec's own key |
+| Approval | `@approval` marks a tool that needs a human, read or write; approvers and TTL are one project-wide setting in `zetra.toml` for now |
 | Receiver | the resource part of the capability: `ticket.write` binds the receiver named `ticket` |
-| Autonomy | derived: no actions is `assist`; any action is `supervised` |
-| Risk tier, required scenarios, execution profile | computed from the lock: any action makes the agent durable and at least T2 |
+| Autonomy | derived: no writes is `assist`; writes all under `@approval` is `supervised`; any write without `@approval` is `autonomous` |
+| Risk tier, required scenarios, execution profile | computed from the lock: any write makes the agent durable and at least T2; a write without `@approval` raises it further |
 | Budgets, model policy | tier defaults and the project default in `zetra.toml`; the spec's own `model_settings` and `retries` apply as upstream defines them |
 | Skill and MCP tool digests, frozen durable identifiers, activity configs, cost bound | compiler output |
 
@@ -103,25 +103,27 @@ One file per tool, and the file name is the tool name, the same rule Agent Skill
 
 ```python
 # tools/create_ticket.py
-from zetra import action
+from zetra import approval, tool
 from ..contracts import Ticket
 
-@action("ticket.write")
+@approval                                     # a human approves this exact payload before the receiver commits it
+@tool("ticket.write")                         # a write: the body builds the payload, the receiver 'ticket' commits
 def create_ticket(title: str, body: str) -> Ticket:
-    """Propose one investigation ticket. A human approves this exact payload;
-    the receiver bound to ticket.write commits it at most once per incident."""
+    """Propose one investigation ticket for the incident."""
     return Ticket(title=title, body=body)
 ```
 
 ```python
 # tools/summarize_status.py
-from zetra import read
+from zetra import tool
 
-@read("mcp.read_status")                      # a local read; MCP tools themselves need no Python at all
+@tool("status.read")                          # a read: retries freely, no receiver; MCP tools need no Python at all
 async def summarize_status(status: str) -> str: ...
 ```
 
-Two decorators replace the seven-argument `@tool` of revision 1, because most argument combinations were invalid and needed rules to reject them. `@read(capability)` marks a tool whose Activity may retry freely. `@action(capability)` marks a consequential or reversible write, and its body is a **pure, synchronous, deterministic payload builder**: it may only construct the payload contract model from its arguments (an AST rule; time, randomness and I/O are compile errors). The developer never sees a grant, an idempotency key or a receiver client. The SDK owns the whole path from proposal to commit (section 4.3), so "approve A, commit B", grant reuse and commit-without-approval are unreachable from agent code. Decorator arguments must be literals so `zetra check` reads them without importing the module. The receiver is derived from the capability's resource (`ticket.write` binds the receiver named `ticket`), its retry contract comes from the receiver's `describe()` self-test at worker start, and every `@action` requires human approval; per-capability policy is deferred to the capability registry in a later phase (section 2.7).
+Two decorators, and neither encodes anything the capability ID does not already say. `@tool(capability)` registers the function; the capability's operation names the effect, as `analysis.py` already assumes today (`*.read` is a read, `*.write` is a write, and an operation outside the vocabulary is a compile error rather than a silent read). `@approval` stacks on any tool and maps one to one onto upstream `requires_approval=True`: for a write it binds the grant to the payload, for a read to the validated arguments, so a sensitive export can need a human just as a ticket does. Approval is orthogonal to effect because both halves occur alone: a label change is a write nobody approves, an export of personal records is a read somebody must.
+
+A write's body is a **pure, synchronous, deterministic payload builder**: it may only construct the payload contract model from its arguments (an AST rule; time, randomness and I/O are compile errors), with or without `@approval`, because the receiver commits every write and recomputes the digest from the payload. The developer never sees a grant, an idempotency key or a receiver client; the SDK owns the path from proposal to commit (section 4.3), so "approve A, commit B", grant reuse and commit without approval are unreachable from agent code. Decorator arguments must be literals so `zetra check` reads them without importing the module. The receiver is the capability's resource (`ticket.write` binds the receiver named `ticket`) and its retry contract comes from the receiver's `describe()` self-test at worker start; per-capability policy is deferred to the capability registry (section 2.7).
 
 ### 2.4 The test
 
@@ -147,7 +149,7 @@ The same test runs in-process and, under `pytest --zetra-durable`, on Temporal's
 
 ### 2.5 `zetra.lock`
 
-Decorators put authority facts in Python, which reviewers read less carefully than YAML. The generated, committed `zetra.lock` closes that gap: it records the tool matrix (name, capability, receiver, approval mode, key template, schema digest), MCP tool schema digests, skill file digests, the resolved capability stack and every frozen durable identifier (section 5.7). `zetra check` fails when it is stale, so a pull request shows every authority change even when only Python changed, and the same file is the baseline for the versioning diff before a release.
+Decorators put authority facts in Python, which reviewers read less carefully than YAML. The generated, committed `zetra.lock` closes that gap: it records the tool matrix (name, capability, effect, receiver, approval, key template, schema digest), MCP tool schema digests, skill file digests, the resolved capability stack and every frozen durable identifier (section 5.7). `zetra check` fails when it is stale, so a pull request shows every authority change even when only Python changed, and the same file is the baseline for the versioning diff before a release.
 
 ### 2.6 What is not written per agent
 
@@ -158,7 +160,7 @@ No `factory.py`, workflow class, activities module, worker entry point, request 
 The first SDK release leaves these out so the authored surface stays an Agent Spec plus code. Each has a designed home (see the brainstorm appendix) and returns as a later phase without changing the developer files above:
 
 - **Ownership and governance files** (`ownership.yaml`, `governance.yaml`): owner, business function, data classification, risk raises, exceptions. Until then the project `zetra.toml` carries one owner, and the tier is computed from tool effects alone.
-- **Capability registry**: per-capability approval policy, approvers, TTL, retry contract, scopes and data class. Until then every `@action` needs a human approval under one project-wide approver setting, and the receiver is the capability's resource name.
+- **Capability registry**: per-capability approval policy, approvers, TTL, retry contract, scopes and data class. Until then `@approval` is the only approval policy, under one project-wide approver setting, and the receiver is the capability's resource name.
 - **Business keys and tenancy**: cross-workflow idempotency, tenant-scoped receivers, namespace-per-tenant isolation. Until then keys are per workflow and deployments are single-tenant.
 - **Bindings** for non-serializable clients beyond receivers and the gateway.
 
@@ -197,14 +199,14 @@ Two upstream facts constrain everything below. **Approval is not authorization**
 
 ### 4.1 Compiler contract
 
-`zetra build` produces an `AgentBundle` (JSON) whose digest is the `release_id` used by evidence, the gateway and the receiver. It performs no I/O beyond reading the package and imports only `contracts.py`. It fails closed on: a tool whose capability is not `resource.operation`; an `@action` with a non-literal argument or a non-pure body; a skill with unsupported frontmatter, symlinks or external references; a `Skills` entry without an include list or pointing outside the package; a Zetra key anywhere in the spec; any spec capability type outside the reviewed allowlist, any provider-native tool, any `model:` not of the form `approved:*`, any `extra_body`/`extra_headers`; a deps model with forbidden fields or over 8 KiB; a timeout chain that does not hold (provider timeout < start-to-close < schedule-to-close < active deadline < execution timeout); a worst-case cost bound above `budgets.cost_usd`; a stale `zetra.lock`.
+`zetra build` produces an `AgentBundle` (JSON) whose digest is the `release_id` used by evidence, the gateway and the receiver. It performs no I/O beyond reading the package and imports only `contracts.py`. It fails closed on: a tool whose capability is not `resource.operation`; a write tool with a non-literal argument or a non-pure body; a skill with unsupported frontmatter, symlinks or external references; a `Skills` entry without an include list or pointing outside the package; a Zetra key anywhere in the spec; any spec capability type outside the reviewed allowlist, any provider-native tool, any `model:` not of the form `approved:*`, any `extra_body`/`extra_headers`; a deps model with forbidden fields or over 8 KiB; a timeout chain that does not hold (provider timeout < start-to-close < schedule-to-close < active deadline < execution timeout); a worst-case cost bound above `budgets.cost_usd`; a stale `zetra.lock`.
 
 Errors follow the deep dive's shape: one violated requirement, its evidence, the next action and what that action costs, under stable namespaced codes (`ZT-MAN`, `ZT-CON`, `ZT-TOOL`, `ZT-SKILL`, `ZT-DEP`, `ZT-BIND`, `ZT-RISK`, `ZT-EVID`, `ZT-DIFF`, `ZT-LOCK`, `ZT-RUN`; agentctl codes keep their numbers). Runtime denials use the same code space and carry the bundle digest, so a failing generated scenario points at its rule. Output is text, JSON or SARIF; `zetra explain <code>` works offline; security rules cannot be suppressed inline.
 
 ```text
-error[ZT-TOOL-004]: create_ticket is an @action but its body is not a pure payload builder
+error[ZT-TOOL-004]: create_ticket is a write tool but its body is not a pure payload builder
   --> agents/incident_triage/tools/create_ticket.py:9   body=f"{body} (filed {datetime.now():%Y-%m-%d})"
-   requirement  an action body is re-run on resume to recompute the approved digest, so it may only build the
+   requirement  a write body is re-run on resume to recompute the approved digest, so it may only build the
                 payload from its arguments: no time, randomness or I/O
    evidence     call to datetime.now at line 9
    next         move the timestamp into the receiver, which stamps receipts, or pass it as a tool argument
@@ -241,7 +243,7 @@ This is the part of the design that survived the red team and that every other c
 
 ```text
 model proposes create_ticket(args)
-  │ ZetraPolicy.before_tool_execute (workflow): action tool, not yet approved -> ApprovalRequired
+  │ ZetraPolicy.before_tool_execute (workflow): @approval tool, not yet approved -> ApprovalRequired
   ▼
 1 prepare   workflow runs the pure payload builder; `receiver.prepare` activity validates the payload against the
             receiver's own schema, canonicalizes it (RFC 8785 JCS), returns {action_digest, preview, schema_version}
@@ -281,7 +283,7 @@ The SDK's job is to make the independent column reachable from the same bundle (
 
 | Profile | Where the agent loop runs | Use |
 | --- | --- | --- |
-| `durable` (default when any `@action` exists) | workflow code drives `agent.iter()`; each model request, tool call, MCP `get_tools`/`call_tool` and `validate_args` is its own Activity on the agent's worker | agents whose tools are receivers or gateway MCP calls; isolation is the worker pod, namespace, network policy and gateway identity |
+| `durable` (default when any write tool exists) | workflow code drives `agent.iter()`; each model request, tool call, MCP `get_tools`/`call_tool` and `validate_args` is its own Activity on the agent's worker | agents whose tools are receivers or gateway MCP calls; isolation is the worker pod, namespace, network policy and gateway identity |
 | `durable` + `isolation: sandboxed` | one coarse Activity hands bundle and input to a sandbox bridge (OpenShell) and returns a typed result | agents that must run untrusted or file-heavy code; keeps today's coarse semantics and loses per-step durability (decision 7) |
 | local (`zetra run`, tests) | `agent.run()` in-process with fixture bindings and terminal approval | development and deterministic evals; production receiver adapters refuse to bind in this mode |
 
@@ -461,7 +463,7 @@ Four rules (from the evidence brainstorm): every case pairs an **attack with an 
 | Phase | Deliverable | Exit evidence |
 | --- | --- | --- |
 | 0. Spike (1–2 weeks) | Port `examples/incident-triage` to PydanticAI v2 + `TemporalDurability` with the inline gate and an approval Update; fixture receiver with `prepare`/`commit`; resolve the section 10 list | demo on the local Temporal dev server; recorded history replays; measured per-agent line count and inner-loop timings |
-| 1. Compiler and local runtime | Agent Spec loader, `AgentBundle`, `zetra.lock`, `@read`/`@action` with AST rules, `RunDeps`, `ZetraToolset`, `ZetraPolicy`, `ZetraSkills`, coded errors, `zetra new/check/run/explain`, pytest plugin with generated scenarios | `just check` green; all examples compiled from manifests with no `factory.py`; mutant self-tests |
+| 1. Compiler and local runtime | Agent Spec loader, `AgentBundle`, `zetra.lock`, `@tool`/`@approval` with AST rules, `RunDeps`, `ZetraToolset`, `ZetraPolicy`, `ZetraSkills`, coded errors, `zetra new/check/run/explain`, pytest plugin with generated scenarios | `just check` green; all examples compiled from manifests with no `factory.py`; mutant self-tests |
 | 2. Durable runtime and receiver protocol | `ZetraAgentWorkflow`, `RunState`, Update validator, retry matrix, stop with fence and reconcile, continue-as-new, codec and encoded failures, `Receiver` protocol (SQLite reference + conformance kit), signed grants with receiver-held keys, `zetra dev/replay/approve/stop/status` | time-skipping tests, replay fixtures, worker-crash and duplicate-delivery tests, the full `approval.*` family green against the reference receiver |
 | 3. Identity and front door | run tickets from an authenticated front door, one release per worker deployment, namespace per tier, Worker Versioning with upgrade-on-continue-as-new, approval service contract | lab run with forged-deps, foreign-bundle and revoked-epoch scenarios refused |
 | 4. Gateway, budgets and telemetry | `GatewayMCPToolset` over agentgateway on the current MCP revision, compiled CEL rules, LLM gateway holding provider keys with budget reservations, OTel correlation and redaction evidence | lab reproduction of the existing gateway and telemetry evidence through the new runtime; `budget.*` and `history.no_plaintext` green |
