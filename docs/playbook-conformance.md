@@ -26,17 +26,18 @@ Status uses the repository's existing vocabulary, so a target is never mistaken 
 | 10. Security and governance | [Governance guide](governance.html); OpenShell sandbox, Tetragon and network policy | Lab-qualified; OpenShell on Kubernetes is experimental upstream |
 | 11. Production readiness | `zetra render` at zero replicas, `zetra catalog` candidates, worker qualification | Candidate; production activation is withheld |
 | 12. Implementation patterns | This repository; [PydanticAI and Temporal reference](reference/pydanticai-temporal/agent-reference-implementation.md) | Implemented for the selected stack |
-| 13. Risk assessment | `zetra check` risk analysis in `src/zetra/analysis.py` | Implemented in part; the playbook's full risk-assessment schema is a gap |
+| 13. Risk assessment | `zetra check` risk analysis in `src/zetra/analysis.py`; `agentctl risk validate` against the full risk-assessment schema | Implemented; the two are not yet unified |
 
 ## Multi-Agent Systems Playbook
 
 | Chapter | Zetra answer | Status |
 | --- | --- | --- |
-| 1 to 5. Principles, architecture, system contract, roles, delegation | [Multi-agent reference implementation](reference/pydanticai-temporal/multi-agent-reference-implementation.md) | Target; Zetra runs single agents today |
+| 1 to 5. Principles, architecture, system contract, roles, delegation | `agentctl system scaffold/validate/graph`; [multi-agent reference implementation](reference/pydanticai-temporal/multi-agent-reference-implementation.md) | System Spec validation implemented; execution is target, as Zetra runs single agents today |
 | 6. Durable coordination | [Temporal coordination reference](reference/pydanticai-temporal/temporal-durable-coordination.md) | Target |
-| 7 to 13. Evaluation, observability, cost, security, readiness, patterns, risk | Not yet implemented beyond the single-agent equivalents above | Gap |
+| 7 to 12. Evaluation, observability, cost, security, readiness, patterns | Not yet implemented beyond the single-agent equivalents above | Gap |
+| 13. System risk assessment | `agentctl risk validate` | Implemented as validation |
 
-The `agentctl` tool that used to ship with the Playbooks validated System Specs and system risk assessments. Where it ends up in Zetra is tracked separately; until then the multi-agent rows stay at target or gap.
+[`agentctl`](../tools/agentctl/README.md), which moved here from the Playbooks, already validates System Specs, risk assessments and skills and renders composition graphs. It runs alongside the `zetra` CLI until its commands fold in; the multi-agent runtime rows stay at target until Zetra executes a composed system.
 
 ## Keeping this map honest
 

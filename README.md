@@ -1,8 +1,14 @@
 # Zetra — ZEro-TRust Agents
 
-Zetra is an opinionated system for building, evaluating, deploying and governing AI agents on zero-trust principles. It implements the technology-neutral guidance in the [Playbooks](https://github.com/X-McKay/playbooks) with specific choices: framework-neutral Python agents, Temporal for durable execution, Kubernetes for deployment, an MCP gateway for tool access, and sandbox and kernel-level controls for confinement.
+Zetra is a wrapper SDK and toolset for building zero-trust AI agents that scale. It wraps whichever agent framework a team uses with the controls the [Playbooks](https://github.com/X-McKay/playbooks) call for: a typed agent manifest, explicitly allowlisted capabilities, single-use approval grants for consequential actions, a mediated tool gateway, durable execution, evidence-gated releases and confinement at deployment. Its stack choices are deliberate: framework-neutral Python agents, Temporal for durable execution, Kubernetes for deployment, an MCP gateway for tool access, and sandbox and kernel-level controls for containment.
 
-The Playbooks explain what good looks like and why. Zetra is one concrete answer to how, and it is where SDK-specific code, adapters, tooling and evidence live. See the [playbook conformance map](docs/playbook-conformance.md) for which chapter each part of Zetra implements.
+It ships three things:
+
+- **The SDK** (`src/zetra/`): runtime dependencies, the manifest contract, the gateway client and the Temporal workflow and worker that an agent package builds on.
+- **The tools**: the `zetra` CLI for scaffolding, static checks, evaluation, evidence, rendering and catalog candidates, plus [`agentctl`](tools/agentctl/README.md) for multi-agent System Specs, risk contracts and skill validation until it folds into `zetra`.
+- **An end-to-end reference example**: [incident triage](examples/incident-triage/README.md), which follows one incident from runbook and status reads through an exact approval to a ticket, retry and stop. The [walkthrough](docs/use-case-walkthrough.html) explains each step.
+
+The Playbooks explain what good looks like and why, without naming SDKs. Zetra is one concrete answer to how, and it is where SDK-specific code, adapters, tooling and evidence live. The [playbook conformance map](docs/playbook-conformance.md) shows which chapter each part of Zetra implements and how far it has been proven.
 
 ## Zero-trust principles
 
@@ -81,6 +87,7 @@ schemas/           Manifest wire contract
 integrations/      Local kind environment, live fixtures and evidence
 scripts/           HTML builder and document QA
 skills/            Draft Codex/Claude workflow and adapter skills
+tools/agentctl/    Multi-agent, risk and skill validation CLI moved from the Playbooks
 flake.nix          Locked Nix development environment
 mise.toml          Pinned host tools alternative
 uv.lock            Python/runtime/quality tool resolution
