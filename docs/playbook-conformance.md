@@ -12,6 +12,8 @@ Status uses the repository's existing vocabulary, so a target is never mistaken 
 
 ## Agent Playbook
 
+Chapters 1 to 8 are the playbook's Core part; chapters 9 to 13 are Advanced concepts.
+
 | Chapter | Zetra answer | Status |
 | --- | --- | --- |
 | 1. Principles and scope | [Zero-trust principles](../README.md#zero-trust-principles); [security boundaries](../SECURITY.md) | Implemented as policy; enforcement varies by row below |
@@ -19,14 +21,14 @@ Status uses the repository's existing vocabulary, so a target is never mistaken 
 | 3. Agent contract | Manifest schema `schemas/agent-v1alpha1.schema.json`, loader `src/zetra/manifest.py`, typed factories in `examples/` | Implemented (v1alpha1) |
 | 4. Skills | Capabilities registered in the manifest; repository workflow skills under `skills/` | Implemented as logical registration; no independent skill isolation |
 | 5. Tools | Restricted MCP client `src/zetra/gateway.py` behind agentgateway | Implemented; gateway read lab-qualified |
-| 6. Durable execution | `src/zetra/temporal_workflow.py`, `src/zetra/temporal_worker.py`; [Temporal reference](reference/pydanticai-temporal/temporal-execution.md) | Implemented; worker history replay lab-qualified |
-| 7. Evaluation | `zetra eval` and scenario suites in `examples/*/evals/` | Implemented; evidence is unsigned |
-| 8. Observability | OpenTelemetry collector fixture, gateway trace correlation | Lab-qualified for fixture-specific assertions |
-| 9. Cost optimization | Manifest budgets enforced by cooperative runtime checks | Implemented as cooperative checks; spend accounting for paid models is a gap |
-| 10. Security and governance | [Governance guide](governance.html); OpenShell sandbox, Tetragon and network policy | Lab-qualified; OpenShell on Kubernetes is experimental upstream |
-| 11. Production readiness | `zetra render` at zero replicas, `zetra catalog` candidates, worker qualification | Candidate; production activation is withheld |
-| 12. Implementation patterns | This repository; [PydanticAI and Temporal reference](reference/pydanticai-temporal/agent-reference-implementation.md) | Implemented for the selected stack |
-| 13. Risk assessment | `zetra check` risk analysis in `src/zetra/analysis.py`; `agentctl risk validate` against the full risk-assessment schema | Implemented; the two are not yet unified |
+| 6. Evaluation | `zetra eval` and scenario suites in `examples/*/evals/` | Implemented; evidence is unsigned |
+| 7. Observability | OpenTelemetry collector fixture, gateway trace correlation | Lab-qualified for fixture-specific assertions |
+| 8. Production readiness | `zetra render` at zero replicas, `zetra catalog` candidates, worker qualification | Candidate; production activation is withheld |
+| 9. Durable execution and human approval | `src/zetra/temporal_workflow.py`, `src/zetra/temporal_worker.py`; [Temporal reference](reference/pydanticai-temporal/temporal-execution.md) | Implemented; worker history replay lab-qualified |
+| 10. Cost optimization | Manifest budgets enforced by cooperative runtime checks | Implemented as cooperative checks; spend accounting for paid models is a gap |
+| 11. Security and governance | [Governance guide](governance.html); OpenShell sandbox, Tetragon and network policy | Lab-qualified; OpenShell on Kubernetes is experimental upstream |
+| 12. Risk assessment | `zetra check` risk analysis in `src/zetra/analysis.py`; `agentctl risk validate` against the full risk-assessment schema | Implemented; the two are not yet unified |
+| 13. Implementation patterns | This repository; [PydanticAI and Temporal reference](reference/pydanticai-temporal/agent-reference-implementation.md) | Implemented for the selected stack |
 
 ## Multi-Agent Systems Playbook
 
