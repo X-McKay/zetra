@@ -95,7 +95,7 @@ Input, Output = Incident, TriageResult       # the two names the compiler binds
 
 `contracts.py` may import only `pydantic`, `typing`, `enum`, `datetime` and `zetra.Contract` (rule `ZT-CON-001`), which makes it safe for `zetra check` to import for schema export and serializability checks while still never importing tool code. Fields with a `pattern` need `examples=` so generated tests never synthesize values from regular expressions.
 
-There is **no developer-defined deps class**. The workflow stamps a frozen `RunDeps` (`run`, `release`, `deadline`, `principal` of the caller) from the start request and the bundle, never from caller-supplied JSON, and the compiler caps it at 8 KiB because PydanticAI copies deps into every activity payload. Receivers are reached only through `@action`, the gateway only through `GatewayMCP`, so no agent needs any other client; a general binding mechanism for non-serializable clients is deferred (section 2.7).
+There is **no developer-defined deps class**. The workflow stamps a frozen `RunDeps` (`run`, `release`, `deadline`, `principal` of the caller) from the start request and the bundle, never from caller-supplied JSON, and the compiler caps it at 8 KiB because PydanticAI copies deps into every activity payload. Receivers are reached only through write tools, the gateway only through `GatewayMCP`, so no agent needs any other client; a general binding mechanism for non-serializable clients is deferred (section 2.7).
 
 ### 2.3 `tools/`
 
@@ -153,7 +153,7 @@ Decorators put authority facts in Python, which reviewers read less carefully th
 
 ### 2.6 What is not written per agent
 
-No `factory.py`, workflow class, activities module, worker entry point, request parsing, capability `require()` calls, approval plumbing, receiver wiring, idempotency keys, telemetry setup, offline MCP fixture, `scenarios.json` or per-scenario test suite. The developer-API brainstorm maps each of seventeen repeated items in today's examples to the SDK element that absorbs it. Two things stay as developer code: domain output rules (registered as PydanticAI output validators, like the developer-starter's "cite only supplied documents" check) and the instructions prose. Custom coordination (section 5.8) exists for multi-agent and deterministic multi-phase work only; the incident-triage plan, approve, commit shape is one `@action` inside one run and needs no custom workflow.
+No `factory.py`, workflow class, activities module, worker entry point, request parsing, capability `require()` calls, approval plumbing, receiver wiring, idempotency keys, telemetry setup, offline MCP fixture, `scenarios.json` or per-scenario test suite. The developer-API brainstorm maps each of seventeen repeated items in today's examples to the SDK element that absorbs it. Two things stay as developer code: domain output rules (registered as PydanticAI output validators, like the developer-starter's "cite only supplied documents" check) and the instructions prose. Custom coordination (section 5.8) exists for multi-agent and deterministic multi-phase work only; the incident-triage plan, approve, commit shape is one `@approval` write tool inside one run and needs no custom workflow.
 
 ### 2.7 Deferred on purpose
 
