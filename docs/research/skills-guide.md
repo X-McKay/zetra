@@ -1,12 +1,15 @@
 # Draft Codex and Claude skills
 
-Zetra includes three repository workflow skills under `skills/`. They are drafts: they guide an assistant through the repository's contracts and evidence; they do not grant deployment authority or provide a runtime security boundary.
+Zetra includes six repository workflow skills under `skills/`: three for Zetra's own contracts and evidence, and three adapter skills for its PydanticAI and Temporal stack, imported from the [Playbooks](https://github.com/X-McKay/playbooks) when that repository became technology-neutral. They are drafts: they guide an assistant through the repository's contracts and evidence; they do not grant deployment authority or provide a runtime security boundary.
 
 | Skill | Use | Expected result |
 | --- | --- | --- |
 | `zetra-agent-development` | Create or change a package, typed factory and evaluation suite | Reviewed implementation, fresh executable evidence and affected quality checks |
 | `zetra-deployment-qualification` | Qualify an explicitly authorized environment | Positive and negative boundary tests, a compatibility tuple and open controls |
 | `zetra-governance-review` | Assess risk, release evidence, publication or revocation | A decision tied to evidence, ownership and unresolved promotion gates |
+| `zetra-pydanticai-agent` | Design a PydanticAI agent package, Agent Spec and typed contracts | A reviewable agent contract on the PydanticAI adapter |
+| `zetra-temporal-agent` | Add durable Temporal execution, approvals and replay tests to one agent | Replay-safe workflows and activities with recovery tests |
+| `zetra-temporal-multi-agent` | Implement durable multi-agent coordination on Temporal | Deterministic coordination with cancellation, compensation and replay tests |
 
 Read `CONTRIBUTING.md` and the skill before enabling it. Each skill has a portable `SKILL.md` with a narrow name and description. `agents/openai.yaml` adds Codex display metadata. The skills deliberately preserve the difference between candidate evidence, runtime discovery, tested enforcement and authorized production promotion.
 
@@ -18,7 +21,8 @@ From the repository root, optionally link the reviewed drafts:
 
 ```bash
 mkdir -p .agents/skills .claude/skills
-for name in zetra-agent-development zetra-deployment-qualification zetra-governance-review; do
+for name in zetra-agent-development zetra-deployment-qualification zetra-governance-review \
+  zetra-pydanticai-agent zetra-temporal-agent zetra-temporal-multi-agent; do
   ln -s "../../skills/$name" ".agents/skills/$name"
   ln -s "../../skills/$name" ".claude/skills/$name"
 done
@@ -28,6 +32,8 @@ These commands intentionally fail when a destination already exists; inspect an 
 
 ## Validation and maintenance
 
-All three drafts passed the skill creator's frontmatter/name validation. An independent agent exercised governance review against the actual action example and correctly withheld production promotion while recognizing the demonstrated SQLite transaction mechanics. It also reviewed deployment instructions for authority preservation and the distinction between discovery and enforcement. The observed results and limits are in [skill-forward-test.md](skill-forward-test.md).
+The three adapter skills were imported unchanged apart from their names and an adapter note; they have not yet been forward-tested against Zetra's examples and may still mention `agentctl`.
+
+The three Zetra workflow drafts passed the skill creator's frontmatter/name validation. An independent agent exercised governance review against the actual action example and correctly withheld production promotion while recognizing the demonstrated SQLite transaction mechanics. It also reviewed deployment instructions for authority preservation and the distinction between discovery and enforcement. The observed results and limits are in [skill-forward-test.md](skill-forward-test.md).
 
 This was an instruction-level forward test, not a runtime test of both products' discovery and invocation. Recheck each supported product after installing a skill. For future changes, use representative tasks: a legitimate implementation change, stale evidence, an attempted permission expansion, a failed negative-path test and a request to publish without authorization. Measure whether the assistant completes authorized work and reports missing controls accurately. Review skill instructions with the same care as CI and release policy.

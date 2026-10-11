@@ -1,5 +1,7 @@
 # Zetra contributor instructions
 
+Zetra is the opinionated, zero-trust implementation of the technology-neutral [Playbooks](https://github.com/X-McKay/playbooks). Concrete stack choices, SDK-specific guidance, code and evidence belong here; generic guidance that applies to any stack belongs in the Playbooks. When a change alters which playbook standard Zetra meets, update `docs/playbook-conformance.md`.
+
 Read `CONTRIBUTING.md`, `SECURITY.md` and the relevant package before changing code. Use `nix develop` or the pinned mise environment, `uv.lock` and the `justfile`. `just check` is the standard local gate; run affected live qualifications separately when a boundary changes.
 
 The editable playbooks are `docs/chapters/*.html`, `docs/research/source-review.html` and `docs/assets/`. Rebuild committed standalone HTML with `just docs`. Keep examples, CLI behavior, schema and prose consistent. The target enterprise architecture is broader than the implemented v0.1 toolkit: distinguish proposals, candidate artifacts, discovery, tested enforcement and approved production operation.
