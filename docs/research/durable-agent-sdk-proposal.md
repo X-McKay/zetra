@@ -1,8 +1,8 @@
 # Proposal: a compiled, zero-trust agent SDK on PydanticAI v2 and Temporal
 
-Status: **proposal for discussion**, revision 5, 2026-10-12. During the review walkthrough the manifest became a plain PydanticAI Agent Spec, and ownership, governance files, business keys, tenancy and the capability registry were deferred to a later phase so the first SDK stays small (section 2.7). Nothing here is implemented or qualified. It describes a target developer experience and architecture for Zetra, grounded in the v0.1 toolkit, the Playbooks, a verified review of PydanticAI v2.55.0 and Temporal Python SDK 1.34.0 ([research notes](durable-agent-sdk-research.md)), and four design brainstorms that critiqued revision 1 ([brainstorm reports](durable-agent-sdk-brainstorm.md): developer API, red team, Temporal runtime design, evidence pipeline). Where this document and the code disagree, the code and its recorded evidence win, per `AGENTS.md`.
+Status: **proposal for discussion**, revision 6, 2026-10-12. During the review walkthrough the manifest became a plain PydanticAI Agent Spec, and ownership, governance files, business keys, tenancy and the capability registry were deferred to a later phase so the first SDK stays small (section 2.7). Nothing here is implemented or qualified. It describes a target developer experience and architecture for Zetra, grounded in the v0.1 toolkit, the Playbooks, a verified review of PydanticAI v2.55.0 and Temporal Python SDK 1.34.0 ([research notes](durable-agent-sdk-research.md)), and four design brainstorms that critiqued revision 1 ([brainstorm reports](durable-agent-sdk-brainstorm.md): developer API, red team, Temporal runtime design, evidence pipeline). Where this document and the code disagree, the code and its recorded evidence win, per `AGENTS.md`.
 
-Reading guide: section 2 is the developer experience, sections 4 to 7 are the design, section 8 is the roadmap, section 9 lists the decisions to make together, section 10 lists what the phase 0 spike must verify, and appendix A is the generated scenario catalogue.
+Reading guide: section 2 is the developer experience and is what the first slice must deliver; sections 4 to 7 describe the full design, most of which belongs to later layers; section 8 is the layered roadmap, starting with a viability slice that is deliberately small; section 9 lists the decisions to make together; section 10 lists what the viability slice must verify; appendix A is the generated scenario catalogue. The rule throughout: **start with the smallest thing that proves the shape, vet it, then add a layer.**
 
 ## 1. The problem in one paragraph
 
@@ -306,30 +306,36 @@ error[ZT-TOOL-004]: create_ticket is a write tool but its body is not a pure pay
    next         move the timestamp into the receiver, which stamps receipts, or pass it as a tool argument
 ```
 
-### 4.2 Runtime assembly and the capability stack
+### 4.2 Runtime assembly, built up in layers
+
+The viability slice assembles an agent with upstream parts and one Zetra capability type. Nothing else is in the stack until the slice has run end to end.
 
 ```python
-def assemble(bundle: AgentBundle, bindings: PlatformBindings, *, model: Model | None = None) -> Agent:
-    contracts = import_contracts(bundle)
-    toolset = ZetraToolset.from_lock(bundle, bindings)          # FunctionToolset + GatewayMCPToolset, lock-verified
-    stack = [
-        Instrumentation(settings=telemetry_settings(bundle)),    # include_content=False unless the tier allows
-        ZetraPolicy(bundle),                                     # allowlist, chain budgets, stop, audit, CAN trigger
-        ApprovalGate(bundle),                                    # proposes, waits, tickets; before TemporalDurability
-        *guardrails_for(bundle),                                 # InputGuardrail / ToolGuardrail / OutputGuardrail
-        *judges_for(bundle),                                     # ToolCallJudge for T2+, explicit stable id
-        ZetraSkills(bundle),                                     # digest-verified SKILL.md, include mandatory
-        ResolveApprovedModel(bindings.model_registry, override=model),
-        SpendLimits(budgets_for(bundle), store=bindings.spend_store),
-    ]
-    if bundle.durable:
-        stack.append(TemporalDurability(**activity_configs(bundle)))   # last, so earlier hooks are durable ops
-    return Agent.from_spec(bundle.agent_spec, name=bundle.name, deps_type=RunDeps,
-                           output_type=contracts.Output | DeferredToolRequests,
-                           toolsets=[toolset], capabilities=stack)
+def assemble(bundle: AgentBundle, bindings: Bindings) -> Agent:
+    toolset = discovered_tools(bundle, bindings)        # the @tool functions plus one MCPToolset per GatewayMCP server
+    return Agent.from_spec(
+        bundle.spec, name=bundle.name, deps_type=RunDeps,
+        output_type=bundle.output | DeferredToolRequests,
+        toolsets=[toolset],
+        capabilities=[TemporalDurability(**bundle.activity_configs)],
+        custom_capability_types=[GatewayMCP, Skills],
+    )
 ```
 
-Ordering is fixed by the SDK. PydanticAI runs `before_*` hooks in capability order and `after_*` in reverse, and under Temporal these hooks run **workflow-side** (verified in the red team), which has two consequences: the stop check sees live workflow state before the next activity is scheduled, and a redaction guardrail that runs after a tool returns is too late to keep the raw result out of history. Redaction therefore also runs inside the tool activity, before it returns.
+Six lines, and every one of them is upstream behaviour: the spec loads with upstream merge rules, `Skills` is the Harness capability unchanged, `requires_approval=True` on `@approval` tools pauses the run with upstream `DeferredToolRequests`, and `TemporalDurability` makes each model request and tool call an activity. Zetra's own code at this layer is the compiler (discovery, lock, activity configs from the retry matrix) and `GatewayMCP`, which at first is a thin wrapper over `MCPToolset` pointed at the gateway.
+
+What each later layer adds to the stack, and only once the previous layer is vetted:
+
+| Layer | Added to `assemble` | Why it waits |
+| --- | --- | --- |
+| 0 viability | nothing beyond the six lines above | proves the shape: spec plus code compiles, runs in-process and on Temporal, one approval round-trips |
+| 1 safety floor | `ZetraPolicy` (allowlist, stop, chain-wide budgets) and `ApprovalGate` (Update with validator, JCS binding, single-use ledger) | needs the generated workflow and the receiver protocol to mean anything |
+| 2 hardening | `Instrumentation` with redaction, guardrails and `ToolCallJudge` by tier, `SpendLimits`, `ResolveApprovedModel` | each is a capability with its own upstream surface; adding them before the gate is solid only widens the test matrix |
+| 3 governance | registry-driven policy, tenancy, `Sandbox`, `AskUser`, conversations | section 2.10 |
+
+Ordering is fixed by the SDK whenever a layer adds a capability: PydanticAI runs `before_*` hooks in capability order and `after_*` in reverse, and under Temporal these hooks run workflow-side, so the stop check sees live state before the next activity is scheduled, and a redaction guardrail that runs after a tool returns is too late to keep the raw result out of history (redaction also runs inside the activity when layer 2 arrives). `TemporalDurability` is always last.
+
+Section 4.3 and sections 5 to 7 describe layers 1 and 2 in full so that the viability slice is built with them in view, not so that they are built first.
 
 ### 4.3 The approval and receiver protocol
 
@@ -554,19 +560,18 @@ Four rules (from the evidence brainstorm): every case pairs an **attack with an 
 - **agentctl fold-in.** `validate`, `skills validate` and `risk validate` become stages of `zetra check`; `release check` runs inside `zetra eval`; about 183 diagnostic codes keep their meaning behind a `codes.yaml` registry with a golden test, except that the `metadata.*` governance rules (AGENT008 to AGENT017) are parked with the deferred governance layer, AGENT006 must accept upstream's `str | list[str]` instructions, and AGENT031 (`instrument: true`) is retired because the field no longer exists upstream; a scan found no 3.12-only syntax, so the plan is to run agentctl's tests on 3.11, port it into `zetra` with `jsonschema` core and `rich` behind a `zetra[ui]` extra, and keep the 3.11 floor.
 - **Inner loop targets** (unmeasured): check on save under 1 s; affected in-process cases under 3 s; Temporal-tier cases 20 to 40 s on pre-push; a tier change prints the scenarios it adds; a failing case prints the risk ID, the attempt, expected and observed fixture state, the likely source line and a reproduce command.
 
-## 8. Roadmap (rough, for discussion)
+## 8. Roadmap: a viability slice, then layers
 
-| Phase | Deliverable | Exit evidence |
+Each layer has an exit test. The next layer starts only when the previous one passes it, and a layer that fails its exit test changes the design rather than being pushed through.
+
+| Layer | Scope | Exit test |
 | --- | --- | --- |
-| 0. Spike (1–2 weeks) | Port `examples/incident-triage` to PydanticAI v2 + `TemporalDurability` with the inline gate and an approval Update; fixture receiver with `prepare`/`commit`; resolve the section 10 list | demo on the local Temporal dev server; recorded history replays; measured per-agent line count and inner-loop timings |
-| 1. Compiler and local runtime | Agent Spec loader, `AgentBundle`, `zetra.lock`, `@tool`/`@approval` with AST rules, `RunDeps`, `ZetraToolset`, `ZetraPolicy`, `ZetraSkills`, coded errors, `zetra new/check/run/explain`, pytest plugin with generated scenarios | `just check` green; all examples compiled from manifests with no `factory.py`; mutant self-tests |
-| 2. Durable runtime and receiver protocol | `ZetraAgentWorkflow`, `RunState`, Update validator, retry matrix, stop with fence and reconcile, continue-as-new, codec and encoded failures, `Receiver` protocol (SQLite reference + conformance kit), signed grants with receiver-held keys, `zetra dev/replay/approve/stop/status` | time-skipping tests, replay fixtures, worker-crash and duplicate-delivery tests, the full `approval.*` family green against the reference receiver |
-| 3. Identity and front door | run tickets from an authenticated front door, one release per worker deployment, namespace per tier, Worker Versioning with upgrade-on-continue-as-new, approval service contract | lab run with forged-deps, foreign-bundle and revoked-epoch scenarios refused |
-| 4. Gateway, budgets and telemetry | `GatewayMCPToolset` over agentgateway on the current MCP revision, compiled CEL rules, LLM gateway holding provider keys with budget reservations, OTel correlation and redaction evidence | lab reproduction of the existing gateway and telemetry evidence through the new runtime; `budget.*` and `history.no_plaintext` green |
-| 5. Deployment and evidence v2 | `render` from the lock (worker deployment, task queue, network policy, gateway policy), image build, evidence v2 with `check --evidence`, nightly live evals, agentctl fold-in | zero-replica render and cluster qualification as today; evidence v2 consumed by `render` |
-| 6. Multi-agent | `ZetraWorkflow.run_agent` on member bundles under a System Spec; child workflows for independent lifecycles | system-level replay and delegation budget tests |
+| **0. Viability slice** (weeks, not months) | The section 2 surface with the six-line `assemble`: spec loader with strict validation, `contracts.py` binding, `tools/` discovery with `@tool` and `@approval`, upstream `Skills`, a thin `GatewayMCP`, the minimal lock, `RunDeps`, a generic workflow that runs `agent.iter()` and resumes after approval with a plain signal, the SQLite receiver generalized to any payload, the `agent` fixture in-process, `zetra new/check/run/dev/worker` | Three archetypes (handbook Q&A, alert responder, scheduled report) compile from their packages and run in-process and on the local Temporal dev server; one approval round-trips as an Update; a recorded history replays; per-agent line counts and inner-loop timings are measured; the section 10 unknowns are answered. If the per-call activity model or the approval pause does not hold up here, the design changes before anything else is built. |
+| **1. Safety floor** | `ZetraPolicy`, `ApprovalGate` with validator and JCS `ActionBinding`, the retry matrix as the only activity config, the receiver `prepare`/`commit` protocol with an unsigned grant and receiver-side digest recomputation, the eleven existing required scenarios generated from the lock, `pytest --durable`, lock diff against the previous lock | The generated scenarios pass against the reference receiver, and the mutant self-tests fail when the policy or the grant check is removed |
+| **2. Hardening** | Signed grants with receiver-held keys, encrypting codec and encoded failures, continue-as-new, fence and reconcile, one release per worker deployment, Worker Versioning with upgrade-on-continue-as-new, `zetra replay`, evidence v2, PR and nightly CI, tier-driven guardrails, judge and spend limits, the full appendix A catalogue | The full catalogue is green in CI; the lab reproduces today's gateway and telemetry evidence through the new runtime; the red-team scenarios (`approval.self_issued`, `identity.bundle_mismatch`, `history.no_plaintext`) are refused |
+| **3. Governance and scale** | Capability registry, ownership and governance files, tenancy and business keys, conversations, `AskUser`, `ArtifactRef`, `Sandbox`, multi-agent coordination, agentctl fold-in | Each item has its own exit test when it is scheduled; none changes the section 2 files |
 
-Phase 1 removes the repeated code; phase 2 is where enforcement starts to live outside the process, and it is deliberately not later than that, because the red team's conclusion is that the in-process controls alone protect against model error and honest bugs only.
+Layer 0 removes the repeated code and is the only layer whose value is certain before it is built. Layer 1 is where enforcement starts to live outside the process; the red team's conclusion is that in-process controls alone protect against model error and honest bugs only, so it follows immediately, but it is not built first.
 
 ## 9. Decisions to make together
 
@@ -582,11 +587,12 @@ Phase 1 removes the repeated code; phase 2 is where enforcement starts to live o
 10. **Skill resources.** Harness `Skills` reads SKILL.md only; the community package adds script execution. Recommendation: no script execution; a skill that needs code becomes a reviewed tool.
 11. **MCP protocol revision.** Move the gateway client to the stateless 2026-07-28 core now, or stay on 2025-11-25 until agentgateway's pinned release supports it, and refuse downgrades while both exist.
 12. **Harness dependency risk.** Pin, wrap and canary (proposed), or vendor Skills, Guardrails and SpendLimits.
-13. **agentctl fold-in and the 3.11 floor.** Proceed as in section 7, or keep agentctl separate until the multi-agent phase.
+13. **Layering.** Resolved: a viability slice with the six-line `assemble` first, then safety, hardening and governance, each gated by an exit test (section 8).
+14. **agentctl fold-in and the 3.11 floor.** Proceed as in section 7, or keep agentctl separate until the multi-agent phase.
 
-## 10. What the phase 0 spike must verify
+## 10. What the viability slice must verify
 
-Items the brainstorms could not confirm against SDK 1.34.0 and PydanticAI v2.55.0, or that only a lab run can answer:
+Items the brainstorms could not confirm against SDK 1.34.0 and PydanticAI v2.55.0, or that only a running slice can answer. Several apply to later layers and are listed so the slice is built with them in view:
 
 1. `ZetraPolicy.before_tool_execute`/`after_tool_execute` run workflow-side around the `call_tool` activity (in-flight tracking assumes it; `_settle` works from ledger state if not).
 2. `AgentRun.cancel()` is safe from a signal handler while `agent.iter` runs in the workflow task; a custom exception from a hook propagates unwrapped out of `agent.iter`; the exception type when a tool activity fails; whether an error hook can call a `@durable_operation` and substitute the tool result.
