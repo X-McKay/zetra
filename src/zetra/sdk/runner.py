@@ -123,6 +123,11 @@ class Session:
                 decl: ToolDecl = self.decls[part.tool_name]
                 args = part.args_as_dict()
                 payload = preview_payload(decl, args, self.deps, self.bundle.input_type)
+                built = (self._result.output.metadata.get(part.tool_call_id) or {}).get("digest")
+                if built is not None and built != payload_digest(payload):
+                    raise Denied(
+                        f"{decl.name}: the preview differs from the payload the tool built"
+                    )
                 self._seq += 1
                 self.pending.append(
                     Pending(

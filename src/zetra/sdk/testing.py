@@ -23,7 +23,7 @@ from .bundle import Bundle, build
 from .contracts import Contract, RunDeps
 from .receiver import MemoryReceiver
 from .runner import Decision, Pending, Session, make_deps
-from .tools import Bindings
+from .tools import Bindings, ensure_importable
 
 
 @dataclass(frozen=True)
@@ -237,6 +237,15 @@ def _package_for(path: Path) -> Path:
 
 try:  # pytest is a development dependency; the plugin is optional at runtime
     import pytest
+
+    def pytest_collect_file(file_path: Path, parent: Any) -> None:
+        """Before a test under an agent package is imported, make the package importable."""
+        if file_path.suffix == ".py":
+            try:
+                ensure_importable(_package_for(file_path.parent))
+            except LookupError:
+                pass
+        return None
 
     @pytest.fixture
     def agent(request: pytest.FixtureRequest) -> AgentUnderTest:

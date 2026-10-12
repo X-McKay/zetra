@@ -20,7 +20,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from pydantic_ai import RunContext
+from pydantic import ValidationError
+from pydantic_ai import ApprovalRequired, ModelRetry, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
 from .contracts import Contract, RunDeps
@@ -221,7 +222,8 @@ def discover_tools(package_dir: Path, input_type: type[Contract]) -> list[ToolDe
                 "ZT-TOOL-017", "decorator metadata does not match the source", where=str(path)
             )
         injects: dict[str, str] = {}
-        for pname, param in inspect.signature(function).parameters.items():
+        for pname, param in inspect.signature(function, eval_str=True).parameters.items():
+            framework_filled = param.annotation is input_type or param.annotation is RunDeps
             if param.kind is inspect.Parameter.KEYWORD_ONLY:
                 if param.annotation is input_type:
                     injects[pname] = "input"
@@ -233,6 +235,13 @@ def discover_tools(package_dir: Path, input_type: type[Contract]) -> list[ToolDe
                         f"keyword-only parameter {pname!r} must be annotated Input or RunDeps",
                         where=str(path),
                     )
+            elif framework_filled:
+                raise CompileError(
+                    "ZT-TOOL-019",
+                    f"parameter {pname!r} is the run's Input or RunDeps and must be keyword-only "
+                    "(after '*'); as a positional parameter the model could supply it",
+                    where=str(path),
+                )
         resource, effect = split_capability(static["capability"])
         decls.append(
             ToolDecl(
@@ -320,20 +329,17 @@ def build_toolset(
         config = activity_config(decl, bindings.tool_timeout)
         if config is not None:
             metadata["temporal"] = config
-        toolset.add_function(
-            wrapper,
-            takes_ctx=True,
-            name=decl.name,
-            requires_approval=decl.approval,
-            metadata=metadata,
-        )
+        # Approval is requested from inside the wrapper (ApprovalRequired) rather than declared
+        # with requires_approval, so the payload is built and validated before anyone is asked.
+        toolset.add_function(wrapper, takes_ctx=True, name=decl.name, metadata=metadata)
     return toolset
 
 
 def _wrap(decl: ToolDecl, input_type: type[Contract], bindings: Bindings) -> Callable[..., Any]:
     function = decl.function
-    signature = inspect.signature(function)
-    hints = function.__annotations__
+    signature = inspect.signature(function, eval_str=True)
+    hints = {n: p.annotation for n, p in signature.parameters.items()}
+    hints["return"] = signature.return_annotation
 
     def injected(ctx: RunContext[RunDeps]) -> dict[str, Any]:
         values: dict[str, Any] = {}
@@ -359,13 +365,19 @@ def _wrap(decl: ToolDecl, input_type: type[Contract], bindings: Bindings) -> Cal
     else:
 
         def write(ctx: RunContext[RunDeps], *args: Any, **kwargs: Any) -> dict[str, Any]:
-            payload = function(*args, **kwargs, **injected(ctx))
+            try:
+                payload = function(*args, **kwargs, **injected(ctx))
+            except ValidationError as exc:  # the model's arguments do not make a valid payload
+                raise ModelRetry(_payload_problem(decl, exc)) from exc
             if not isinstance(payload, Contract):
                 raise Denied(f"{decl.name} must return a Contract payload")
             actual = payload_digest(payload)
             if decl.approval:
                 if not ctx.tool_call_approved:
-                    raise Denied(f"{decl.name} requires approval")
+                    # Pause here, after validation: an approver only ever sees a valid payload.
+                    raise ApprovalRequired(
+                        metadata={"digest": actual, "capability": decl.capability}
+                    )
                 raw = (ctx.tool_call_metadata or {}).get("grant")
                 if raw is None:
                     raise Denied("approved call carries no grant")
@@ -400,6 +412,14 @@ def _wrap(decl: ToolDecl, input_type: type[Contract], bindings: Bindings) -> Cal
     wrapper.__name__ = decl.name
     wrapper.__doc__ = decl.docstring
     return wrapper
+
+
+def _payload_problem(decl: ToolDecl, exc: ValidationError) -> str:
+    problems = []
+    for error in exc.errors()[:5]:
+        field = ".".join(str(part) for part in error["loc"]) or "payload"
+        problems.append(f"{field}: {error['msg']}")
+    return f"{decl.name} cannot build its payload from these arguments: " + "; ".join(problems)
 
 
 def preview_payload(

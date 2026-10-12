@@ -10,13 +10,17 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 try:
     import pydantic_ai  # noqa: F401
@@ -29,6 +33,8 @@ REPO = Path(__file__).resolve().parents[1]
 EXAMPLES = REPO / "examples" / "agents"
 
 if HAVE_SDK:
+    from pydantic_ai.messages import RetryPromptPart
+
     from zetra.cli import main
     from zetra.sdk import CompileError, Contract, Denied
     from zetra.sdk.bundle import build, lock_status
@@ -48,11 +54,16 @@ def _write(path: Path, text: str) -> Path:
 
 
 def _cli(*argv: str) -> tuple[int, dict]:
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+    code, report, _ = _cli_full(*argv)
+    return code, report
+
+
+def _cli_full(*argv: str) -> tuple[int, dict, str]:
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         code = main(list(argv))
     text = out.getvalue()
-    return code, json.loads(text) if text.strip().startswith("{") else {}
+    return code, json.loads(text) if text.strip().startswith("{") else {}, err.getvalue()
 
 
 @unittest.skipUnless(HAVE_SDK, "requires the sdk extra")
@@ -88,6 +99,35 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(report["tools"]["record_note"]["approval"]["mode"], "human")
             code, report = _cli("check", str(root), "--frozen")
             self.assertEqual((code, report["lock"]), (0, "current"))
+            pytest_run = subprocess.run(
+                [sys.executable, "-m", "pytest", str(root), "-q", "-p", "no:cacheprovider"],
+                capture_output=True,
+                text=True,
+                env={**os.environ, "PYDANTIC_AI_NO_BANNER": "1"},
+            )
+            self.assertEqual(pytest_run.returncode, 0, pytest_run.stdout + pytest_run.stderr)
+            self.assertIn("1 passed", pytest_run.stdout)
+
+    def test_positional_input_parameter_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "sdk_positional"
+            _cli("new", str(root), "--write")
+            tool = root / "tools" / "record_note.py"
+            tool.write_text(tool.read_text().replace("text: str, *, request", "text: str, request"))
+            with self.assertRaises(CompileError) as ctx:
+                build(root)
+            self.assertEqual(ctx.exception.code, "ZT-TOOL-019")
+
+    def test_prompt_approval_refuses_to_run_without_a_terminal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "sdk_prompt"
+            _cli("new", str(root), "--write")
+            with patch("sys.stdin", io.StringIO("")):
+                code, report, err = _cli_full(
+                    "run", str(root), "--input", '{"text": "hi"}', "--model", "test"
+                )
+            self.assertEqual((code, report), (1, {}))
+            self.assertIn("needs a terminal", err)
 
     def test_unapproved_irreversible_write_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -287,6 +327,22 @@ class ApprovalLoopTests(unittest.TestCase):
         run = agent.run(self.alert())
         self.assertEqual(run.approvals.pending, [])
         self.assertEqual(run.output, NoAction(reason="gave up"))
+        self.assertEqual(agent.receiver("pager").commits, [])
+
+    def test_invalid_payload_becomes_a_retry_prompt_not_a_proposal(self):
+        from alert_responder.contracts import NoAction
+
+        agent = self.agent()
+        agent.model.script(
+            call("page_oncall", urgency="high", summary="x" * 600),  # Page.summary max 500
+            final(NoAction(reason="could not page")),
+        )
+        run = agent.run(self.alert())
+        self.assertEqual(run.approvals.pending, [])
+        self.assertEqual(run.output, NoAction(reason="could not page"))
+        retries = [p for m in run.messages for p in m.parts if isinstance(p, RetryPromptPart)]
+        self.assertEqual(len(retries), 1)
+        self.assertIn("summary", str(retries[0].content))
         self.assertEqual(agent.receiver("pager").commits, [])
 
     def test_rejection_and_reversible_writes(self):

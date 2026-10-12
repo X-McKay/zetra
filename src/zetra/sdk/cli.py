@@ -150,10 +150,20 @@ def _decide(
         return Decision(True, "cli:auto")
     if mode == "deny":
         return Decision(False, "cli:deny", "denied by --approve deny")
-    answer = input("approve this exact payload? [y/N] ").strip().lower()
+    try:
+        answer = input("approve this exact payload? [y/N] ").strip().lower()
+    except EOFError:
+        answer = ""
     if answer == "y":
         return Decision(True, "cli:prompt")
     return Decision(False, "cli:prompt", "denied at prompt")
+
+
+def _require_terminal(mode: str) -> None:
+    if mode == "prompt" and not sys.stdin.isatty():
+        raise Denied(
+            "--approve prompt needs a terminal to answer in; use --approve auto or --approve deny"
+        )
 
 
 def _approver(mode: str):
@@ -196,6 +206,7 @@ def _stubs(bundle: Bundle, model: str | None) -> dict[str, Any] | None:
 
 
 def run(root: Path, raw_input: str, *, approve: str, model: str | None) -> dict[str, Any]:
+    _require_terminal(approve)
     bundle = build(root)
     value = bundle.input_type.model_validate(json.loads(raw_input))
     agent = assemble(
@@ -233,6 +244,7 @@ async def _dev(
 
     from . import temporal as t
 
+    _require_terminal(approve)
     bundle = build(root)
     value = bundle.input_type.model_validate(json.loads(raw_input))
     agent = assemble(
