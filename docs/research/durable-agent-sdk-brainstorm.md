@@ -74,17 +74,28 @@ Field-level issues in the draft:
 All three compile to the same bundle and the same runtime. Here is the SDK-owned behaviour behind `@action` (a sketch built on documented primitives: `ApprovalRequired(metadata=)`, `DeferredToolResults(metadata=)` arriving as `ctx.tool_call_metadata`, and hooks raising `ApprovalRequired`):
 
 ```python
-class ZetraPolicy(AbstractCapability):                      # workflow side, deterministic
+class ZetraPolicy(AbstractCapability):  # workflow side, deterministic
     async def before_tool_execute(self, ctx, *, call, tool_def, args):
         spec = tool_def.metadata["zetra"]
         if spec.kind == "action" and not ctx.tool_call_approved:
-            binding = ActionBinding.build(ctx.deps, spec, spec.builder(**args))  # JCS over bundle, tool, schema, tenant, actor, key, payload
-            raise ApprovalRequired(metadata={"binding": binding})              # -> approval Update / DeferredToolRequests
+            binding = ActionBinding.build(
+                ctx.deps, spec, spec.builder(**args)
+            )  # JCS over bundle, tool, schema, tenant, actor, key, payload
+            raise ApprovalRequired(
+                metadata={"binding": binding}
+            )  # -> approval Update / DeferredToolRequests
 
-async def run_action(ctx, spec, args) -> Receipt:           # tool-call activity, after approval
-    binding = ActionBinding.build(ctx.deps, spec, spec.builder(**args))      # rebuilt, never read back from history
-    grant = Grant.verify(ctx.tool_call_metadata["grant"], binding)           # digest, expiry, no override_args
-    return await bindings.receiver(spec.receiver).commit(binding, grant)     # receiver re-verifies, consumes atomically
+
+async def run_action(ctx, spec, args) -> Receipt:  # tool-call activity, after approval
+    binding = ActionBinding.build(
+        ctx.deps, spec, spec.builder(**args)
+    )  # rebuilt, never read back from history
+    grant = Grant.verify(
+        ctx.tool_call_metadata["grant"], binding
+    )  # digest, expiry, no override_args
+    return await bindings.receiver(spec.receiver).commit(
+        binding, grant
+    )  # receiver re-verifies, consumes atomically
 ```
 
 #### A. Manifest plus decorators (recommended): 74 lines
@@ -163,14 +174,22 @@ from incident_triage.contracts import Incident, Ticket
 
 from zetra.testing import Harness, tool_call
 
-INCIDENT = Incident(incident_id="INC-2026-0042", service="checkout-api",
-                    severity="warning", summary="Checkout latency alert.")
+INCIDENT = Incident(
+    incident_id="INC-2026-0042",
+    service="checkout-api",
+    severity="warning",
+    summary="Checkout latency alert.",
+)
 TICKET = Ticket(title="Investigate INC-2026-0042", body="checkout-api degraded; runbook applied.")
 
 
-def test_ticket_commits_once_after_exact_approval(harness: Harness):  # fixture from zetra pytest plugin
-    harness.model.script(tool_call("create_ticket", **TICKET.model_dump()),
-                         output={"status": "ticket_created", "evidence": ["status: degraded"]})
+def test_ticket_commits_once_after_exact_approval(
+    harness: Harness,
+):  # fixture from zetra pytest plugin
+    harness.model.script(
+        tool_call("create_ticket", **TICKET.model_dump()),
+        output={"status": "ticket_created", "evidence": ["status: degraded"]},
+    )
     run = harness.start(INCIDENT)
     [pending] = run.pending_approvals
     assert pending.payload == TICKET and harness.receivers["tickets"].commits == []
@@ -189,6 +208,7 @@ How the harness works:
 ```python
 class IncidentTriage(Agent[Incident, TriageResult]):
     """Open one investigation ticket for a checkout-api incident."""
+
     name = "incident-triage"
     business_key = "incident_id"
     model = "approved:balanced-v1"
@@ -220,7 +240,7 @@ class IncidentTriage(Agent[Incident, TriageResult]):
       approval: {approvers: group:service-ops-oncall, ttl: 24h}
 ```
 ```python
-def create_ticket(title: str, body: str) -> Ticket:   # no zetra import
+def create_ticket(title: str, body: str) -> Ticket:  # no zetra import
     """Propose one investigation ticket; a human approves this exact payload."""
     return Ticket(title=title, body=body)
 ```
@@ -586,65 +606,107 @@ Status: design proposal, nothing implemented. This expands section 5 of `docs/re
 
 ```python
 class Phase(StrEnum):
-    RUNNING = "running"; AWAITING_APPROVAL = "awaiting_approval"; RECONCILING = "reconciling"
-    STOPPING = "stopping"; COMPENSATING = "compensating"; CONTINUING = "continuing"; TERMINAL = "terminal"
+    RUNNING = "running"
+    AWAITING_APPROVAL = "awaiting_approval"
+    RECONCILING = "reconciling"
+    STOPPING = "stopping"
+    COMPENSATING = "compensating"
+    CONTINUING = "continuing"
+    TERMINAL = "terminal"
+
 
 class Outcome(StrEnum):
-    COMPLETED = "completed"; REJECTED = "rejected"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
     CANCELLED_WITHOUT_EFFECT = "cancelled_without_effect"
     CANCELLED_AFTER_PARTIAL_EFFECT = "cancelled_after_partial_effect"
-    COMPENSATED = "compensated"; FAILED_RETRYABLE_EXHAUSTED = "failed_retryable_exhausted"
-    FAILED_PERMANENT = "failed_permanent"; NEEDS_INFORMATION = "needs_information"; ESCALATED = "escalated"
+    COMPENSATED = "compensated"
+    FAILED_RETRYABLE_EXHAUSTED = "failed_retryable_exhausted"
+    FAILED_PERMANENT = "failed_permanent"
+    NEEDS_INFORMATION = "needs_information"
+    ESCALATED = "escalated"
 
-class ActionBinding(BaseModel, frozen=True):          # JCS (RFC 8785) + SHA-256 -> action_digest
+
+class ActionBinding(BaseModel, frozen=True):  # JCS (RFC 8785) + SHA-256 -> action_digest
     v: Literal["zetra.action/1"] = "zetra.action/1"
-    workflow_id: str; operation_id: str; bundle_digest: str
-    tool: str; tool_schema_version: str; receiver: str
-    tenant_id: str; resource: str; actor_id: str
-    args: JsonValue; policy_epoch: int; expires_at: AwareDatetime
+    workflow_id: str
+    operation_id: str
+    bundle_digest: str
+    tool: str
+    tool_schema_version: str
+    receiver: str
+    tenant_id: str
+    resource: str
+    actor_id: str
+    args: JsonValue
+    policy_epoch: int
+    expires_at: AwareDatetime
+
 
 class EffectRecord(BaseModel):
     idempotency_key: str
-    status: Literal["unknown", "committed", "refused", "not_found", "indeterminate", "compensated"] = "unknown"
-    receipt_digest: str | None = None; receipt_ref: ArtifactReference | None = None
+    status: Literal[
+        "unknown", "committed", "refused", "not_found", "indeterminate", "compensated"
+    ] = "unknown"
+    receipt_digest: str | None = None
+    receipt_ref: ArtifactReference | None = None
+
 
 class Proposal(BaseModel):
-    operation_id: str                  # "<workflow-id>:c000017:<op-version>" (section 4)
-    call_seq: int; provider_tool_call_id: str
-    binding: ActionBinding; action_digest: str
+    operation_id: str  # "<workflow-id>:c000017:<op-version>" (section 4)
+    call_seq: int
+    provider_tool_call_id: str
+    binding: ActionBinding
+    action_digest: str
     mode: Literal["human", "policy", "none"]
-    status: Literal["pending", "approved", "rejected", "expired", "ticketed",
-                    "committed", "failed", "revoked"] = "pending"
-    created_at: AwareDatetime; expires_at: AwareDatetime
-    grant_id: str | None = None; receipt: ApprovalReceipt | None = None
+    status: Literal[
+        "pending", "approved", "rejected", "expired", "ticketed", "committed", "failed", "revoked"
+    ] = "pending"
+    created_at: AwareDatetime
+    expires_at: AwareDatetime
+    grant_id: str | None = None
+    receipt: ApprovalReceipt | None = None
     effect: EffectRecord | None = None
 
+
 class Ledger(BaseModel):
-    proposals: dict[str, Proposal] = {}          # insertion-ordered, keyed by operation_id
-    applied: dict[str, str] = {}                 # approval_id -> receipt_hash (cross-run dedup)
-    head: str = "0" * 64                         # receipt hash chain (prev_receipt_hash)
+    proposals: dict[str, Proposal] = {}  # insertion-ordered, keyed by operation_id
+    applied: dict[str, str] = {}  # approval_id -> receipt_hash (cross-run dedup)
+    head: str = "0" * 64  # receipt hash chain (prev_receipt_hash)
     next_call_seq: int = 1
-    max_pending: int = 8                         # stays under the server's 10 in-flight Updates
+    max_pending: int = 8  # stays under the server's 10 in-flight Updates
+
 
 class Budget(BaseModel):
-    max_model_requests: int; max_tool_calls: int; max_cost_usd: Decimal; max_active_seconds: int
-    model_requests: int = 0; tool_calls: int = 0; cost_usd: Decimal = Decimal(0)
-    cost_unknown_requests: int = 0                # unknown cost is never counted as zero
-    active_seconds: float = 0.0                   # RUNNING phases only; approval waits excluded
+    max_model_requests: int
+    max_tool_calls: int
+    max_cost_usd: Decimal
+    max_active_seconds: int
+    model_requests: int = 0
+    tool_calls: int = 0
+    cost_usd: Decimal = Decimal(0)
+    cost_unknown_requests: int = 0  # unknown cost is never counted as zero
+    active_seconds: float = 0.0  # RUNNING phases only; approval waits excluded
+
 
 class RunState(BaseModel):
-    schema_version: Literal[1] = 1                # migrate() in @workflow.init when bumped
-    workflow_id: str; segment: int = 0            # continue-as-new generation
-    bundle_digest: str; policy_epoch: int; approval_keys: dict[str, str]   # kid -> pinned Ed25519 key
-    deps: ZetraDeps                               # small; copied into every Activity
+    schema_version: Literal[1] = 1  # migrate() in @workflow.init when bumped
+    workflow_id: str
+    segment: int = 0  # continue-as-new generation
+    bundle_digest: str
+    policy_epoch: int
+    approval_keys: dict[str, str]  # kid -> pinned Ed25519 key
+    deps: ZetraDeps  # small; copied into every Activity
     phase: Phase = Phase.RUNNING
-    outcome: Outcome | None = None; outcome_reason: str | None = None
-    budget: Budget; ledger: Ledger = Ledger()
+    outcome: Outcome | None = None
+    outcome_reason: str | None = None
+    budget: Budget
+    ledger: Ledger = Ledger()
     stop: StopRequest | None = None
     artifacts: list[ArtifactReference] = []
-    conversation: ConversationCarry | None = None # inline JSON or ArtifactReference
+    conversation: ConversationCarry | None = None  # inline JSON or ArtifactReference
     compensations: list[CompensationObligation] = []
-    deadline_at: AwareDatetime                    # business deadline (absolute, survives CAN)
+    deadline_at: AwareDatetime  # business deadline (absolute, survives CAN)
 ```
 
 **Transitions.** All transitions go through `state.transition()`, which raises `IllegalTransition`. That type is listed in `@workflow.defn(failure_exception_types=…)`, so a bug fails the workflow with a typed error instead of looping on workflow-task retries.
@@ -680,53 +742,69 @@ Governed outcomes, including `failed_*`, are **returned** as `RunOutcome`, so th
 ### 2. Workflow class and message handlers
 
 ```python
-@workflow.defn(name="zetra.agent", versioning_behavior=VersioningBehavior.PINNED,
-               failure_exception_types=[IllegalTransition, ContractError])
+@workflow.defn(
+    name="zetra.agent",
+    versioning_behavior=VersioningBehavior.PINNED,
+    failure_exception_types=[IllegalTransition, ContractError],
+)
 class ZetraAgentWorkflow(PydanticAIWorkflow):
-    __pydantic_ai_agents__ = REGISTRY.agents()            # module-level, frozen per worker build
+    __pydantic_ai_agents__ = REGISTRY.agents()  # module-level, frozen per worker build
 
     @workflow.init
-    def __init__(self, req: Start | Continuation) -> None:   # discriminated union on `kind`
-        self.state = migrate(req.state) if req.kind == "continuation" \
+    def __init__(self, req: Start | Continuation) -> None:  # discriminated union on `kind`
+        self.state = (
+            migrate(req.state)
+            if req.kind == "continuation"
             else RunState.start(req, workflow.info(), workflow.now())
+        )
         self._run: AgentRun | None = None
 
     @workflow.signal
     def stop(self, req: StopRequest) -> None:
         if self.state.stop is None and self.state.phase is not Phase.TERMINAL:
-            self.state.stop = req.stamped(workflow.now())       # first stop wins; duplicates are no-ops
+            self.state.stop = req.stamped(workflow.now())  # first stop wins; duplicates are no-ops
             if self._run is not None:
-                self._run.cancel()                              # RunCancelled at the run's next await
+                self._run.cancel()  # RunCancelled at the run's next await
 
     @workflow.update
     def approve(self, d: ApprovalDecision) -> ApprovalReceipt:
         return self.state.ledger.apply(d, workflow.current_update_info().id, workflow.now())
 
     @approve.validator
-    def _check_approve(self, d: ApprovalDecision) -> None:      # pure: no mutation, no I/O
-        self.state.ledger.check(d, workflow.current_update_info().id, workflow.now(),
-                                workflow.info().workflow_id, self.state)
+    def _check_approve(self, d: ApprovalDecision) -> None:  # pure: no mutation, no I/O
+        self.state.ledger.check(
+            d,
+            workflow.current_update_info().id,
+            workflow.now(),
+            workflow.info().workflow_id,
+            self.state,
+        )
 
     @workflow.query
-    def status(self) -> RunStatus: return self.state.status_view()
+    def status(self) -> RunStatus:
+        return self.state.status_view()
 
     @workflow.query
-    def pending_approvals(self) -> list[PendingApproval]: return self.state.ledger.pending_view()
+    def pending_approvals(self) -> list[PendingApproval]:
+        return self.state.ledger.pending_view()
 
     @workflow.run
     async def run(self, req: Start | Continuation) -> RunOutcome:
-        agent = REGISTRY.bundle(self.state.bundle_digest).agent    # unknown digest -> ContractError
+        agent = REGISTRY.bundle(self.state.bundle_digest).agent  # unknown digest -> ContractError
         try:
             while True:
                 try:
-                    async with agent.iter(**self.state.resume_kwargs(),   # input | conversation (+results)
-                                          deps=self.state.deps,
-                                          conversation_id=self.state.workflow_id,
-                                          usage_limits=self.state.budget.remaining_limits()) as run:
+                    async with agent.iter(
+                        **self.state.resume_kwargs(),  # input | conversation (+results)
+                        deps=self.state.deps,
+                        conversation_id=self.state.workflow_id,
+                        usage_limits=self.state.budget.remaining_limits(),
+                    ) as run:
                         self._run = run
-                        async for _ in run: pass
+                        async for _ in run:
+                            pass
                     result = run.result
-                except ContinueAsNewRequested:                    # raised by ZetraPolicy.before_model_request
+                except ContinueAsNewRequested:  # raised by ZetraPolicy.before_model_request
                     await self._continue_as_new()
                 except RunCancelled as rc:
                     self.state.carry(rc.all_messages())
@@ -740,7 +818,7 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
                         await self._continue_as_new()
                     continue
                 return await self._settle(self.state.outcome_for(result.output))
-        except asyncio.CancelledError:                            # operator cancel: same cleanup, status Cancelled
+        except asyncio.CancelledError:  # operator cancel: same cleanup, status Cancelled
             await self._settle(Outcome.CANCELLED_WITHOUT_EFFECT)
             raise
         except ActivityError as e:
@@ -748,10 +826,12 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
 
     async def _settle(self, provisional: Outcome) -> RunOutcome:
         self.state.transition(Phase.STOPPING if self.state.stop else Phase.RECONCILING)
-        for p in self.state.ledger.unsettled():                   # ticketed but no observed receipt
+        for p in self.state.ledger.unsettled():  # ticketed but no observed receipt
             if self.state.stop:
                 await workflow.execute_activity("zetra.receiver.revoke", p.fence(), **FENCE_CFG)
-            p.effect = await workflow.execute_activity("zetra.receiver.reconcile", p.lookup(), **RECONCILE_CFG)
+            p.effect = await workflow.execute_activity(
+                "zetra.receiver.reconcile", p.lookup(), **RECONCILE_CFG
+            )
         outcome = self.state.final_outcome(provisional)
         if outcome is Outcome.CANCELLED_AFTER_PARTIAL_EFFECT and self.state.compensable():
             outcome = await self._compensate()
@@ -760,19 +840,24 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
         return RunOutcome.from_state(self.state)
 
     async def _continue_as_new(self) -> NoReturn:
-        self.state.transition(Phase.CONTINUING)                  # approve stays accepted (sync handler)
+        self.state.transition(Phase.CONTINUING)  # approve stays accepted (sync handler)
         await workflow.wait_condition(workflow.all_handlers_finished)
         workflow.continue_as_new(
-            Continuation(state=self.state.for_next_segment()),   # segment+1, compacted ledger, conversation carry
+            Continuation(
+                state=self.state.for_next_segment()
+            ),  # segment+1, compacted ledger, conversation carry
             initial_versioning_behavior=ContinueAsNewVersioningBehavior.AUTO_UPGRADE
-            if workflow.info().is_target_worker_deployment_version_changed() else None)
+            if workflow.info().is_target_worker_deployment_version_changed()
+            else None,
+        )
 ```
 
 The inline gate is the default. It is a workflow-side capability placed before `TemporalDurability` in the stack. The compiler marks **every** write tool `requires_approval`, so every write receives a workflow-assigned ticket, including `approval: none`:
 
 ```python
 class ApprovalGate(AbstractCapability):
-    id = "zetra.approval-gate"                                   # frozen durable id
+    id = "zetra.approval-gate"  # frozen durable id
+
     async def handle_deferred_tool_calls(self, ctx, requests):
         return await self.decide(workflow.instance().state, requests)
 
@@ -780,9 +865,14 @@ class ApprovalGate(AbstractCapability):
         props = [st.ledger.propose(c, st, workflow.now()) for c in requests.approvals]
         st.transition(Phase.AWAITING_APPROVAL)
         for p in props:
-            if p.mode == "policy":                               # PDP signs or denies; recorded result
-                st.ledger.apply_grant(p, await workflow.execute_activity(
-                    "zetra.approvals.policy_grant", p.binding, **PDP_CFG), workflow.now())
+            if p.mode == "policy":  # PDP signs or denies; recorded result
+                st.ledger.apply_grant(
+                    p,
+                    await workflow.execute_activity(
+                        "zetra.approvals.policy_grant", p.binding, **PDP_CFG
+                    ),
+                    workflow.now(),
+                )
             elif p.mode == "none":
                 p.status = "approved"
         while (pending := [p for p in props if p.status == "pending"]) and st.stop is None:
@@ -791,15 +881,22 @@ class ApprovalGate(AbstractCapability):
                 await workflow.wait_condition(
                     lambda: st.stop is not None or all(p.status != "pending" for p in pending),
                     timeout=max(nxt - workflow.now(), timedelta(seconds=1)),
-                    timeout_summary=f"approval-expiry:{pending[0].call_seq}")
+                    timeout_summary=f"approval-expiry:{pending[0].call_seq}",
+                )
             except asyncio.TimeoutError:
                 st.ledger.expire([p for p in pending if p.expires_at <= workflow.now()])
         st.transition(Phase.RUNNING)
         return DeferredToolResults(
-            approvals={p.provider_tool_call_id: True if p.status == "approved" else ToolDenied(p.denial())
-                       for p in props},
-            metadata={p.provider_tool_call_id: st.ledger.ticket(p).model_dump(mode="json")
-                      for p in props if p.status == "approved"})    # sets status "ticketed"
+            approvals={
+                p.provider_tool_call_id: True if p.status == "approved" else ToolDenied(p.denial())
+                for p in props
+            },
+            metadata={
+                p.provider_tool_call_id: st.ledger.ticket(p).model_dump(mode="json")
+                for p in props
+                if p.status == "approved"
+            },
+        )  # sets status "ticketed"
 ```
 
 **Validator checks.** `Ledger.check` runs these in order. A failure raises `ApplicationError(type="ApprovalInvalid", details=[code])`, the client gets `WorkflowUpdateFailedError`, and nothing is written to history.
@@ -841,29 +938,54 @@ A hard `terminate` bypasses all of this. The defense there is grant expiry plus 
 
 ```python
 ZETRA_NON_RETRYABLE = [  # PydanticAI v2.55.0 appends its own framework types to whatever is set here
-    "Denied", "ContractError", "PolicyViolation", "ApprovalInvalid", "ApprovalExpired",
-    "GrantConsumed", "GrantRevoked", "IdempotencyConflict", "InvalidRequest",
-    "AuthenticationFailed", "PermissionDenied", "PayloadTooLarge",
-    "ProviderAuthError", "ProviderBadRequest", "UncertainEffect"]
+    "Denied",
+    "ContractError",
+    "PolicyViolation",
+    "ApprovalInvalid",
+    "ApprovalExpired",
+    "GrantConsumed",
+    "GrantRevoked",
+    "IdempotencyConflict",
+    "InvalidRequest",
+    "AuthenticationFailed",
+    "PermissionDenied",
+    "PayloadTooLarge",
+    "ProviderAuthError",
+    "ProviderBadRequest",
+    "UncertainEffect",
+]
 
 CLASSES = {  # (effect, retry) -> attempts, initial s, max interval s, cancellation, heartbeat?
-    ("read", "safe"):                                     (4, 1, 10, TRY_CANCEL, False),
-    ("read", "idempotency_key_required"):                 (4, 1, 10, TRY_CANCEL, False),
-    ("read", "unsafe"):                                   (1, 1, 1,  TRY_CANCEL, False),
-    ("write_reversible", "idempotency_key_required"):     (5, 2, 30, WAIT_CANCELLATION_COMPLETED, True),
-    ("write_consequential", "idempotency_key_required"):  (3, 2, 30, WAIT_CANCELLATION_COMPLETED, True),
-    ("write_reversible", "unsafe"):                       (1, 1, 1,  WAIT_CANCELLATION_COMPLETED, True),
-    ("write_consequential", "unsafe"):                    (1, 1, 1,  WAIT_CANCELLATION_COMPLETED, True),
+    ("read", "safe"): (4, 1, 10, TRY_CANCEL, False),
+    ("read", "idempotency_key_required"): (4, 1, 10, TRY_CANCEL, False),
+    ("read", "unsafe"): (1, 1, 1, TRY_CANCEL, False),
+    ("write_reversible", "idempotency_key_required"): (5, 2, 30, WAIT_CANCELLATION_COMPLETED, True),
+    ("write_consequential", "idempotency_key_required"): (
+        3,
+        2,
+        30,
+        WAIT_CANCELLATION_COMPLETED,
+        True,
+    ),
+    ("write_reversible", "unsafe"): (1, 1, 1, WAIT_CANCELLATION_COMPLETED, True),
+    ("write_consequential", "unsafe"): (1, 1, 1, WAIT_CANCELLATION_COMPLETED, True),
 }
+
 
 def tool_activity_config(t: ToolDecl, receivers: ReceiverCatalog) -> ActivityConfig:
     if t.effect != "read" and t.retry == "safe":
         raise CompileError("TOOL007", f"{t.name}: write tool cannot declare retry=safe")
     if t.retry == "unsafe" and t.effect != "read" and not receivers[t.receiver].supports_reconcile:
-        raise CompileError("TOOL020", f"{t.name}: unsafe write requires a receiver with reconcile()")
+        raise CompileError(
+            "TOOL020", f"{t.name}: unsafe write requires a receiver with reconcile()"
+        )
     attempts, init, cap, cancel, needs_hb = CLASSES[(t.effect, t.retry)]
     stc = timedelta(seconds=t.timeout_seconds)
-    hb = timedelta(seconds=min(10, max(2, t.timeout_seconds // 3))) if (needs_hb or t.timeout_seconds > 30) else None
+    hb = (
+        timedelta(seconds=min(10, max(2, t.timeout_seconds // 3)))
+        if (needs_hb or t.timeout_seconds > 30)
+        else None
+    )
     if hb and not t.is_async:
         raise CompileError("TOOL021", f"{t.name}: heartbeat-governed tools must be async")
     backoff = sum(min(init * 2**i, cap) for i in range(attempts - 1))
@@ -871,17 +993,30 @@ def tool_activity_config(t: ToolDecl, receivers: ReceiverCatalog) -> ActivityCon
         start_to_close_timeout=stc,
         schedule_to_close_timeout=stc * attempts + timedelta(seconds=backoff + 5),
         heartbeat_timeout=hb,
-        retry_policy=RetryPolicy(initial_interval=timedelta(seconds=init), backoff_coefficient=2.0,
-                                 maximum_interval=timedelta(seconds=cap), maximum_attempts=attempts,
-                                 non_retryable_error_types=ZETRA_NON_RETRYABLE),
+        retry_policy=RetryPolicy(
+            initial_interval=timedelta(seconds=init),
+            backoff_coefficient=2.0,
+            maximum_interval=timedelta(seconds=cap),
+            maximum_attempts=attempts,
+            non_retryable_error_types=ZETRA_NON_RETRYABLE,
+        ),
         cancellation_type=cancel,
-        summary=t.name)                                   # no arguments: they may be sensitive
+        summary=t.name,
+    )  # no arguments: they may be sensitive
 
-MODEL_CFG = ActivityConfig(start_to_close_timeout=timedelta(seconds=75),   # provider timeout 60 s, max_retries=0
-    heartbeat_timeout=timedelta(seconds=30), schedule_to_close_timeout=timedelta(seconds=260),
-    retry_policy=RetryPolicy(initial_interval=timedelta(seconds=2), maximum_interval=timedelta(seconds=30),
-                             maximum_attempts=3, non_retryable_error_types=ZETRA_NON_RETRYABLE),
-    cancellation_type=TRY_CANCEL)
+
+MODEL_CFG = ActivityConfig(
+    start_to_close_timeout=timedelta(seconds=75),  # provider timeout 60 s, max_retries=0
+    heartbeat_timeout=timedelta(seconds=30),
+    schedule_to_close_timeout=timedelta(seconds=260),
+    retry_policy=RetryPolicy(
+        initial_interval=timedelta(seconds=2),
+        maximum_interval=timedelta(seconds=30),
+        maximum_attempts=3,
+        non_retryable_error_types=ZETRA_NON_RETRYABLE,
+    ),
+    cancellation_type=TRY_CANCEL,
+)
 # toolset_activity_config[<mcp toolset id>]: get_tools 15 s / 3 attempts; validate_args 10 s / 2 attempts
 # zetra.receiver.reconcile: 15 s / 6 attempts (max interval 60 s); revoke: 10 s / 6; policy_grant: 10 s / 3
 ```
@@ -1131,12 +1266,18 @@ Scripts are **pure functions of message history**, never call counters, because 
 ```python
 def attempt(tool: str, args: dict, *, final: dict | None = None) -> FunctionModel:
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        answered = any(isinstance(p, (ToolReturnPart, RetryPromptPart)) and p.tool_name == tool
-                       for m in messages for p in m.parts)
-        if not answered:                                   # turn 1: try the forbidden thing
+        answered = any(
+            isinstance(p, (ToolReturnPart, RetryPromptPart)) and p.tool_name == tool
+            for m in messages
+            for p in m.parts
+        )
+        if not answered:  # turn 1: try the forbidden thing
             return ModelResponse(parts=[ToolCallPart(tool, args, tool_call_id=f"zt:{tool}")])
-        out = info.output_tools[0]                         # turn 2: schema-valid final output
-        return ModelResponse(parts=[ToolCallPart(out.name, final or example(out.parameters_json_schema))])
+        out = info.output_tools[0]  # turn 2: schema-valid final output
+        return ModelResponse(
+            parts=[ToolCallPart(out.name, final or example(out.parameters_json_schema))]
+        )
+
     return FunctionModel(respond, model_name=f"zetra-script:{tool}")
 ```
 
@@ -1184,13 +1325,28 @@ EXTRA = {  # added to BASE_SCENARIOS by bundle facts
     "skill.injection": lambda b: bool(b.skills),
     "mcp.schema_drift": lambda b: bool(b.mcp_tools),
     "tenant.isolated": lambda b: b.tier >= 2 or b.multi_tenant,
-    **{i: (lambda b: b.consequential_tools) for i in ("approval.replayed", "approval.tampered", "grant.expired")},
+    **{
+        i: (lambda b: b.consequential_tools)
+        for i in ("approval.replayed", "approval.tampered", "grant.expired")
+    },
     "authority.revoked": lambda b: b.consequential_tools and b.tier >= 2,
-    **{i: (lambda b: b.execution.startswith("temporal")) for i in ("retry.multiplication", "history.bounded")},
+    **{
+        i: (lambda b: b.execution.startswith("temporal"))
+        for i in ("retry.multiplication", "history.bounded")
+    },
 }
 
-@catalog.scenario("approval.bound", version=2, risks=["R-APPROVAL-001"], owasp=["ASI09"], tier="T",
-                  expand=lambda b: [(t, p) for t in b.consequential_tools for p in t.approval.bind_to + EXTRA_PROPS])
+
+@catalog.scenario(
+    "approval.bound",
+    version=2,
+    risks=["R-APPROVAL-001"],
+    owasp=["ASI09"],
+    tier="T",
+    expand=lambda b: [
+        (t, p) for t in b.consequential_tools for p in t.approval.bind_to + EXTRA_PROPS
+    ],
+)
 async def approval_bound(h: Harness, tool: ToolPolicy, prop: str) -> None:
     run = await h.start(h.example_input(), attempt(tool.name, h.example_args(tool)))
     pending = await run.pending_approval(tool.name)
@@ -1198,7 +1354,7 @@ async def approval_bound(h: Harness, tool: ToolPolicy, prop: str) -> None:
     with h.expect_update_rejected(no_history_event=True):
         await run.approve(grant.mutate(prop))
     h.receiver(tool.receiver).assert_commits(0)
-    await run.approve(grant)                                   # positive control, same run
+    await run.approve(grant)  # positive control, same run
     h.receiver(tool.receiver).assert_commits(1, digest=pending.action_digest)
 ```
 
@@ -1221,11 +1377,18 @@ evals/
 ```
 
 ```python
-@scenario("approval.bound", family="safety")       # adds to the ID; cannot replace generated cases
+@scenario("approval.bound", family="safety")  # adds to the ID; cannot replace generated cases
 async def approver_cannot_edit_body(h: Harness) -> None:
-    run = await h.start(Incident.example(), script(call("create_ticket", title="p95 latency", body="Investigate"),
-                                                   final(status="ticket_created")))
-    grant = h.approvals.issue(await run.pending_approval("create_ticket"), override_args={"body": "edited"})
+    run = await h.start(
+        Incident.example(),
+        script(
+            call("create_ticket", title="p95 latency", body="Investigate"),
+            final(status="ticket_created"),
+        ),
+    )
+    grant = h.approvals.issue(
+        await run.pending_approval("create_ticket"), override_args={"body": "edited"}
+    )
     with h.expect_denied("APPROVAL_OVERRIDE_FORBIDDEN"):
         await run.approve(grant)
     h.receiver("tickets").assert_commits(0)
@@ -1922,7 +2085,9 @@ class Alert(Contract):
     message: str = Field(max_length=2000)  # untrusted text from the alerting system
 
 
-class Page(Contract):  # the exact payload the on-call human approves and the 'pager' receiver commits
+class Page(
+    Contract
+):  # the exact payload the on-call human approves and the 'pager' receiver commits
     service: str
     urgency: Literal["high", "low"]
     summary: str = Field(max_length=500)
@@ -1999,14 +2164,20 @@ to check.
 from alert_responder.contracts import Alert, Annotation, NoAction, Page, Paged
 from zetra.testing import call, final
 
-ALERT = Alert(alert_id="ALR-20261012", service="checkout-api", severity="critical", message="p99 latency 4s")
+ALERT = Alert(
+    alert_id="ALR-20261012", service="checkout-api", severity="critical", message="p99 latency 4s"
+)
 PAGE = Page(service="checkout-api", urgency="high", summary="checkout-api degraded, p99 4s")
 
 
 def test_critical_alert_pages_after_approval(agent):
-    agent.gateway("status").stub("read_status", "status: degraded").stub("recent_deploys", "none in 2h")
-    agent.model.script(call("page_oncall", urgency="high", summary=PAGE.summary),
-                       final(Paged(reason="critical and degraded, no recent deploy")))
+    agent.gateway("status").stub("read_status", "status: degraded").stub(
+        "recent_deploys", "none in 2h"
+    )
+    agent.model.script(
+        call("page_oncall", urgency="high", summary=PAGE.summary),
+        final(Paged(reason="critical and degraded, no recent deploy")),
+    )
     run = agent.run(ALERT)
     assert run.approvals.pending == [PAGE] and agent.receiver("pager").commits == []
     run.approve_all(actor="oncall:bob")
@@ -2016,11 +2187,15 @@ def test_critical_alert_pages_after_approval(agent):
 
 def test_info_alert_is_annotated_not_paged(agent):
     agent.gateway("status").stub("read_status", "status: healthy")
-    agent.model.script(call("annotate_alert", note="Info severity; service healthy; no page."),
-                       final(NoAction(reason="policy: info alerts are never paged")))
+    agent.model.script(
+        call("annotate_alert", note="Info severity; service healthy; no page."),
+        final(NoAction(reason="policy: info alerts are never paged")),
+    )
     run = agent.run(ALERT.model_copy(update={"severity": "info"}))
     assert run.output.kind == "no_action"
-    assert agent.receiver("alerts").commits == [Annotation(alert_id="ALR-20261012", note="Info severity; service healthy; no page.")]
+    assert agent.receiver("alerts").commits == [
+        Annotation(alert_id="ALR-20261012", note="Info severity; service healthy; no page.")
+    ]
     assert agent.receiver("pager").commits == []
 ```
 
@@ -2095,9 +2270,15 @@ from zetra.testing import final
 
 
 def test_answers_with_citations(agent):
-    agent.gateway("docs").stub("search_documents", [{"id": "expense-policy", "text": "Submit expenses within 30 days."}])
-    agent.model.script(final(Answer(text="Submit expenses within 30 days.", sources=["expense-policy"])))
-    assert agent.run(Question(text="When must I submit expenses?")).output.sources == ["expense-policy"]
+    agent.gateway("docs").stub(
+        "search_documents", [{"id": "expense-policy", "text": "Submit expenses within 30 days."}]
+    )
+    agent.model.script(
+        final(Answer(text="Submit expenses within 30 days.", sources=["expense-policy"]))
+    )
+    assert agent.run(Question(text="When must I submit expenses?")).output.sources == [
+        "expense-policy"
+    ]
 ```
 
 ---

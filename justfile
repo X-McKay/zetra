@@ -48,6 +48,17 @@ worker-load:
 test:
     uv run --locked --all-extras python -m unittest discover -s tests -v
 
+# Check the SDK example agents: locks must be current, then run their pytest suites.
+sdk-examples:
+    uv run --locked --all-extras zetra check examples/agents/handbook_qa --frozen
+    uv run --locked --all-extras zetra check examples/agents/alert_responder --frozen
+    uv run --locked --all-extras zetra check examples/agents/scheduled_report --frozen
+    PYDANTIC_AI_NO_BANNER=1 uv run --locked --all-extras python -m pytest examples/agents -q -p no:cacheprovider
+
+# Run one SDK example durably on a local Temporal dev server; needs the Temporal CLI (see docs).
+sdk-dev input='{"alert_id":"ALR-20261012","service":"checkout-api","severity":"critical","message":"5xx rate 40%"}':
+    PYDANTIC_AI_NO_BANNER=1 uv run --locked --all-extras zetra dev examples/agents/alert_responder --input '{{ input }}' --approve auto --model test
+
 # Build the combined book and all standalone HTML chapters.
 docs:
     uv run --locked python scripts/build_playbooks.py
@@ -94,7 +105,7 @@ agentctl-check:
     uv run --project tools/agentctl --locked agentctl --no-animations skills validate skills
 
 # Run all repository gates. Live enforcement remains a separate qualification.
-check: lock-check lint typecheck ci-lint shell-lint test docs examples agentctl-check
+check: lock-check lint typecheck ci-lint shell-lint test docs examples sdk-examples agentctl-check
 
 # Check pre-commit configuration; does not install hooks.
 hooks-config:

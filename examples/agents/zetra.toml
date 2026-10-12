@@ -1,0 +1,19 @@
+# Project-wide settings for the example agents. Deployment overrides come from ZETRA_* variables.
+[project]
+model_policy = "approved:balanced-v1"      # what every `approved:*` spec entry resolves through
+approvers    = "group:service-ops-oncall"  # who may approve @approval tools (v1: one group per project)
+approval_ttl = "PT24H"                     # default; a tool may shorten it with @approval(ttl=...)
+
+[models]                                   # logical policy -> provider model; ZETRA_MODEL overrides
+balanced-v1 = "test"                       # the examples run on PydanticAI's TestModel until a provider is approved
+
+[reversible]
+writes = ["alerts.write", "wiki.write"]    # writes allowed without @approval
+
+[receivers]                                # bound at worker start; the local runner uses SQLite ledgers
+pager  = "sqlite"
+alerts = "sqlite"
+wiki   = "sqlite"
+
+[gateway]
+servers = { status = "https://gateway.internal/mcp/status", docs = "https://gateway.internal/mcp/docs", metrics = "https://gateway.internal/mcp/metrics" }

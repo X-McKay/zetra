@@ -91,32 +91,38 @@ The v1alpha1 manifest keeps loading and `zetra migrate` rewrites it as a spec. L
 ```python
 from typing import Literal
 from pydantic import Field
-from zetra import Contract            # BaseModel with extra="forbid", frozen=True, strict JSON mode
+from zetra.sdk import Contract  # BaseModel with extra="forbid", frozen=True
+
 
 class Alert(Contract):
     alert_id: str = Field(pattern=r"^ALR-[0-9]{8}$", examples=["ALR-20261012"])
     service: str = Field(max_length=64, examples=["checkout-api"])
     severity: Literal["info", "warning", "critical"]
-    message: str = Field(max_length=2000)          # untrusted text from the alerting system
+    message: str = Field(max_length=2000)  # untrusted text from the alerting system
 
-class Page(Contract):                              # the exact payload the human approves and the receiver commits
+
+class Page(Contract):  # the exact payload the human approves and the receiver commits
     service: str
     urgency: Literal["high", "low"]
     summary: str = Field(max_length=500)
 
-class Annotation(Contract):                        # committed without approval (reversible)
+
+class Annotation(Contract):  # committed without approval (reversible)
     alert_id: str
     note: str = Field(max_length=1000)
+
 
 class Paged(Contract):
     kind: Literal["paged"] = "paged"
     reason: str
 
-class NoAction(Contract):                          # "do nothing" is a typed outcome, not an error
+
+class NoAction(Contract):  # "do nothing" is a typed outcome, not an error
     kind: Literal["no_action"] = "no_action"
     reason: str
 
-Input, Output = Alert, Paged | NoAction            # the two names the compiler binds; Output may be a union
+
+Input, Output = Alert, Paged | NoAction  # the two names the compiler binds; Output may be a union
 ```
 
 `contracts.py` may import only `pydantic`, `typing`, `enum`, `datetime` and `zetra` (rule `ZT-CON-001`), which makes it safe for `zetra check` to import for schema export and serializability checks while still never importing tool code. Fields with a `pattern` need `examples=` so generated tests never synthesize values from regular expressions. Domain output rules, such as "cite only documents that were returned", go in an optional `validators.py` registered as upstream output validators.
@@ -133,8 +139,9 @@ from typing import Literal
 from zetra import approval, tool
 from ..contracts import Alert, Page
 
-@approval(ttl="PT10M")      # a page is urgent: the approval request expires in ten minutes
-@tool("pager.write")        # a write: the body builds the payload; the receiver 'pager' commits it
+
+@approval(ttl="PT10M")  # a page is urgent: the approval request expires in ten minutes
+@tool("pager.write")  # a write: the body builds the payload; the receiver 'pager' commits it
 def page_oncall(urgency: Literal["high", "low"], summary: str, *, alert: Alert) -> Page:
     """Page the on-call engineer for this alert's service."""
     # `alert` is filled by the SDK from the run's Input and hidden from the model,
@@ -144,7 +151,7 @@ def page_oncall(urgency: Literal["high", "low"], summary: str, *, alert: Alert) 
 
 ```python
 # tools/annotate_alert.py
-@tool("alerts.write")       # reversible write listed in zetra.toml [reversible]: no human approval
+@tool("alerts.write")  # reversible write listed in zetra.toml [reversible]: no human approval
 def annotate_alert(note: str, *, alert: Alert) -> Annotation:
     """Attach a note to the alert explaining the decision."""
     return Annotation(alert_id=alert.alert_id, note=note)
@@ -170,23 +177,33 @@ Agent Skills directories, one `SKILL.md` per skill, selected in the spec with th
 
 ```python
 # tests/test_alert_responder.py
-ALERT = Alert(alert_id="ALR-20261012", service="checkout-api", severity="critical", message="p99 latency 4s")
+ALERT = Alert(
+    alert_id="ALR-20261012", service="checkout-api", severity="critical", message="p99 latency 4s"
+)
 PAGE = Page(service="checkout-api", urgency="high", summary="checkout-api degraded, p99 4s")
 
+
 def test_critical_alert_pages_after_approval(agent):
-    agent.gateway("status").stub("read_status", "status: degraded").stub("recent_deploys", "none in 2h")
-    agent.model.script(call("page_oncall", urgency="high", summary=PAGE.summary),
-                       final(Paged(reason="critical and degraded, no recent deploy")))
+    agent.gateway("status").stub("read_status", "status: degraded").stub(
+        "recent_deploys", "none in 2h"
+    )
+    agent.model.script(
+        call("page_oncall", urgency="high", summary=PAGE.summary),
+        final(Paged(reason="critical and degraded, no recent deploy")),
+    )
     run = agent.run(ALERT)
     assert run.approvals.pending == [PAGE] and agent.receiver("pager").commits == []
     run.approve_all(actor="oncall:bob")
     assert run.output == Paged(reason="critical and degraded, no recent deploy")
     assert agent.receiver("pager").commits == [PAGE]
 
+
 def test_info_alert_is_annotated_not_paged(agent):
     agent.gateway("status").stub("read_status", "status: healthy")
-    agent.model.script(call("annotate_alert", note="Info severity; service healthy; no page."),
-                       final(NoAction(reason="policy: info alerts are never paged")))
+    agent.model.script(
+        call("annotate_alert", note="Info severity; service healthy; no page."),
+        final(NoAction(reason="policy: info alerts are never paged")),
+    )
     run = agent.run(ALERT.model_copy(update={"severity": "info"}))
     assert run.output.kind == "no_action" and agent.receiver("pager").commits == []
 ```
@@ -312,9 +329,13 @@ The viability slice assembles an agent with upstream parts and one Zetra capabil
 
 ```python
 def assemble(bundle: AgentBundle, bindings: Bindings) -> Agent:
-    toolset = discovered_tools(bundle, bindings)        # the @tool functions plus one MCPToolset per GatewayMCP server
+    toolset = discovered_tools(
+        bundle, bindings
+    )  # the @tool functions plus one MCPToolset per GatewayMCP server
     return Agent.from_spec(
-        bundle.spec, name=bundle.name, deps_type=RunDeps,
+        bundle.spec,
+        name=bundle.name,
+        deps_type=RunDeps,
         output_type=bundle.output | DeferredToolRequests,
         toolsets=[toolset],
         capabilities=[TemporalDurability(**bundle.activity_configs)],
@@ -424,30 +445,41 @@ Every transition goes through `state.transition()`, which raises `IllegalTransit
 ### 5.3 Workflow and message handlers
 
 ```python
-@workflow.defn(name="zetra.agent", versioning_behavior=VersioningBehavior.PINNED,
-               failure_exception_types=[IllegalTransition, ContractError])
+@workflow.defn(
+    name="zetra.agent",
+    versioning_behavior=VersioningBehavior.PINNED,
+    failure_exception_types=[IllegalTransition, ContractError],
+)
 class ZetraAgentWorkflow(PydanticAIWorkflow):
-    __pydantic_ai_agents__ = REGISTRY.agents()                 # one release per worker build (section 5.9)
+    __pydantic_ai_agents__ = REGISTRY.agents()  # one release per worker build (section 5.9)
 
     @workflow.init
     def __init__(self, req: Start | Continuation) -> None:
-        self.state = migrate(req.state) if req.kind == "continuation" else RunState.start(req, REGISTRY, workflow.now())
+        self.state = (
+            migrate(req.state)
+            if req.kind == "continuation"
+            else RunState.start(req, REGISTRY, workflow.now())
+        )
         self._run: AgentRun | None = None
 
     @workflow.signal
-    def stop(self, req: StopRequest) -> None:                   # first stop wins; duplicates are no-ops
+    def stop(self, req: StopRequest) -> None:  # first stop wins; duplicates are no-ops
         if self.state.stop is None and self.state.phase is not Phase.TERMINAL:
             self.state.stop = req.stamped(workflow.now())
             if self._run is not None:
-                self._run.cancel()                              # RunCancelled at the run's next await
+                self._run.cancel()  # RunCancelled at the run's next await
 
     @workflow.update
-    def approve(self, d: ApprovalDecision) -> ApprovalReceipt:  # synchronous; never waits for the commit
+    def approve(
+        self, d: ApprovalDecision
+    ) -> ApprovalReceipt:  # synchronous; never waits for the commit
         return self.state.ledger.apply(d, workflow.current_update_info().id, workflow.now())
 
     @approve.validator
-    def _check(self, d: ApprovalDecision) -> None:              # pure: no mutation, no I/O; skipped on replay
-        self.state.ledger.check(d, workflow.current_update_info().id, workflow.now(), workflow.info(), REGISTRY.keys())
+    def _check(self, d: ApprovalDecision) -> None:  # pure: no mutation, no I/O; skipped on replay
+        self.state.ledger.check(
+            d, workflow.current_update_info().id, workflow.now(), workflow.info(), REGISTRY.keys()
+        )
 
     @workflow.query
     def status(self) -> RunStatus: ...
@@ -456,30 +488,37 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
 
     @workflow.run
     async def run(self, req: Start | Continuation) -> RunOutcome:
-        agent = REGISTRY.bundle(self.state.bundle_digest).agent  # unknown digest -> ContractError (worker refuses foreign bundles)
+        agent = REGISTRY.bundle(
+            self.state.bundle_digest
+        ).agent  # unknown digest -> ContractError (worker refuses foreign bundles)
         try:
             while True:
                 try:
-                    async with agent.iter(**self.state.resume_kwargs(), deps=self.state.deps,
-                                          conversation_id=self.state.workflow_id,
-                                          usage_limits=self.state.budget.remaining_limits()) as run:
+                    async with agent.iter(
+                        **self.state.resume_kwargs(),
+                        deps=self.state.deps,
+                        conversation_id=self.state.workflow_id,
+                        usage_limits=self.state.budget.remaining_limits(),
+                    ) as run:
                         self._run = run
-                        async for _ in run: pass
+                        async for _ in run:
+                            pass
                     result = run.result
-                except ContinueAsNewRequested:                    # raised by ZetraPolicy.before_model_request
+                except ContinueAsNewRequested:  # raised by ZetraPolicy.before_model_request
                     await self._continue_as_new()
                 except RunCancelled as rc:
                     self.state.carry(rc.all_messages())
                     return await self._settle(Outcome.CANCELLED_WITHOUT_EFFECT)
                 finally:
                     self._run = None
-                if isinstance(result.output, DeferredToolRequests):   # stop-the-world fallback path
+                if isinstance(result.output, DeferredToolRequests):  # stop-the-world fallback path
                     self.state.carry(result.conversation)
                     self.state.pending_results = await GATE.decide(self.state, result.output)
                     continue
                 return await self._settle(self.state.outcome_for(result.output))
-        except asyncio.CancelledError:                            # operator cancel: same cleanup
-            await self._settle(Outcome.CANCELLED_WITHOUT_EFFECT); raise
+        except asyncio.CancelledError:  # operator cancel: same cleanup
+            await self._settle(Outcome.CANCELLED_WITHOUT_EFFECT)
+            raise
         except ActivityError as e:
             return await self._settle(classify(e))
 ```
@@ -562,6 +601,8 @@ Four rules (from the evidence brainstorm): every case pairs an **attack with an 
 
 ## 8. Roadmap: a viability slice, then layers
 
+> Status 2026-10-12: layer 0 is implemented under `src/zetra/sdk/` with three example packages under `examples/agents/`. What ran, the measured sizes and timings, and where the slice deviates from this text are recorded in [durable-agent-sdk-viability.md](durable-agent-sdk-viability.md).
+
 Each layer has an exit test. The next layer starts only when the previous one passes it, and a layer that fails its exit test changes the design rather than being pushed through.
 
 | Layer | Scope | Exit test |
@@ -591,6 +632,8 @@ Layer 0 removes the repeated code and is the only layer whose value is certain b
 14. **agentctl fold-in and the 3.11 floor.** Proceed as in section 7, or keep agentctl separate until the multi-agent phase.
 
 ## 10. What the viability slice must verify
+
+> Items 4, 5, 7 (in part), 10 and 12 are answered in [the viability results](durable-agent-sdk-viability.md); the rest remain open.
 
 Items the brainstorms could not confirm against SDK 1.34.0 and PydanticAI v2.55.0, or that only a running slice can answer. Several apply to later layers and are listed so the slice is built with them in view:
 

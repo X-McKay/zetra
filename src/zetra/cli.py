@@ -79,6 +79,46 @@ def init(root: Path, name: str) -> dict:
     }
 
 
+def is_sdk_package(root: Path) -> bool:
+    """An SDK package carries a PydanticAI Agent Spec; a legacy manifest has ``apiVersion``."""
+    path = root / "agent.yaml"
+    if not path.is_file():
+        return False
+    return "apiVersion:" not in path.read_text(encoding="utf-8", errors="replace")[:4000]
+
+
+def sdk_subcommands(subs: argparse._SubParsersAction) -> None:
+    """SDK commands are parsed here so ``zetra --help`` works without the ``sdk`` extra."""
+    x = subs.add_parser("new", help="Scaffold an SDK agent package (Agent Spec, contracts, test)")
+    x.add_argument("directory")
+    x.add_argument(
+        "--write", action="store_true", help="also scaffold one approval-gated write tool"
+    )
+    x = subs.add_parser("dev", help="Run an SDK agent durably on a local Temporal dev server")
+    x.add_argument("directory")
+    x.add_argument("--input", required=True, help="JSON object matching the Input contract")
+    x.add_argument("--approve", choices=["prompt", "auto", "deny"], default="prompt")
+    x.add_argument("--model", help="model override; 'test' also stubs the gateway servers")
+    x.add_argument(
+        "--timeout", type=float, default=300.0, help="seconds before the run is terminated"
+    )
+    x = subs.add_parser("worker", help="Serve SDK agents on a Temporal task queue")
+    x.add_argument("directories", nargs="+")
+    x.add_argument("--address", default="127.0.0.1:7233")
+    x.add_argument("--namespace", default="default")
+    x.add_argument("--task-queue", default="zetra-agents")
+    x.add_argument("--model")
+
+
+def sdk_main(args: argparse.Namespace) -> int:
+    try:
+        from .sdk import cli as sdk_cli
+    except ImportError as exc:
+        print(f"zetra: the SDK extra is not installed ({exc}); install zetra[sdk]", file=sys.stderr)
+        return 1
+    return sdk_cli.handle(args)
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="zetra",
@@ -92,7 +132,7 @@ def parser() -> argparse.ArgumentParser:
         x = subs.add_parser(
             command,
             help={
-                "check": "Static manifest/capability check; never imports agent code",
+                "check": "Static manifest/capability check; SDK packages also write zetra.lock",
                 "eval": "Execute trusted local unittest scenarios and record candidate evidence",
                 "render": "Generate native Kubernetes candidate with replicas=0",
                 "catalog": "Generate unsigned catalog candidate; does not publish",
@@ -102,6 +142,12 @@ def parser() -> argparse.ArgumentParser:
         x.add_argument("directory")
         if command in {"check", "render", "catalog"}:
             x.add_argument("--evidence", required=command != "check")
+        if command == "check":
+            x.add_argument(
+                "--frozen",
+                action="store_true",
+                help="SDK packages: fail instead of rewriting a stale zetra.lock",
+            )
         if command != "run":
             x.add_argument("--output")
         if command == "render":
@@ -115,6 +161,16 @@ def parser() -> argparse.ArgumentParser:
                 required=True,
                 help="JSON object; write receiver intentionally not configured",
             )
+            x.add_argument(
+                "--approve",
+                choices=["prompt", "auto", "deny"],
+                default="prompt",
+                help="SDK packages: how approval-gated writes are decided",
+            )
+            x.add_argument(
+                "--model", help="SDK packages: model override; 'test' also stubs the gateways"
+            )
+    sdk_subcommands(subs)
     x = subs.add_parser(
         "profile", help="Normalize scoped recorded-event fixture into review candidate only"
     )
@@ -135,6 +191,10 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if args.command in {"new", "dev", "worker"} or (
+        args.command in {"check", "run"} and is_sdk_package(Path(args.directory).resolve())
+    ):
+        return sdk_main(args)
     try:
         if args.command == "init":
             output(init(Path(args.directory).resolve(), args.name))

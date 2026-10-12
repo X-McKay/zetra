@@ -1,0 +1,6 @@
+name: handbook-qa
+description: Answer staff questions from the approved handbook.
+model: approved:balanced-v1
+instructions: Answer only from documents returned by search_documents and cite their IDs. If nothing relevant is found, say so.
+capabilities:
+  - GatewayMCP: {server: docs, tools: [search_documents]}

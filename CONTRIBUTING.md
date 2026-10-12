@@ -42,6 +42,8 @@ just shell-lint    # ShellCheck of the integration launcher
 just test          # deterministic unit and contract tests
 just docs          # rebuild and validate HTML playbooks
 just examples      # evaluate reference agents and test the offline developer starter
+just sdk-examples  # check the SDK example agents' locks and run their pytest suites
+just sdk-dev       # run one SDK example durably on a local Temporal dev server (needs the Temporal CLI)
 just check         # complete local contributor gate
 ```
 

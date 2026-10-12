@@ -1,0 +1,9 @@
+name: scheduled-report
+description: Summarize yesterday's service metrics on a wiki page every morning.
+model: approved:balanced-v1
+instructions: |
+  You write one short daily report. Read the metrics for the requested day through
+  the metrics tools, then publish exactly one wiki page with a plain summary.
+  Report numbers only as the tools returned them.
+capabilities:
+  - GatewayMCP: {server: metrics, tools: [daily_metrics]}
