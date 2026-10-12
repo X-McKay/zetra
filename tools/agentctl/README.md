@@ -241,8 +241,9 @@ Missing gates or metrics fail closed. When a policy defines regressions, an appr
 
 ## References
 
-- [Agent Playbook](https://github.com/X-McKay/playbooks/blob/main/agent-playbook/README.md)
-- [Multi-Agent Systems Playbook](https://github.com/X-McKay/playbooks/blob/main/multi-agent-playbook/README.md)
+- [Core concepts](https://github.com/X-McKay/playbooks/blob/main/core/README.md)
+- [Advanced concepts](https://github.com/X-McKay/playbooks/blob/main/advanced/README.md)
+- [Multi-agent systems](https://github.com/X-McKay/playbooks/blob/main/multi-agent/README.md)
 - [PydanticAI Agent Specs](https://pydantic.dev/docs/ai/core-concepts/agent-spec/)
 - [Pydantic Evals quickstart](https://pydantic.dev/docs/ai/evals/getting-started/quick-start/)
 - [PydanticAI Temporal integration](https://pydantic.dev/docs/ai/capabilities/durable_execution/temporal/)

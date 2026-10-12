@@ -1,6 +1,6 @@
 # References
 
-These sources inform the draft. The [Agent Playbook references](../agent-playbook/references.md)
+These sources inform the draft. The [Core and Advanced references](agent-references.md)
 remain applicable to every member agent and to inherited PydanticAI, Temporal,
 evaluation, observability, risk, and security requirements.
 
