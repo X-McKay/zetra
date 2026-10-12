@@ -148,6 +148,35 @@ Observed on 2026-10-12 by scaffolding a fresh agent with `zetra new --write` int
 - One worker serves two agents on one task queue; a request naming an unknown agent fails the workflow with `no agent named 'nope' on this worker`.
 - Cold-process timings: `zetra check` 0.9 s, `zetra run` 1.0 s, importing `zetra.sdk.assemble` 0.7 s.
 
+## Simplification candidates
+
+Measured on 2026-10-12 after the fixes above: 15 modules, 2 565 lines; seven proposal- or decision-shaped types across `runner.py` and `temporal.py`; two `zetra.toml` keys nothing reads (`model_policy`, `approvers`); one spec field that exists only to be refused (`Skills.exclude`); a 44-line `context.py` whose only job is to hand `Agent.from_spec` the values capability classes need. Ranked by concepts removed per line changed.
+
+### For agent authors
+
+1. **Drop the `kind` field from Output contracts.** PydanticAI already picks the output class by tool name, so `kind: Literal["paged"] = "paged"` on every outcome class is a discriminator the model never needs. Record the class name as `output_type` in the run result instead. One line and one idea fewer per outcome class; the three examples carry five of them.
+2. **Make `zetra.toml` optional and smaller.** Remove `model_policy`, `approvers` and `[receivers]` until something reads them (the worker binds SQLite ledgers for every write resource regardless); keep `[models]`, `[reversible]`, `[gateway]` and `approval_ttl`. Have `zetra new` write a minimal `zetra.toml` when none exists above the package, so `zetra run` works on a fresh scaffold without `--model`.
+3. **One approval vocabulary.** A `Proposal` (operation id, tool, payload, digest, ttl) and a `Decision` (operation id, digest, approved, actor, reason), both pydantic models, used unchanged by the runner, the workflow, the CLI and the test harness; `Decided` is a `Decision` plus `recorded_at`. That retires `Pending`, `PendingApproval`, `ApprovalDecision`, `DecisionRecord` and `RunErrorRecord`, and the mapping code in the workflow that converts between them.
+4. **Show the payload the tool built.** The write wrapper already builds and validates the payload before raising `ApprovalRequired`; put the payload in that metadata next to the digest and the runner no longer re-runs the builder for the preview. `preview_payload` and its digest cross-check go; the purity rule stays, because the builder still re-runs on approval.
+5. **`assemble(bundle, receivers=..., tool_timeout=...)`** instead of a `Bindings` object. Every durable test imports `Bindings` to wrap a dict.
+
+### Inside the SDK
+
+6. **Read `Skills` and `GatewayMCP` entries ourselves.** Build their toolsets in `assemble` from `bundle.skills` and `bundle.mcp` and pass only upstream capabilities (`Thinking`, `Caching`) to `Agent.from_spec`. The spec file does not change and the allowlist still applies; what goes is `context.py`, `custom_capability_types`, the kw-only dataclass constraint, the `__post_init__` reads of a context variable, and `GatewayMCP.capabilities`. A spec run outside Zetra through plain `Agent.from_file` would then not resolve those entries, which was already the intent.
+7. **Remove `Skills.exclude`** and `ZT-SKILL-008` with it.
+8. **`REGISTRY` as `name -> (bundle, agent)`**; `worker()` serves whatever is registered. `Registered` goes.
+9. **`cli.py` (393 lines):** `run` and `_dev` shape the same report twice; `_dev` polls the query every half second where a result task and a query task could run side by side. One `report(outcome)` and one watcher.
+
+### Improvements that are not simplifications
+
+10. Per-proposal expiry timers; today the shortest TTL among the pending proposals governs all of them.
+11. Update id equal to the operation id, so a client retry of the same decision is deduplicated by the server while the validator still rejects a different decision under that id.
+12. A labelled rendering of the Input for the model, with `prompt()` shown in the scaffold.
+13. A generated reference of the `ZT-*` codes and messages, checked by `just docs`.
+14. The remaining rough edges from the field exercise: a file location on every compile error, `approval denied:` prefixed to the reason the model sees.
+
+Items 3, 4 and 6 remove the most code and the most concepts and are covered by the existing tests end to end; 1 and 2 change what an author writes and are best decided together.
+
 ## Before layer 1
 
 - Run `zetra worker` against a standing server rather than the throwaway dev server.
