@@ -4,12 +4,12 @@ These documents moved here from the [Playbooks](https://github.com/X-McKay/playb
 
 | Document | Origin in the Playbooks |
 | --- | --- |
-| [Agent reference implementation](agent-reference-implementation.md) | Agent Playbook, chapter 13 |
-| [Temporal execution standard](temporal-execution.md) | Agent Playbook, chapter 9 |
-| [Multi-agent reference implementation](multi-agent-reference-implementation.md) | Multi-Agent Systems Playbook, chapter 12 |
-| [Temporal durable coordination](temporal-durable-coordination.md) | Multi-Agent Systems Playbook, chapter 6 |
-| [Agent references](agent-references.md) | Agent Playbook, references |
-| [Multi-agent references](multi-agent-references.md) | Multi-Agent Systems Playbook, references |
+| [Agent reference implementation](agent-reference-implementation.md) | Advanced concepts, chapter 5 |
+| [Temporal execution standard](temporal-execution.md) | Advanced concepts, chapter 1 |
+| [Multi-agent reference implementation](multi-agent-reference-implementation.md) | Multi-agent systems, chapter 12 |
+| [Temporal durable coordination](temporal-durable-coordination.md) | Multi-agent systems, chapter 6 |
+| [Agent references](agent-references.md) | Core concepts, references |
+| [Multi-agent references](multi-agent-references.md) | Multi-agent systems, references |
 | [SDK notes](sdk-notes.md) | SDK-specific passages cut from the other chapters |
 
 They are kept as written, so relative links inside them point at their old locations and some commands name `agentctl`. Zetra's own core is framework-neutral; PydanticAI is one adapter, not a requirement. Where these documents and Zetra's code disagree, the code and its recorded evidence describe what actually exists. See the [playbook conformance map](../../playbook-conformance.md).
