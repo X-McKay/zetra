@@ -4,18 +4,18 @@ Status: observed on 2026-10-12 with `pydantic-ai-slim 2.55.0`, `temporalio 1.34.
 
 ## What was built
 
-Layer 0 of the roadmap, under `src/zetra/sdk/` (14 modules, 2 378 lines including docstrings):
+Layer 0 of the roadmap, under `src/zetra/sdk/` (15 modules, 2 501 lines including docstrings, after the simplifications below):
 
 | Module | Role |
 | --- | --- |
 | `contracts.py` | `Contract` (`extra="forbid"`, frozen), `RunDeps`, canonical JSON and digests |
 | `spec.py` | loads `agent.yaml` as a PydanticAI `AgentSpec`; refuses gateway-bypassing capabilities, non-`approved:` models, `metadata`, `extra_body`/`extra_headers` |
 | `tools.py` | `@tool`, `@approval`, AST checks on tool files, discovery, framework-filled parameters, the write wrapper that mints or validates a `Grant` and commits through a receiver |
-| `skills.py`, `gateway.py` | the two custom capability types: in-package skills and `GatewayMCP` |
+| `skills.py`, `gateway.py` | the two spec entries Zetra builds itself: in-package skills as a `load_skill` toolset with the catalogue as instructions, and `GatewayMCP` as a filtered `MCPToolset` per server |
 | `bundle.py` | `build()`, tiers, `zetra.lock` |
-| `assemble.py` | `Agent.from_spec` plus the toolset; `durable=True` adds `TemporalDurability` with bounded activity retries |
+| `assemble.py` | `Agent.from_spec` on the spec minus Zetra's entries, plus the three kinds of toolset; `durable=True` adds `TemporalDurability` with bounded activity retries |
 | `receiver.py` | `Grant`, `Receipt`, memory and SQLite receivers with digest, expiry and operation-id rules |
-| `runner.py` | the approval loop shared by the in-process runner and the workflow |
+| `runner.py` | `Proposal`, `Decision`, `Decided`, `RunError`; the approval loop shared by the in-process runner and the workflow |
 | `temporal.py` | one generic `zetra.agent` workflow, the `approve` Update with its validator, `pending_approvals` and `decisions` queries, worker, client helpers |
 | `testing.py` | pytest `agent` fixture, scripted model, stub gateways |
 | `cli.py` | `zetra new`, `check` (writes the lock), `run`, `dev`, `worker` |
@@ -156,14 +156,14 @@ Measured on 2026-10-12 after the fixes above: 15 modules, 2 565 lines; seven pro
 
 1. **Drop the `kind` field from Output contracts.** PydanticAI already picks the output class by tool name, so `kind: Literal["paged"] = "paged"` on every outcome class is a discriminator the model never needs. Record the class name as `output_type` in the run result instead. One line and one idea fewer per outcome class; the three examples carry five of them.
 2. **Make `zetra.toml` optional and smaller.** Remove `model_policy`, `approvers` and `[receivers]` until something reads them (the worker binds SQLite ledgers for every write resource regardless); keep `[models]`, `[reversible]`, `[gateway]` and `approval_ttl`. Have `zetra new` write a minimal `zetra.toml` when none exists above the package, so `zetra run` works on a fresh scaffold without `--model`.
-3. **One approval vocabulary.** A `Proposal` (operation id, tool, payload, digest, ttl) and a `Decision` (operation id, digest, approved, actor, reason), both pydantic models, used unchanged by the runner, the workflow, the CLI and the test harness; `Decided` is a `Decision` plus `recorded_at`. That retires `Pending`, `PendingApproval`, `ApprovalDecision`, `DecisionRecord` and `RunErrorRecord`, and the mapping code in the workflow that converts between them.
-4. **Show the payload the tool built.** The write wrapper already builds and validates the payload before raising `ApprovalRequired`; put the payload in that metadata next to the digest and the runner no longer re-runs the builder for the preview. `preview_payload` and its digest cross-check go; the purity rule stays, because the builder still re-runs on approval.
+3. **One approval vocabulary.** Done. `Proposal` (operation id, tool, capability, payload, digest, ttl), `Decision` (operation id, digest, approved, actor, reason) and `Decided` (a `Decision` plus `recorded_at`) are pydantic models in `runner.py`, used unchanged by the runner, the workflow (as the Update's argument and result and the queries' rows), the CLI and the test harness. `Pending`, `PendingApproval`, `ApprovalDecision`, `DecisionRecord` and `RunErrorRecord` are gone, with the conversion code in the workflow. The runner now also refuses a decision whose digest is not the proposal's, so the in-process path has the rule the workflow validator has.
+4. **Show the payload the tool built.** Done. The write wrapper puts the payload next to its digest in the `ApprovalRequired` metadata; the runner reads both into the `Proposal` and checks they agree. `preview_payload` is gone. The purity rule stays, because the builder re-runs on approval, and a write tool must now annotate its return type with the payload Contract (`ZT-TOOL-020`), which the lock records as `payload` and the test harness uses to hand tests typed payloads.
 5. **`assemble(bundle, receivers=..., tool_timeout=...)`** instead of a `Bindings` object. Every durable test imports `Bindings` to wrap a dict.
 
 ### Inside the SDK
 
-6. **Read `Skills` and `GatewayMCP` entries ourselves.** Build their toolsets in `assemble` from `bundle.skills` and `bundle.mcp` and pass only upstream capabilities (`Thinking`, `Caching`) to `Agent.from_spec`. The spec file does not change and the allowlist still applies; what goes is `context.py`, `custom_capability_types`, the kw-only dataclass constraint, the `__post_init__` reads of a context variable, and `GatewayMCP.capabilities`. A spec run outside Zetra through plain `Agent.from_file` would then not resolve those entries, which was already the intent.
-7. **Remove `Skills.exclude`** and `ZT-SKILL-008` with it.
+6. **Read `Skills` and `GatewayMCP` entries ourselves.** Done. `build()` validates the two entries (`load_skills`, `gateway_entry`) and `assemble` builds their toolsets, passing `upstream_spec(spec)` with those entries removed to `Agent.from_spec`. The skill catalogue rides as the toolset's own `instructions`. `context.py`, `custom_capability_types`, the capability dataclasses and `GatewayMCP.capabilities` are gone; `Skills.exclude` went with them (item 7). The spec file and the allowlist are unchanged.
+7. **Remove `Skills.exclude`.** Done with item 6; `ZT-SKILL-008` now names an unsupported Skills argument.
 8. **`REGISTRY` as `name -> (bundle, agent)`**; `worker()` serves whatever is registered. `Registered` goes.
 9. **`cli.py` (393 lines):** `run` and `_dev` shape the same report twice; `_dev` polls the query every half second where a result task and a query task could run side by side. One `report(outcome)` and one watcher.
 

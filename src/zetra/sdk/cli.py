@@ -20,7 +20,7 @@ from .assemble import assemble
 from .bundle import Bundle, build, lock_status, write_lock
 from .errors import CompileError, Denied
 from .receiver import SqliteReceiver
-from .runner import Decision, Pending, run_agent
+from .runner import Decision, Proposal, run_agent
 from .tools import Bindings
 
 SPEC_TEMPLATE = """name: {name}
@@ -139,24 +139,29 @@ def _receivers(bundle: Bundle) -> Bindings:
     )
 
 
-def _decide(
-    mode: str, tool: str, operation_id: str, payload: dict[str, Any], digest: str
-) -> Decision:
+def _decide(mode: str, proposal: Proposal) -> Decision:
     """Show the exact payload a receiver would commit, then decide per ``--approve``."""
-    print(f"\napproval needed: {tool}  operation {operation_id}", file=sys.stderr)
-    print(json.dumps(payload, indent=2), file=sys.stderr)
-    print(f"digest sha256:{digest}", file=sys.stderr)
+    print(f"\napproval needed: {proposal.tool}  operation {proposal.operation_id}", file=sys.stderr)
+    print(json.dumps(proposal.payload, indent=2), file=sys.stderr)
+    print(f"digest sha256:{proposal.digest}", file=sys.stderr)
+    approved, actor, reason = False, f"cli:{mode}", ""
     if mode == "auto":
-        return Decision(True, "cli:auto")
-    if mode == "deny":
-        return Decision(False, "cli:deny", "denied by --approve deny")
-    try:
-        answer = input("approve this exact payload? [y/N] ").strip().lower()
-    except EOFError:
-        answer = ""
-    if answer == "y":
-        return Decision(True, "cli:prompt")
-    return Decision(False, "cli:prompt", "denied at prompt")
+        approved = True
+    elif mode == "deny":
+        reason = "denied by --approve deny"
+    else:
+        try:
+            approved = input("approve this exact payload? [y/N] ").strip().lower() == "y"
+        except EOFError:
+            approved = False
+        reason = "" if approved else "denied at prompt"
+    return Decision(
+        operation_id=proposal.operation_id,
+        digest=proposal.digest,
+        approved=approved,
+        actor=actor,
+        reason=reason,
+    )
 
 
 def _require_terminal(mode: str) -> None:
@@ -167,17 +172,8 @@ def _require_terminal(mode: str) -> None:
 
 
 def _approver(mode: str):
-    def decide(pending: list[Pending]) -> dict[str, Decision]:
-        return {
-            item.tool_call_id: _decide(
-                mode,
-                item.tool,
-                item.operation_id,
-                item.payload.model_dump(mode="json"),
-                item.digest,
-            )
-            for item in pending
-        }
+    def decide(pending: list[Proposal]) -> list[Decision]:
+        return [_decide(mode, proposal) for proposal in pending]
 
     return decide
 
@@ -217,16 +213,9 @@ def run(root: Path, raw_input: str, *, approve: str, model: str | None) -> dict[
         "agent": bundle.name,
         "status": outcome.status,
         "output": outcome.output.model_dump(mode="json") if outcome.output is not None else None,
-        "error": {"code": outcome.error.code, "message": outcome.error.message}
-        if outcome.error
-        else None,
-        "proposals": [
-            {"tool": p.tool, "operation_id": p.operation_id, "digest": p.digest}
-            for p in outcome.proposals
-        ],
-        "decisions": {
-            k: {"approved": d.approved, "actor": d.actor} for k, d in outcome.decisions.items()
-        },
+        "error": outcome.error.model_dump() if outcome.error else None,
+        "proposals": [p.model_dump() for p in outcome.proposals],
+        "decisions": {k: d.model_dump(mode="json") for k, d in outcome.decisions.items()},
         "mode": "in-process; cooperative controls only; not durable, not isolated",
     }
 
@@ -287,16 +276,8 @@ async def _dev(
                     if p.operation_id in decided:
                         continue
                     decided.add(p.operation_id)
-                    d = _decide(approve, p.tool, p.operation_id, p.payload, p.digest)
-                    decision = t.ApprovalDecision(
-                        operation_id=p.operation_id,
-                        digest=p.digest,
-                        approved=d.approved,
-                        actor=d.actor,
-                        reason=d.reason,
-                    )
                     recorded = await handle.execute_update(
-                        t.APPROVE_UPDATE, decision, result_type=t.Decided
+                        t.APPROVE_UPDATE, _decide(approve, p), result_type=t.Decided
                     )
                     verdict = "approved" if recorded.approved else "denied"
                     print(f"recorded: {verdict} by {recorded.actor}", file=sys.stderr)
@@ -319,7 +300,7 @@ async def _dev(
         "output": result.output,
         "error": result.error.model_dump() if result.error else None,
         "proposals": [p.model_dump() for p in result.proposals],
-        "decisions": {k: v.model_dump() for k, v in result.decisions.items()},
+        "decisions": {k: v.model_dump(mode="json") for k, v in result.decisions.items()},
         "history_events": len(history.events),
         "replay": "passed",
         "mode": "local Temporal dev server; per-call activities; cooperative controls only",

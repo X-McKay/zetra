@@ -33,7 +33,7 @@ REPO = Path(__file__).resolve().parents[1]
 EXAMPLES = REPO / "examples" / "agents"
 
 if HAVE_SDK:
-    from pydantic_ai.messages import RetryPromptPart
+    from pydantic_ai.messages import RetryPromptPart, ToolReturnPart
 
     from zetra.cli import main
     from zetra.sdk import CompileError, Contract, Denied
@@ -117,6 +117,16 @@ class BundleTests(unittest.TestCase):
             with self.assertRaises(CompileError) as ctx:
                 build(root)
             self.assertEqual(ctx.exception.code, "ZT-TOOL-019")
+
+    def test_write_tool_must_declare_its_payload_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "sdk_untyped"
+            _cli("new", str(root), "--write")
+            tool = root / "tools" / "record_note.py"
+            tool.write_text(tool.read_text().replace(") -> Note:", "):"))
+            with self.assertRaises(CompileError) as ctx:
+                build(root)
+            self.assertEqual(ctx.exception.code, "ZT-TOOL-020")
 
     def test_prompt_approval_refuses_to_run_without_a_terminal(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -315,6 +325,19 @@ class ApprovalLoopTests(unittest.TestCase):
         [proposal] = run.proposals
         self.assertEqual(proposal.operation_id, "test-run:c000001")
         self.assertEqual(proposal.ttl, "PT10M")
+
+    def test_skill_catalogue_reaches_the_model_as_instructions(self):
+        from alert_responder.contracts import NoAction
+
+        agent = self.agent()
+        agent.model.script(call("load_skill", name="paging-policy"), final(NoAction(reason="ok")))
+        run = agent.run(self.alert())
+        first = run.messages[0]
+        instructions = getattr(first, "instructions", "") or ""
+        self.assertIn("paging-policy", instructions)
+        self.assertIn("load_skill", instructions)
+        returns = [p for m in run.messages for p in m.parts if isinstance(p, ToolReturnPart)]
+        self.assertTrue(any("# Skill: paging-policy" in str(r.content) for r in returns))
 
     def test_model_cannot_choose_the_injected_service(self):
         from alert_responder.contracts import NoAction

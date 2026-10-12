@@ -1,4 +1,4 @@
-"""Agent Skills as a spec capability: SKILL.md catalogue in instructions, body on demand.
+"""Agent Skills from a spec entry: SKILL.md catalogue in instructions, body on demand.
 
 Only ``name``, ``description`` and the Markdown body are used. ``references/``, ``scripts/``
 and ``assets/`` are never read or executed. Skills are read once at build time and their
@@ -9,15 +9,13 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import FunctionToolset
 
-from . import context
 from .errors import CompileError
 
 NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -78,61 +76,62 @@ def read_skill(directory: Path) -> Skill:
     return Skill(name, description.strip(), body, hashlib.sha256(text.encode()).hexdigest())
 
 
-@dataclass(kw_only=True)
-class Skills(AbstractCapability[Any]):
-    """``- Skills: {directories: skills, include: [a, b]}`` in a spec."""
+def skills_toolset(skills: dict[str, Skill]) -> FunctionToolset[Any]:
+    """``load_skill`` plus the catalogue of skills as instructions."""
 
-    directories: str | list[str]
-    include: list[str]
-    exclude: list[str] | None = None
-    skills: dict[str, Skill] = field(init=False, default_factory=dict)
+    def load_skill(name: str) -> str:
+        """Load the full instructions for one of your skills by name."""
+        skill = skills.get(name)
+        if skill is None:
+            return f"No skill named {name!r}. Available: {', '.join(skills)}"
+        return f"# Skill: {skill.name}\n\n{skill.body}"
 
-    def __post_init__(self) -> None:
-        self.id = "skills"
-        if self.exclude:
-            raise CompileError("ZT-SKILL-008", "use include; exclude is not supported")
-        if not isinstance(self.include, list) or not self.include:
-            raise CompileError(
-                "ZT-SKILL-009", "Skills.include must list the skills this agent may load"
-            )
-        ctx = context.current()
-        roots = [self.directories] if isinstance(self.directories, str) else list(self.directories)
-        resolved: list[Path] = []
-        for root in roots:
-            path = (ctx.package_dir / root).resolve()
-            if not path.is_relative_to(ctx.project.root.resolve()):
-                raise CompileError(
-                    "ZT-SKILL-010", f"skills directory {root} is outside the project"
-                )
-            resolved.append(path)
-        for name in self.include:
-            found = [d / name for d in resolved if (d / name).is_dir()]
-            if len(found) != 1:
-                raise CompileError(
-                    "ZT-SKILL-011", f"skill {name!r} not found exactly once in {roots}"
-                )
-            self.skills[name] = read_skill(found[0])
+    catalogue = "\n".join(f"- {s.name}: {s.description}" for s in skills.values())
+    toolset: FunctionToolset[Any] = FunctionToolset(
+        id="skills",
+        instructions="You have these skills. Call load_skill before doing work one of them covers.\n"
+        + catalogue,
+    )
+    toolset.add_function(load_skill, takes_ctx=False)
+    return toolset
 
-    def get_instructions(self) -> str:
-        catalogue = "\n".join(f"- {s.name}: {s.description}" for s in self.skills.values())
-        return (
-            "You have these skills. Call load_skill before doing work one of them covers.\n"
-            + catalogue
-        )
 
-    def get_toolset(self) -> FunctionToolset[Any]:
-        skills = self.skills
+@dataclass(frozen=True)
+class SkillSet:
+    """The skills one agent may load, read once at build time."""
 
-        def load_skill(name: str) -> str:
-            """Load the full instructions for one of your skills by name."""
-            skill = skills.get(name)
-            if skill is None:
-                return f"No skill named {name!r}. Available: {', '.join(skills)}"
-            return f"# Skill: {skill.name}\n\n{skill.body}"
+    skills: dict[str, Skill]
 
-        toolset: FunctionToolset[Any] = FunctionToolset(id="skills")
-        toolset.add_function(load_skill, takes_ctx=False)
-        return toolset
+    def toolset(self) -> FunctionToolset[Any]:
+        return skills_toolset(self.skills)
 
     def lock_entries(self) -> dict[str, dict[str, str]]:
         return {name: {"SKILL.md": f"sha256:{s.digest}"} for name, s in self.skills.items()}
+
+
+def load_skills(package_dir: Path, project_root: Path, arguments: dict[str, Any]) -> SkillSet:
+    """Validate a ``- Skills: {directories: ..., include: [...]}`` entry and read its skills."""
+    unknown = set(arguments) - {"directories", "include"}
+    if unknown:
+        raise CompileError(
+            "ZT-SKILL-008", f"Skills takes directories and include, not {sorted(unknown)}"
+        )
+    directories, include = arguments.get("directories", "skills"), arguments.get("include")
+    if not isinstance(include, list) or not include or any(not isinstance(n, str) for n in include):
+        raise CompileError(
+            "ZT-SKILL-009", "Skills.include must list the skills this agent may load"
+        )
+    roots = [directories] if isinstance(directories, str) else list(directories)
+    resolved: list[Path] = []
+    for root in roots:
+        path = (package_dir / str(root)).resolve()
+        if not path.is_relative_to(project_root.resolve()):
+            raise CompileError("ZT-SKILL-010", f"skills directory {root} is outside the project")
+        resolved.append(path)
+    skills: dict[str, Skill] = {}
+    for name in include:
+        found = [d / name for d in resolved if (d / name).is_dir()]
+        if len(found) != 1:
+            raise CompileError("ZT-SKILL-011", f"skill {name!r} not found exactly once in {roots}")
+        skills[name] = read_skill(found[0])
+    return SkillSet(skills)

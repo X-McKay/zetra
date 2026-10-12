@@ -105,7 +105,7 @@ class DurableRunTests(unittest.TestCase):
                     request,
                     workflow_id=f"test:{uuid.uuid4().hex[:8]}",
                 )
-                pending: list[t.PendingApproval] = []
+                pending: list[t.Proposal] = []
                 for _ in range(200):
                     pending = await handle.query(t.ZetraAgentWorkflow.pending_approvals)
                     if pending:
@@ -122,7 +122,7 @@ class DurableRunTests(unittest.TestCase):
                 self.assertEqual(first.operation_id, f"{handle.id}:c000001")
                 self.assertEqual(pager.commits, [])
 
-                def decision(**overrides) -> t.ApprovalDecision:
+                def decision(**overrides) -> t.Decision:
                     fields: dict = {
                         "operation_id": first.operation_id,
                         "digest": first.digest,
@@ -130,12 +130,12 @@ class DurableRunTests(unittest.TestCase):
                         "actor": "oncall:bob",
                     }
                     fields.update(overrides)
-                    return t.ApprovalDecision(**fields)
+                    return t.Decision(**fields)
 
-                async def send(d: t.ApprovalDecision) -> t.Decided:
+                async def send(d: t.Decision) -> t.Decided:
                     return await handle.execute_update(t.APPROVE_UPDATE, d, result_type=t.Decided)
 
-                async def rejected(bad: t.ApprovalDecision) -> str:
+                async def rejected(bad: t.Decision) -> str:
                     with self.assertRaises(WorkflowUpdateFailedError) as ctx:
                         await send(bad)
                     cause = ctx.exception.cause
@@ -231,7 +231,7 @@ class DurableRunTests(unittest.TestCase):
                         request,
                         workflow_id=f"test:{uuid.uuid4().hex[:8]}",
                     )
-                    pending: list[t.PendingApproval] = []
+                    pending: list[t.Proposal] = []
                     for _ in range(200):
                         pending = await handle.query(t.ZetraAgentWorkflow.pending_approvals)
                         if pending:
@@ -242,7 +242,7 @@ class DurableRunTests(unittest.TestCase):
                     result = await asyncio.wait_for(handle.result(), timeout=60)  # nobody answers
                     self.assertEqual(await handle.query(t.ZetraAgentWorkflow.pending_approvals), [])
                     history = await handle.fetch_history()
-                    late = t.ApprovalDecision(
+                    late = t.Decision(
                         operation_id=item.operation_id,
                         digest=item.digest,
                         approved=True,
@@ -312,14 +312,14 @@ class DurableRunTests(unittest.TestCase):
                     handle = await t.start_run(
                         env.client, queue, request, workflow_id=f"test:{uuid.uuid4().hex[:8]}"
                     )
-                    pending: list[t.PendingApproval] = []
+                    pending: list[t.Proposal] = []
                     for _ in range(400):
                         pending = await handle.query(t.ZetraAgentWorkflow.pending_approvals)
                         if pending:
                             break
                         await asyncio.sleep(0.05)
                     [item] = pending
-                    decision = t.ApprovalDecision(
+                    decision = t.Decision(
                         operation_id=item.operation_id,
                         digest=item.digest,
                         approved=True,

@@ -19,13 +19,12 @@ from typing import Any
 import yaml
 from pydantic_ai import AgentSpec
 
-from . import context
 from .contracts import Contract, canonical
 from .errors import CompileError
-from .gateway import GatewayMCP
+from .gateway import gateway_entry
 from .project import Project, find_project
-from .skills import Skills
-from .spec import load_spec
+from .skills import SkillSet, load_skills
+from .spec import capability_entry, load_spec
 from .tools import ToolDecl, discover_tools, ensure_importable
 
 LOCK_VERSION = 1
@@ -57,8 +56,12 @@ class Bundle:
     input_type: type[Contract]
     output_members: tuple[type[Contract], ...]
     tools: list[ToolDecl]
-    skills: dict[str, dict[str, str]] = field(default_factory=dict)
+    skill_set: SkillSet | None = None
     mcp: dict[str, list[str]] = field(default_factory=dict)
+
+    @property
+    def skills(self) -> dict[str, dict[str, str]]:
+        return self.skill_set.lock_entries() if self.skill_set else {}
 
     @property
     def capabilities(self) -> list[str]:
@@ -108,6 +111,7 @@ class Bundle:
                     "approval": {"mode": "human", "ttl": t.ttl or self.project.approval_ttl}
                     if t.approval
                     else ({"mode": "none", "reversible": True} if t.is_write else None),
+                    "payload": t.payload_type.__name__ if t.payload_type else None,
                     "injects": sorted(t.injects),
                 }
                 for t in self.tools
@@ -199,14 +203,17 @@ def build(package_dir: Path, *, project: Project | None = None) -> Bundle:
     input_type, output_members = load_contracts(package_dir)
     tools = discover_tools(package_dir, input_type)
     bundle = Bundle(name, package_dir, project, spec, raw, input_type, output_members, tools)
-    with context.building(context.BuildContext(package_dir=package_dir, project=project)):
-        for entry in spec.capabilities:
-            kind, kwargs = _entry(entry)
-            if kind == "Skills":
-                bundle.skills.update(Skills(**kwargs).lock_entries())
-            elif kind == "GatewayMCP":
-                cap = GatewayMCP(**kwargs)
-                bundle.mcp[cap.server] = cap.tools
+    for entry in spec.capabilities:
+        kind, arguments = capability_entry(entry)
+        if kind == "Skills":
+            bundle.skill_set = load_skills(package_dir, project.root, arguments)
+        elif kind == "GatewayMCP":
+            server, mcp_tools = gateway_entry(arguments)
+            if server not in project.gateway:
+                raise CompileError(
+                    "ZT-MCP-003", f"gateway server {server!r} is not configured in zetra.toml"
+                )
+            bundle.mcp[server] = mcp_tools
     for decl in bundle.tools:
         if decl.is_write and not decl.approval and decl.capability not in project.reversible:
             raise CompileError(
@@ -214,19 +221,6 @@ def build(package_dir: Path, *, project: Project | None = None) -> Bundle:
                 f"{decl.name} writes {decl.capability} without @approval; list it under [reversible] in zetra.toml",
             )
     return bundle
-
-
-def _entry(entry: Any) -> tuple[str, dict[str, Any]]:
-    """Upstream parses spec capabilities into CapabilitySpec(name, arguments)."""
-    name, arguments = getattr(entry, "name", None), getattr(entry, "arguments", None)
-    if isinstance(name, str):
-        return name, dict(arguments) if isinstance(arguments, dict) else {}
-    if isinstance(entry, str):
-        return entry, {}
-    if isinstance(entry, dict) and len(entry) == 1:
-        kind, value = next(iter(entry.items()))
-        return kind, dict(value) if isinstance(value, dict) else {}
-    raise CompileError("ZT-SPEC-010", f"unreadable capability entry {entry!r}")
 
 
 def lock_status(bundle: Bundle) -> str:

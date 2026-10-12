@@ -22,7 +22,7 @@ from .assemble import assemble
 from .bundle import Bundle, build
 from .contracts import Contract, RunDeps
 from .receiver import MemoryReceiver
-from .runner import Decision, Pending, RunError, Session, make_deps
+from .runner import Decision, Proposal, RunError, Session, make_deps
 from .tools import Bindings, ensure_importable
 
 
@@ -147,11 +147,13 @@ class StubGateway:
 
 @dataclass
 class Approvals:
-    items: list[Pending] = field(default_factory=list)
+    items: list[Proposal] = field(default_factory=list)
+    payload_types: dict[str, type[Contract]] = field(default_factory=dict)
 
     @property
     def pending(self) -> list[Contract]:
-        return [item.payload for item in self.items]
+        """The payloads awaiting approval, as the Contracts the tools declared."""
+        return [self.payload_types[p.tool].model_validate(p.payload) for p in self.items]
 
 
 class Run:
@@ -163,7 +165,10 @@ class Run:
 
     @property
     def approvals(self) -> Approvals:
-        return Approvals(list(self._session.pending))
+        payload_types = {
+            d.name: d.payload_type for d in self._session.bundle.tools if d.payload_type
+        }
+        return Approvals(list(self._session.pending), payload_types)
 
     @property
     def output(self) -> Any:
@@ -182,13 +187,20 @@ class Run:
         return self._session.outcome.messages
 
     @property
-    def proposals(self) -> list[Pending]:
+    def proposals(self) -> list[Proposal]:
         return list(self._session.outcome.proposals)
 
     def _decide(self, approved: bool, actor: str, reason: str = "") -> Run:
-        decisions = {
-            item.tool_call_id: Decision(approved, actor, reason) for item in self._session.pending
-        }
+        decisions = [
+            Decision(
+                operation_id=p.operation_id,
+                digest=p.digest,
+                approved=approved,
+                actor=actor,
+                reason=reason,
+            )
+            for p in self._session.pending
+        ]
         asyncio.run(self._session.decide(decisions))
         return self
 

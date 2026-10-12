@@ -7,17 +7,13 @@ Temporal, and gives tests one fixture. Everything here is cooperative; see SECUR
 
 from .contracts import Contract, RunDeps
 from .errors import CompileError, Denied
-from .gateway import GatewayMCP
-from .skills import Skills
 from .tools import approval, tool
 
 __all__ = [
     "CompileError",
     "Contract",
     "Denied",
-    "GatewayMCP",
     "RunDeps",
-    "Skills",
     "approval",
     "tool",
 ]

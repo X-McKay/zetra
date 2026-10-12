@@ -65,7 +65,7 @@ Zetra adds the three things upstream cannot express in a spec, each through an u
 
 1. **Tools from `tools/`.** Callable tools are not spec-expressible upstream (issues #5266, #5471). Zetra discovers one `@tool` per file and attaches them as the agent's toolset.
 2. **Contracts from `contracts.py`.** `Input`, `Output` and write payloads by convention, passed as `output_type` and `deps_type=RunDeps`, which `Agent.from_spec` already accepts. Upstream template strings such as `{{principal}}` in instructions resolve against `RunDeps` for free.
-3. **`GatewayMCP`.** A Zetra capability type registered through `custom_capability_types`, the documented way to add spec-expressible capabilities. It is the only route to MCP; its entries declare the tool allowlist per server, and MCP tools are reads in v1 because every write goes through a receiver.
+3. **`GatewayMCP`.** A spec entry that Zetra reads itself and builds as a filtered `MCPToolset`; only upstream capabilities (`Thinking`, `Caching`) go through `Agent.from_spec`. It is the only route to MCP; its entries declare the tool allowlist per server, and MCP tools are reads in v1 because every write goes through a receiver.
 
 Zetra refuses spec features that bypass the gateway or the model policy: raw `MCP`, `WebFetch`, `WebSearch`, `LocalWorkspace`, `NativeTool`, `Skills` pointing outside the package or a shared skills directory, any `model` not of the form `approved:*`, `extra_body` or `extra_headers`. Such a spec cannot run through plain `Agent.from_file` outside Zetra either, because `approved:*` does not resolve and `GatewayMCP` is not registered there; that is the intent. Two upstream facts shape the loader: `AgentSpec` does not reject unknown keys at runtime (only its generated JSON Schema is strict), so Zetra validates the file against the pinned spec schema first and a misspelled key is a compile error; and `AgentSpec` on `main` has no `instrument` field, so telemetry is never declared in the spec and Zetra attaches `Instrumentation` itself.
 
@@ -328,22 +328,23 @@ error[ZT-TOOL-004]: create_ticket is a write tool but its body is not a pure pay
 The viability slice assembles an agent with upstream parts and one Zetra capability type. Nothing else is in the stack until the slice has run end to end.
 
 ```python
-def assemble(bundle: AgentBundle, bindings: Bindings) -> Agent:
-    toolset = discovered_tools(
-        bundle, bindings
-    )  # the @tool functions plus one MCPToolset per GatewayMCP server
+def assemble(bundle: Bundle, bindings: Bindings) -> Agent:
+    toolsets = [
+        build_toolset(bundle.tools, bindings),  # the @tool functions
+        *(gateway_toolset(server, tools) for server, tools in bundle.mcp.items()),
+        *([bundle.skill_set.toolset()] if bundle.skill_set else []),
+    ]
     return Agent.from_spec(
-        bundle.spec,
+        upstream_spec(bundle.spec),  # Skills and GatewayMCP entries removed; Zetra built them
         name=bundle.name,
         deps_type=RunDeps,
         output_type=bundle.output | DeferredToolRequests,
-        toolsets=[toolset],
-        capabilities=[TemporalDurability(**bundle.activity_configs)],
-        custom_capability_types=[GatewayMCP, Skills],
+        toolsets=toolsets,
+        capabilities=[durability(bundle)],
     )
 ```
 
-Six lines, and every one of them is upstream behaviour: the spec loads with upstream merge rules, `Skills` is the Harness capability unchanged, `requires_approval=True` on `@approval` tools pauses the run with upstream `DeferredToolRequests`, and `TemporalDurability` makes each model request and tool call an activity. Zetra's own code at this layer is the compiler (discovery, lock, activity configs from the retry matrix) and `GatewayMCP`, which at first is a thin wrapper over `MCPToolset` pointed at the gateway.
+Every line is upstream behaviour: the spec loads with upstream merge rules, a write tool pauses the run by raising upstream `ApprovalRequired` once it has built and validated its payload, and `TemporalDurability` makes each model request and tool call an activity. Zetra's own code at this layer is the compiler (discovery, lock, activity configs from the retry matrix) and the two toolsets it builds from spec entries: `load_skill` with the skill catalogue as instructions, and a filtered `MCPToolset` per gateway server.
 
 What each later layer adds to the stack, and only once the previous layer is vetted:
 
@@ -471,12 +472,12 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
 
     @workflow.update
     def approve(
-        self, d: ApprovalDecision
-    ) -> ApprovalReceipt:  # synchronous; never waits for the commit
+        self, d: Decision
+    ) -> Decided:  # synchronous; never waits for the commit
         return self.state.ledger.apply(d, workflow.current_update_info().id, workflow.now())
 
     @approve.validator
-    def _check(self, d: ApprovalDecision) -> None:  # pure: no mutation, no I/O; skipped on replay
+    def _check(self, d: Decision) -> None:  # pure: no mutation, no I/O; skipped on replay
         self.state.ledger.check(
             d, workflow.current_update_info().id, workflow.now(), workflow.info(), REGISTRY.keys()
         )
@@ -484,7 +485,7 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
     @workflow.query
     def status(self) -> RunStatus: ...
     @workflow.query
-    def pending_approvals(self) -> list[PendingApproval]: ...
+    def pending_approvals(self) -> list[Proposal]: ...
 
     @workflow.run
     async def run(self, req: Start | Continuation) -> RunOutcome:

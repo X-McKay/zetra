@@ -12,7 +12,7 @@ Requires the ``sdk`` extra (temporalio).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -26,7 +26,7 @@ from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner, SandboxR
 
 from .bundle import Bundle
 from .contracts import RunDeps
-from .runner import Decision, Pending, arun_agent, parse_duration
+from .runner import Decided, Decision, Proposal, RunError, arun_agent, expired, parse_duration
 
 WORKFLOW_TYPE = "zetra.agent"
 APPROVE_UPDATE = "approve"  # the Update name, for clients that address it by string
@@ -38,55 +38,15 @@ class RunRequest(BaseModel):
     principal: str = "unknown"
 
 
-class ApprovalDecision(BaseModel):
-    """What an approver sends: the operation and the exact payload digest they looked at."""
-
-    operation_id: str
-    digest: str
-    approved: bool
-    actor: str
-    reason: str = ""
-
-
-class Decided(BaseModel):
-    """What the workflow returns once a decision is recorded."""
-
-    operation_id: str
-    digest: str
-    approved: bool
-    actor: str
-    reason: str
-    recorded_at: datetime
-
-
-class PendingApproval(BaseModel):
-    tool_call_id: str
-    tool: str
-    operation_id: str
-    payload: dict[str, Any]
-    digest: str
-
-
-class DecisionRecord(BaseModel):
-    approved: bool
-    actor: str
-    reason: str = ""
-
-
-class RunErrorRecord(BaseModel):
-    code: str
-    message: str
-
-
 class RunResult(BaseModel):
     """The workflow completes with this even when the run failed in an expected way."""
 
     agent: str
     status: Literal["completed", "failed"] = "completed"
     output: dict[str, Any] | None
-    error: RunErrorRecord | None = None
-    proposals: list[PendingApproval]
-    decisions: dict[str, DecisionRecord]  # keyed by operation id
+    error: RunError | None = None
+    proposals: list[Proposal]
+    decisions: dict[str, Decided]  # keyed by operation id
 
 
 @dataclass
@@ -120,9 +80,9 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
 
     def __init__(self) -> None:
         self._decisions: dict[str, Decided] = {}
-        self._pending: list[PendingApproval] = []
+        self._pending: list[Proposal] = []
 
-    def _check(self, decision: ApprovalDecision) -> None:
+    def _check(self, decision: Decision) -> None:
         """Refuse anything but one fresh decision on exactly the payload the approver saw."""
         previous = self._decisions.get(decision.operation_id)
         if previous is not None:
@@ -151,25 +111,20 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
             )
 
     @workflow.update(name=APPROVE_UPDATE)
-    def approve(self, decision: ApprovalDecision) -> Decided:
+    def approve(self, decision: Decision) -> Decided:
         self._check(decision)  # validators are skipped on replay; the handler re-checks
         decided = Decided(
-            operation_id=decision.operation_id,
-            digest=decision.digest,
-            approved=decision.approved,
-            actor=decision.actor.strip(),
-            reason=decision.reason,
-            recorded_at=workflow.now(),
+            **decision.model_dump() | {"actor": decision.actor.strip()}, recorded_at=workflow.now()
         )
         self._decisions[decision.operation_id] = decided
         return decided
 
     @approve.validator
-    def validate_approval(self, decision: ApprovalDecision) -> None:
+    def validate_approval(self, decision: Decision) -> None:
         self._check(decision)
 
     @workflow.query
-    def pending_approvals(self) -> list[PendingApproval]:
+    def pending_approvals(self) -> list[Proposal]:
         return list(self._pending)
 
     @workflow.query
@@ -192,8 +147,8 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
             input=value.model_dump(mode="json"),
         )
 
-        async def approver(pending: list[Pending]) -> dict[str, Decision]:
-            self._pending = [_pending_approval(p) for p in pending]
+        async def approver(pending: list[Proposal]) -> list[Decision]:
+            self._pending = list(pending)
             ttl = min((parse_duration(p.ttl) for p in pending), default=timedelta(hours=24))
             try:
                 await workflow.wait_condition(
@@ -204,15 +159,7 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
             except TimeoutError:  # asyncio.TimeoutError is this builtin on 3.11+
                 pass
             self._pending = []
-            decisions: dict[str, Decision] = {}
-            for p in pending:
-                decided = self._decisions.get(p.operation_id)
-                decisions[p.tool_call_id] = (
-                    Decision(decided.approved, decided.actor, decided.reason)
-                    if decided
-                    else Decision(False, "none", "approval expired")
-                )
-            return decisions
+            return [self._decisions.get(p.operation_id) or expired(p) for p in pending]
 
         outcome = await arun_agent(
             entry.agent, bundle, value, approver=approver, deps=deps, now=workflow.now
@@ -221,25 +168,10 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
             agent=bundle.name,
             status=outcome.status,
             output=outcome.output.model_dump(mode="json") if outcome.output is not None else None,
-            error=RunErrorRecord(code=outcome.error.code, message=outcome.error.message)
-            if outcome.error
-            else None,
-            proposals=[_pending_approval(p) for p in outcome.proposals],
-            decisions={
-                op: DecisionRecord(approved=d.approved, actor=d.actor, reason=d.reason)
-                for op, d in outcome.decisions.items()
-            },
+            error=outcome.error,
+            proposals=outcome.proposals,
+            decisions=outcome.decisions,
         )
-
-
-def _pending_approval(p: Pending) -> PendingApproval:
-    return PendingApproval(
-        tool_call_id=p.tool_call_id,
-        tool=p.tool,
-        operation_id=p.operation_id,
-        payload=p.payload.model_dump(mode="json"),
-        digest=p.digest,
-    )
 
 
 def workflow_runner(bundles: list[Bundle]) -> SandboxedWorkflowRunner:

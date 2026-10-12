@@ -43,6 +43,7 @@ tools:
     effect: write
     injects:
     - alert
+    payload: Annotation
     receiver: alerts
   page_oncall:
     approval:
@@ -52,5 +53,6 @@ tools:
     effect: write
     injects:
     - alert
+    payload: Page
     receiver: pager
 version: 1

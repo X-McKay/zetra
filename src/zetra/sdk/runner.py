@@ -1,8 +1,9 @@
 """Run an agent as a function from Input to Output, pausing for approvals.
 
-The same loop serves the in-process runner and the Temporal workflow: the only difference
-is how the approver is asked. A pending approval carries the exact payload the pure builder
-produced, so the approver sees what the receiver will commit.
+The same loop serves the in-process runner and the Temporal workflow; only the approver
+differs. A ``Proposal`` carries the exact payload the write tool built and validated before
+it paused, so an approver sees what the receiver will commit; a ``Decision`` names that
+proposal by operation id and digest, so a decision on a stale or altered payload cannot land.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+from pydantic import BaseModel, ConfigDict
 from pydantic_ai import Agent, capture_run_messages
 from pydantic_ai.exceptions import ModelAPIError, UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.messages import ModelMessage
@@ -22,36 +24,51 @@ from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolDen
 from pydantic_ai.usage import UsageLimits
 
 from .bundle import Bundle
-from .contracts import Contract, RunDeps, canonical
+from .contracts import Contract, RunDeps, canonical, digest
 from .errors import Denied
-from .receiver import Grant, payload_digest
-from .tools import ToolDecl, preview_payload
+from .receiver import Grant
+from .tools import ToolDecl
 
 
-@dataclass(frozen=True)
-class Pending:
-    tool_call_id: str
-    tool: str
+class Proposal(BaseModel):
+    """A write the agent wants to make, exactly as the receiver would commit it."""
+
+    model_config = ConfigDict(frozen=True)
+
     operation_id: str
-    args: dict[str, Any]
-    payload: Contract
+    tool: str
+    capability: str
+    payload: dict[str, Any]
     digest: str
     ttl: str
+    tool_call_id: str
 
 
-@dataclass(frozen=True)
-class Decision:
+class Decision(BaseModel):
+    """What an approver says about one proposal, naming the payload digest they looked at."""
+
+    model_config = ConfigDict(frozen=True)
+
+    operation_id: str
+    digest: str
     approved: bool
     actor: str
     reason: str = ""
 
 
+class Decided(Decision):
+    """A decision once recorded, with the time it was recorded."""
+
+    recorded_at: datetime
+
+
 ErrorCode = Literal["budget_exhausted", "output_invalid", "model_error", "denied"]
 
 
-@dataclass(frozen=True)
-class RunError:
+class RunError(BaseModel):
     """Why a run ended without an output. These are expected ways for a run to end, not bugs."""
+
+    model_config = ConfigDict(frozen=True)
 
     code: ErrorCode
     message: str
@@ -61,14 +78,14 @@ class RunError:
 class RunOutcome:
     output: Any
     messages: list[ModelMessage]
-    proposals: list[Pending] = field(default_factory=list)
-    decisions: dict[str, Decision] = field(default_factory=dict)
+    proposals: list[Proposal] = field(default_factory=list)
+    decisions: dict[str, Decided] = field(default_factory=dict)  # keyed by operation id
     status: Literal["completed", "failed"] = "completed"
     error: RunError | None = None
 
 
-AsyncApprover = Callable[[list[Pending]], Awaitable[dict[str, Decision]]]
-SyncApprover = Callable[[list[Pending]], dict[str, Decision]]
+AsyncApprover = Callable[[list[Proposal]], Awaitable[list[Decision]]]
+SyncApprover = Callable[[list[Proposal]], list[Decision]]
 
 
 def parse_duration(value: str) -> timedelta:
@@ -100,8 +117,18 @@ def make_deps(bundle: Bundle, value: Contract, *, run_id: str | None, principal:
     )
 
 
+def expired(proposal: Proposal) -> Decision:
+    return Decision(
+        operation_id=proposal.operation_id,
+        digest=proposal.digest,
+        approved=False,
+        actor="none",
+        reason="approval expired",
+    )
+
+
 class Session:
-    """Drive one run step by step: start, inspect pending approvals, decide, repeat."""
+    """Drive one run step by step: start, inspect pending proposals, decide, repeat."""
 
     def __init__(
         self,
@@ -116,7 +143,7 @@ class Session:
         self.decls = {t.name: t for t in bundle.tools}
         self.limits = usage_limits(bundle)
         self.outcome = RunOutcome(output=None, messages=[])
-        self.pending: list[Pending] = []
+        self.pending: list[Proposal] = []
         self._result: Any = None
         self._seq = 0
 
@@ -145,7 +172,7 @@ class Session:
     def _fail(self, code: ErrorCode, message: str, messages: list[ModelMessage]) -> None:
         self.pending = []
         self.outcome.status = "failed"
-        self.outcome.error = RunError(code, message.splitlines()[0] if message else code)
+        self.outcome.error = RunError(code=code, message=message.splitlines()[0] or code)
         self.outcome.output = None
         self.outcome.messages = list(messages)
 
@@ -153,27 +180,24 @@ class Session:
         await self._step(prompt_for(self.value))
 
     def _collect(self) -> None:
+        """Turn the tool calls that paused for approval into proposals; the tool built each payload."""
         self.pending = []
         if isinstance(self._result.output, DeferredToolRequests):
             for part in self._result.output.approvals:
                 decl: ToolDecl = self.decls[part.tool_name]
-                args = part.args_as_dict()
-                payload = preview_payload(decl, args, self.deps, self.bundle.input_type)
-                built = (self._result.output.metadata.get(part.tool_call_id) or {}).get("digest")
-                if built is not None and built != payload_digest(payload):
-                    raise Denied(
-                        f"{decl.name}: the preview differs from the payload the tool built"
-                    )
+                built = self._result.output.metadata.get(part.tool_call_id) or {}
+                if "payload" not in built or digest(built["payload"]) != built.get("digest"):
+                    raise Denied(f"{decl.name} paused without a consistent payload and digest")
                 self._seq += 1
                 self.pending.append(
-                    Pending(
-                        tool_call_id=part.tool_call_id,
-                        tool=decl.name,
+                    Proposal(
                         operation_id=f"{self.deps.run}:c{self._seq:06d}",
-                        args=args,
-                        payload=payload,
-                        digest=payload_digest(payload),
+                        tool=decl.name,
+                        capability=decl.capability,
+                        payload=built["payload"],
+                        digest=built["digest"],
                         ttl=decl.ttl or self.bundle.project.approval_ttl,
+                        tool_call_id=part.tool_call_id,
                     )
                 )
             self.outcome.proposals.extend(self.pending)
@@ -183,26 +207,41 @@ class Session:
                 self._result.all_messages(),
             )
 
-    async def decide(self, decisions: dict[str, Decision]) -> None:
+    async def decide(self, decisions: list[Decision]) -> None:
+        """Record one decision per pending proposal and resume the run with them."""
         if not self.pending:
             raise Denied("nothing is pending approval")
+        by_operation = {d.operation_id: d for d in decisions}
+        unknown = set(by_operation) - {p.operation_id for p in self.pending}
+        if unknown:
+            raise Denied(f"no proposal is pending for {sorted(unknown)}")
         approvals: dict[str, Any] = {}
         metadata: dict[str, dict[str, Any]] = {}
-        for item in self.pending:
-            decision = decisions.get(item.tool_call_id) or Decision(False, "none", "no decision")
-            self.outcome.decisions[item.operation_id] = decision
-            if decision.approved:
+        for proposal in self.pending:
+            decision = by_operation.get(proposal.operation_id) or expired(proposal).model_copy(
+                update={"reason": "no decision"}
+            )
+            if decision.digest != proposal.digest:
+                raise Denied(f"the decision on {proposal.operation_id} names a different payload")
+            decided = (
+                decision  # the workflow records decisions as they arrive, with their own time
+                if isinstance(decision, Decided)
+                else Decided(**decision.model_dump(), recorded_at=self.now())
+            )
+            self.outcome.decisions[proposal.operation_id] = decided
+            if decided.approved:
                 grant = Grant(
-                    operation_id=item.operation_id,
-                    digest=item.digest,
-                    actor=decision.actor,
+                    operation_id=proposal.operation_id,
+                    digest=proposal.digest,
+                    actor=decided.actor,
                     mode="human",
-                    expires_at=self.now() + parse_duration(item.ttl),
+                    expires_at=decided.recorded_at + parse_duration(proposal.ttl),
                 )
-                approvals[item.tool_call_id] = True
-                metadata[item.tool_call_id] = {"grant": grant.model_dump(mode="json")}
+                approvals[proposal.tool_call_id] = True
+                metadata[proposal.tool_call_id] = {"grant": grant.model_dump(mode="json")}
             else:
-                approvals[item.tool_call_id] = ToolDenied(decision.reason or "approval denied")
+                reason = decided.reason or "no reason given"
+                approvals[proposal.tool_call_id] = ToolDenied(f"approval denied: {reason}")
         await self._step(
             message_history=self._result.all_messages(),
             deferred_tool_results=DeferredToolResults(approvals=approvals, metadata=metadata),
@@ -234,7 +273,7 @@ def run_agent(
     run_id: str | None = None,
     principal: str = "local",
 ) -> RunOutcome:
-    async def ask(pending: list[Pending]) -> dict[str, Decision]:
+    async def ask(pending: list[Proposal]) -> list[Decision]:
         return approver(pending)
 
     deps = make_deps(bundle, value, run_id=run_id, principal=principal)

@@ -103,6 +103,7 @@ class ToolDecl:
     injects: dict[str, str]  # parameter name -> "input" | "deps"
     function: Callable[..., Any] = field(compare=False, repr=False)
     docstring: str = ""
+    payload_type: type[Contract] | None = None  # the Contract a write tool builds
 
     @property
     def is_write(self) -> bool:
@@ -222,7 +223,8 @@ def discover_tools(package_dir: Path, input_type: type[Contract]) -> list[ToolDe
                 "ZT-TOOL-017", "decorator metadata does not match the source", where=str(path)
             )
         injects: dict[str, str] = {}
-        for pname, param in inspect.signature(function, eval_str=True).parameters.items():
+        signature = inspect.signature(function, eval_str=True)
+        for pname, param in signature.parameters.items():
             framework_filled = param.annotation is input_type or param.annotation is RunDeps
             if param.kind is inspect.Parameter.KEYWORD_ONLY:
                 if param.annotation is input_type:
@@ -243,6 +245,17 @@ def discover_tools(package_dir: Path, input_type: type[Contract]) -> list[ToolDe
                     where=str(path),
                 )
         resource, effect = split_capability(static["capability"])
+        payload_type: type[Contract] | None = None
+        if effect != "read":
+            returns = signature.return_annotation
+            if not (isinstance(returns, type) and issubclass(returns, Contract)):
+                raise CompileError(
+                    "ZT-TOOL-020",
+                    f"{static['name']} is a write tool; annotate its return type with the "
+                    "payload Contract it builds",
+                    where=str(path),
+                )
+            payload_type = returns
         decls.append(
             ToolDecl(
                 name=static["name"],
@@ -254,6 +267,7 @@ def discover_tools(package_dir: Path, input_type: type[Contract]) -> list[ToolDe
                 injects=injects,
                 function=function,
                 docstring=inspect.getdoc(function) or "",
+                payload_type=payload_type,
             )
         )
     return decls
@@ -376,7 +390,7 @@ def _wrap(decl: ToolDecl, input_type: type[Contract], bindings: Bindings) -> Cal
                 if not ctx.tool_call_approved:
                     # Pause here, after validation: an approver only ever sees a valid payload.
                     raise ApprovalRequired(
-                        metadata={"digest": actual, "capability": decl.capability}
+                        metadata={"payload": payload.model_dump(mode="json"), "digest": actual}
                     )
                 raw = (ctx.tool_call_metadata or {}).get("grant")
                 if raw is None:
@@ -420,16 +434,3 @@ def _payload_problem(decl: ToolDecl, exc: ValidationError) -> str:
         field = ".".join(str(part) for part in error["loc"]) or "payload"
         problems.append(f"{field}: {error['msg']}")
     return f"{decl.name} cannot build its payload from these arguments: " + "; ".join(problems)
-
-
-def preview_payload(
-    decl: ToolDecl, args: dict[str, Any], deps: RunDeps, input_type: type[Contract]
-) -> Contract:
-    """Run the pure payload builder outside the run, to show an approver exactly what will be committed."""
-    values = dict(args)
-    for pname, kind in decl.injects.items():
-        values[pname] = input_type.model_validate(deps.input) if kind == "input" else deps
-    payload = decl.function(**values)
-    if not isinstance(payload, Contract):
-        raise Denied(f"{decl.name} must return a Contract payload")
-    return payload

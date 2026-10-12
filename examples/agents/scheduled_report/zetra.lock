@@ -36,5 +36,6 @@ tools:
     effect: write
     injects:
     - request
+    payload: WikiPage
     receiver: wiki
 version: 1

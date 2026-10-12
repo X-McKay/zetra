@@ -83,3 +83,26 @@ def load_spec(path: Path) -> tuple[AgentSpec, dict[str, Any]]:
             "ZT-SPEC-009", f"spec does not validate: {exc}", where=str(path)
         ) from exc
     return spec, raw
+
+
+def capability_entry(entry: Any) -> tuple[str, dict[str, Any]]:
+    """Read one spec capability entry as ``(kind, arguments)``; upstream parses them as
+    ``CapabilitySpec(name, arguments)``, raw YAML as a string or a one-key mapping."""
+    name, arguments = getattr(entry, "name", None), getattr(entry, "arguments", None)
+    if isinstance(name, str):
+        return name, dict(arguments) if isinstance(arguments, dict) else {}
+    if isinstance(entry, str):
+        return entry, {}
+    if isinstance(entry, dict) and len(entry) == 1:
+        kind, value = next(iter(entry.items()))
+        return kind, dict(value) if isinstance(value, dict) else {}
+    raise CompileError("ZT-SPEC-010", f"unreadable capability entry {entry!r}")
+
+
+ZETRA_CAPABILITIES = {"Skills", "GatewayMCP"}  # built by Zetra as toolsets, not by upstream
+
+
+def upstream_spec(spec: AgentSpec) -> AgentSpec:
+    """The spec with Zetra's capability entries removed, for ``Agent.from_spec``."""
+    kept = [c for c in spec.capabilities if capability_entry(c)[0] not in ZETRA_CAPABILITIES]
+    return spec.model_copy(update={"capabilities": kept})
