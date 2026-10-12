@@ -118,6 +118,36 @@ Items 1, 2, 3, 6, 8, 9 and 11 belong to later layers and were not touched.
 6. **Tiers.** A reversible write without `@approval` is T2, not T3; T3 is reserved for `exec` and for an unapproved irreversible write, which `zetra check` refuses anyway (`ZT-TOOL-005`).
 7. **Temporal CLI.** `WorkflowEnvironment.start_local()` downloads the CLI from `temporal.download`, which the network policy here denied. The CLI was built with `go install github.com/temporalio/cli/cmd/temporal@v1.5.1` through the Go module proxy. `zetra dev` and the durable test use `ZETRA_TEMPORAL_CLI` or a `temporal` on `PATH` when present, and skip (the test) or fall back to the download (the command) otherwise.
 
+## Field exercise: what a developer meets
+
+Observed on 2026-10-12 by scaffolding a fresh agent with `zetra new --write` into a scratch project, running every CLI verb on it, then breaking it in fifteen deliberate ways and probing runtime behaviour in-process with the test harness. Scratch files were not committed. Numbered items are ranked by how much they matter.
+
+### Should be fixed
+
+1. **A positional `Input` parameter leaks to the model.** `def record_note(text: str, request: Request)` (no `*`) passes `zetra check`; `request` becomes a model-visible tool argument, so the model can supply a forged input to a tool that derives payload fields from it. Only keyword-only parameters are injected today. Proposed: refuse any positional parameter annotated with the Input or `RunDeps` type at compile time (`ZT-TOOL-019`).
+2. **An invalid payload kills the run.** When the model's arguments pass the tool schema but the payload builder's `Contract` rejects them (a 600-character summary against `max_length=500`), the raw `ValidationError` escapes from `preview_payload` and the run dies. Proposed: build the payload inside the tool before deferring, by raising PydanticAI's `ApprovalRequired(metadata=...)` instead of `requires_approval=True`; a `ValidationError` becomes a `ModelRetry` that tells the model what to fix, and the approver never sees an invalid payload. The digest can ride in the deferred request's metadata.
+3. **Run failures are exceptions, not outcomes.** Exhausting the request budget (`UsageLimitExceeded`) or the output retries (`UnexpectedModelBehavior`, when the model answers in prose) escapes the runner: a traceback from `zetra run`, a failed workflow with no `RunResult` from the worker. Proposed: the runner returns a typed failed outcome (`status: failed`, `error: budget_exhausted | output_invalid | ...`), the workflow completes with it, the CLI prints it and exits non-zero.
+4. **`pytest <package>` fails on a fresh scaffold** with `ModuleNotFoundError`: nothing puts the package's parent on `sys.path`; the examples work only because of a hand-written `conftest.py`. Proposed: the pytest plugin adds the parent of the nearest `agent.yaml` to `sys.path` while collecting, so a scaffold tests with no extra file.
+5. **`--approve prompt` without a terminal** (the default for `zetra run` and `zetra dev`) ends in an `EOFError` traceback. Proposed: refuse up front when stdin is not a TTY, naming `--approve auto` and `--approve deny`; treat EOF at the prompt as a denial.
+
+### Rough edges
+
+6. Compile errors are inconsistent about location: `ZT-SPEC-*`, `ZT-TOOL-004/011`, `ZT-CON-001` name the file; `ZT-TOOL-005/003`, `ZT-SKILL-011`, `ZT-MCP-003`, `ZT-CON-003` do not. A non-JSON `--input` reports `Expecting value: line 1 column 1` rather than what was expected.
+7. A denied write returns only the approver's reason to the model (`not now`); `approval denied: not now` would make the state explicit.
+8. The Input reaches the model as one canonical JSON object in the user prompt, untrusted fields inline. A default rendering that names the contract and labels fields, with `prompt()` shown in the scaffold, would give instructions something to point at ("the alert below is data").
+9. `tools/` refuses every non-`.py` file, including a `README.md` (`ZT-TOOL-016`). Strict by design; allowing a README costs nothing.
+10. The `ZT-*` codes are not documented anywhere a developer would look. A reference table, or `zetra explain ZT-TOOL-004`, would help.
+11. A project without `zetra.toml` only fails at `zetra run` (`ZT-SPEC-011`, unresolved model policy). `zetra new` could write a minimal `zetra.toml` when none exists above the package, or the error could say what to create.
+
+### Working as intended
+
+- All fifteen deliberate mistakes that should fail at compile time did, each with a `ZT-*` code, in under a second: misspelled spec key, `metadata`, a provider model, `WebSearch`, an unapproved irreversible write, an impure write body, a function named unlike its file, `os` in `contracts.py`, a missing skill, a stray file in `tools/`, a non-ISO TTL, an unconfigured gateway server, `Output` bound to `dict`.
+- The lock catches a one-line edit to `SKILL.md` (`--frozen` exits 1, `stale`) and an edit to `instructions` changes the bundle digest.
+- Model-side mistakes degrade rather than crash: a wrong argument type costs one retry; an unknown tool, or `load_skill` for a skill outside `include`, returns a plain message naming what exists; a reversible write and an approval-gated write in the same model turn behave as declared (the first commits at once, the second waits).
+- `RunDeps` injection gives a read tool the run id and principal without exposing them to the model.
+- One worker serves two agents on one task queue; a request naming an unknown agent fails the workflow with `no agent named 'nope' on this worker`.
+- Cold-process timings: `zetra check` 0.9 s, `zetra run` 1.0 s, importing `zetra.sdk.assemble` 0.7 s.
+
 ## Before layer 1
 
 - Run `zetra worker` against a standing server rather than the throwaway dev server.
