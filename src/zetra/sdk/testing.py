@@ -22,7 +22,7 @@ from .assemble import assemble
 from .bundle import Bundle, build
 from .contracts import Contract, RunDeps
 from .receiver import MemoryReceiver
-from .runner import Decision, Pending, Session, make_deps
+from .runner import Decision, Pending, RunError, Session, make_deps
 from .tools import Bindings, ensure_importable
 
 
@@ -168,6 +168,14 @@ class Run:
     @property
     def output(self) -> Any:
         return self._session.outcome.output
+
+    @property
+    def status(self) -> str:
+        return self._session.outcome.status
+
+    @property
+    def error(self) -> RunError | None:
+        return self._session.outcome.error
 
     @property
     def messages(self) -> list[ModelMessage]:

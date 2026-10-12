@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 from pydantic_ai import Agent
@@ -73,9 +73,18 @@ class DecisionRecord(BaseModel):
     reason: str = ""
 
 
+class RunErrorRecord(BaseModel):
+    code: str
+    message: str
+
+
 class RunResult(BaseModel):
+    """The workflow completes with this even when the run failed in an expected way."""
+
     agent: str
-    output: dict[str, Any]
+    status: Literal["completed", "failed"] = "completed"
+    output: dict[str, Any] | None
+    error: RunErrorRecord | None = None
     proposals: list[PendingApproval]
     decisions: dict[str, DecisionRecord]  # keyed by operation id
 
@@ -90,10 +99,16 @@ REGISTRY: dict[str, Registered] = {}
 
 
 def register(bundle: Bundle, agent: Agent[RunDeps, Any]) -> Registered:
+    """Register (or re-register) the agent the workflow runs for ``bundle.name``.
+
+    Re-registering replaces the previous agent of that name, since activity names derive
+    from the agent name and a worker refuses duplicates.
+    """
     entry = Registered(bundle, agent)
     REGISTRY[bundle.name] = entry
-    if agent not in ZetraAgentWorkflow.__pydantic_ai_agents__:
-        ZetraAgentWorkflow.__pydantic_ai_agents__.append(agent)
+    agents = ZetraAgentWorkflow.__pydantic_ai_agents__
+    agents[:] = [a for a in agents if a.name != agent.name]
+    agents.append(agent)
     return entry
 
 
@@ -204,7 +219,11 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
         )
         return RunResult(
             agent=bundle.name,
-            output=outcome.output.model_dump(mode="json"),
+            status=outcome.status,
+            output=outcome.output.model_dump(mode="json") if outcome.output is not None else None,
+            error=RunErrorRecord(code=outcome.error.code, message=outcome.error.message)
+            if outcome.error
+            else None,
             proposals=[_pending_approval(p) for p in outcome.proposals],
             decisions={
                 op: DecisionRecord(approved=d.approved, actor=d.actor, reason=d.reason)

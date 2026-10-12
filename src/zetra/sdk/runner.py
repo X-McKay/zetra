@@ -13,9 +13,10 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, capture_run_messages
+from pydantic_ai.exceptions import ModelAPIError, UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolDenied
 from pydantic_ai.usage import UsageLimits
@@ -45,12 +46,25 @@ class Decision:
     reason: str = ""
 
 
+ErrorCode = Literal["budget_exhausted", "output_invalid", "model_error", "denied"]
+
+
+@dataclass(frozen=True)
+class RunError:
+    """Why a run ended without an output. These are expected ways for a run to end, not bugs."""
+
+    code: ErrorCode
+    message: str
+
+
 @dataclass
 class RunOutcome:
     output: Any
     messages: list[ModelMessage]
     proposals: list[Pending] = field(default_factory=list)
     decisions: dict[str, Decision] = field(default_factory=dict)
+    status: Literal["completed", "failed"] = "completed"
+    error: RunError | None = None
 
 
 AsyncApprover = Callable[[list[Pending]], Awaitable[dict[str, Decision]]]
@@ -108,13 +122,35 @@ class Session:
 
     @property
     def done(self) -> bool:
-        return self._result is not None and not self.pending
+        return self.outcome.status == "failed" or (self._result is not None and not self.pending)
+
+    async def _step(self, *args: Any, **kwargs: Any) -> None:
+        """One agent.run; the expected ways it can end without an output become a RunError."""
+        with capture_run_messages() as messages:
+            try:
+                self._result = await self.agent.run(
+                    *args, deps=self.deps, usage_limits=self.limits, **kwargs
+                )
+            except UsageLimitExceeded as exc:
+                self._fail("budget_exhausted", str(exc), messages)
+            except UnexpectedModelBehavior as exc:
+                self._fail("output_invalid", str(exc), messages)
+            except ModelAPIError as exc:
+                self._fail("model_error", str(exc), messages)
+            except Denied as exc:
+                self._fail("denied", str(exc), messages)
+            else:
+                self._collect()
+
+    def _fail(self, code: ErrorCode, message: str, messages: list[ModelMessage]) -> None:
+        self.pending = []
+        self.outcome.status = "failed"
+        self.outcome.error = RunError(code, message.splitlines()[0] if message else code)
+        self.outcome.output = None
+        self.outcome.messages = list(messages)
 
     async def start(self) -> None:
-        self._result = await self.agent.run(
-            prompt_for(self.value), deps=self.deps, usage_limits=self.limits
-        )
-        self._collect()
+        await self._step(prompt_for(self.value))
 
     def _collect(self) -> None:
         self.pending = []
@@ -167,13 +203,10 @@ class Session:
                 metadata[item.tool_call_id] = {"grant": grant.model_dump(mode="json")}
             else:
                 approvals[item.tool_call_id] = ToolDenied(decision.reason or "approval denied")
-        self._result = await self.agent.run(
+        await self._step(
             message_history=self._result.all_messages(),
             deferred_tool_results=DeferredToolResults(approvals=approvals, metadata=metadata),
-            deps=self.deps,
-            usage_limits=self.limits,
         )
-        self._collect()
 
 
 async def arun_agent(

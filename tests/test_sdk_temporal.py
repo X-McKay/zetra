@@ -361,3 +361,51 @@ class DurableRunTests(unittest.TestCase):
                 any(receipt_id in json.dumps(json.loads(c)) for c in completed),
                 "the retried write must return the receipt the dead worker wrote",
             )
+
+    def test_expected_failure_completes_the_workflow_with_a_typed_error(self):
+        asyncio.run(self._failed())
+
+    async def _failed(self) -> None:
+        from temporalio.client import WorkflowExecutionStatus
+
+        from zetra.sdk import temporal as t
+        from zetra.sdk.assemble import assemble
+        from zetra.sdk.bundle import build
+        from zetra.sdk.receiver import MemoryReceiver
+        from zetra.sdk.testing import ScriptedModel, StubGateway, final
+        from zetra.sdk.tools import Bindings
+
+        bundle = build(REPO / "examples" / "agents" / "alert_responder")
+        status = StubGateway("status").stub("read_status", "ok").stub("recent_deploys", "none")
+        model = ScriptedModel().script(final("Prose instead of a typed output, every time."))
+        agent = assemble(
+            bundle,
+            Bindings({"pager": MemoryReceiver("pager"), "alerts": MemoryReceiver("alerts")}),
+            model=model.build(),
+            durable=True,
+            gateway_stubs={"status": status.toolset()},
+        )
+        entry = t.register(bundle, agent)
+        request = t.RunRequest(
+            agent=bundle.name,
+            input={
+                "alert_id": "ALR-20261012",
+                "service": "checkout-api",
+                "severity": "critical",
+                "message": "5xx rate 40%",
+            },
+            principal="test:failed",
+        )
+        env = await start_env()
+        async with env:
+            async with t.worker(env.client, "zetra-test", [entry]):
+                handle = await t.start_run(
+                    env.client, "zetra-test", request, workflow_id=f"test:{uuid.uuid4().hex[:8]}"
+                )
+                result = await asyncio.wait_for(handle.result(), timeout=60)  # completes, not fails
+                description = await handle.describe()
+        self.assertEqual(description.status, WorkflowExecutionStatus.COMPLETED)
+        self.assertEqual((result.status, result.output), ("failed", None))
+        assert result.error is not None
+        self.assertEqual(result.error.code, "output_invalid")
+        self.assertIn("retries", result.error.message)

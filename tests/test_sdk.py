@@ -345,6 +345,25 @@ class ApprovalLoopTests(unittest.TestCase):
         self.assertIn("summary", str(retries[0].content))
         self.assertEqual(agent.receiver("pager").commits, [])
 
+    def test_budget_exhaustion_and_prose_output_are_typed_failures(self):
+        from alert_responder.contracts import NoAction
+
+        agent = self.agent()
+        agent.model.script(*([call("read_status")] * 20), final(NoAction(reason="done")))
+        run = agent.run(self.alert())
+        self.assertEqual((run.status, run.output), ("failed", None))
+        assert run.error is not None
+        self.assertEqual(run.error.code, "budget_exhausted")
+        self.assertIn("request_limit", run.error.message)
+        self.assertGreater(len(run.messages), 8, "messages are kept for evidence")
+
+        agent = self.agent()
+        agent.model.script(final("I think we should page someone."))
+        run = agent.run(self.alert())
+        assert run.error is not None
+        self.assertEqual((run.status, run.error.code), ("failed", "output_invalid"))
+        self.assertEqual(run.approvals.pending, [])
+
     def test_rejection_and_reversible_writes(self):
         from alert_responder.contracts import Annotation, NoAction
 

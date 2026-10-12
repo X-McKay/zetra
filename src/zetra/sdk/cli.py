@@ -215,7 +215,11 @@ def run(root: Path, raw_input: str, *, approve: str, model: str | None) -> dict[
     outcome = run_agent(agent, bundle, value, approver=_approver(approve), principal="cli:local")
     return {
         "agent": bundle.name,
-        "output": outcome.output.model_dump(mode="json"),
+        "status": outcome.status,
+        "output": outcome.output.model_dump(mode="json") if outcome.output is not None else None,
+        "error": {"code": outcome.error.code, "message": outcome.error.message}
+        if outcome.error
+        else None,
         "proposals": [
             {"tool": p.tool, "operation_id": p.operation_id, "digest": p.digest}
             for p in outcome.proposals
@@ -311,7 +315,9 @@ async def _dev(
     return {
         "agent": bundle.name,
         "workflow_id": handle.id,
+        "status": result.status,
         "output": result.output,
+        "error": result.error.model_dump() if result.error else None,
         "proposals": [p.model_dump() for p in result.proposals],
         "decisions": {k: v.model_dump() for k, v in result.decisions.items()},
         "history_events": len(history.events),
@@ -357,7 +363,7 @@ def handle(args: argparse.Namespace) -> int:
         if args.command == "run":
             report = run(Path(args.directory), args.input, approve=args.approve, model=args.model)
             print(json.dumps(report, indent=2))
-            return 0
+            return 0 if report["status"] == "completed" else 3
         if args.command == "dev":
             report = asyncio.run(
                 _dev(
@@ -369,7 +375,7 @@ def handle(args: argparse.Namespace) -> int:
                 )
             )
             print(json.dumps(report, indent=2))
-            return 0
+            return 0 if report["status"] == "completed" else 3
         if args.command == "worker":
             asyncio.run(
                 _worker(
