@@ -30,10 +30,22 @@ Three example packages under `examples/agents/` share one `zetra.toml`: `handboo
 | `pytest examples/agents` | 6 passed in 0.30 s: approval round-trip, rejection, reversible write, gateway stub, union outputs |
 | `python -m unittest tests.test_sdk` | 11 passed: lock currency and tiers, scaffold plus check, refused irreversible write, AST purity rules, spec refusals, receiver rules, approval loop, hidden injected parameter |
 | `zetra dev examples/agents/alert_responder --approve auto --model test` | workflow `dev:alert-responder:f9a0c246` on a local dev server; one approval surfaced by query and decided by signal; the `pager` SQLite receiver holds one receipt for operation `…:c000001` with actor `cli:auto`; 49 history events; `Replayer` replay passed; 2.5 s wall clock including dev-server start |
-| `python -m unittest tests.test_sdk_temporal` | 1 passed in 1.2 s: scripted model and stub gateway inside activities, approval by signal, duplicate signal ignored, receiver committed once, history replays |
-| `just lint`, `just typecheck`, `just docs`, `just lock-check` | pass |
+| `zetra dev examples/agents/handbook_qa --approve auto --model test` | gateway read through the stub toolset inside an activity, typed `answer` output, no proposals; 25 history events; replay passed; 2.1 s |
+| `zetra dev examples/agents/scheduled_report --approve auto --model test` | reversible write committed without a human: the `wiki` SQLite receiver holds one receipt with actor `policy:reversible`, operation id `<workflow id>:<tool call id>`, title `Service report 2026-10-11` derived from the injected day; 28 history events; replay passed; 2.1 s |
+| `just sdk-dev-all` | the three runs above, back to back |
+| `python -m unittest tests.test_sdk_temporal` | 2 passed in 2.5 s. First: scripted model and stub gateway inside activities, approval by signal, duplicate signal ignored, receiver committed once, history replays. Second: approval expiry, below |
+| `just check` | passes, with `actionlint` and `shellcheck` installed locally |
 
-Only `alert_responder` was driven durably. The other two packages run through the same generic workflow but were exercised in-process only.
+### Approval expiry
+
+A scaffolded package (`zetra new --write`) with its tool changed to `@approval(ttl="PT1S")`, run durably with a scripted model that proposes one note and nobody answering:
+
+- the proposal appears in `pending_approvals`, then the run completes on its own;
+- the history holds exactly one `TimerFired` event: the expiry is a durable timer set by `workflow.wait_condition(timeout=ttl)`, not a worker-side sleep, so it survives a worker restart;
+- the decision is recorded as `approved=False, actor="none", reason="approval expired"`, the model receives the denial and produces the typed fallback output, and the receiver holds no commit;
+- a late approval signal is rejected by the server (`RPCError`): a closed run has no pending operation to revive.
+
+Expiry of a *granted* approval is a separate rule and is tested in `tests/test_sdk.py`: a receiver refuses a `Grant` whose `expires_at` has passed.
 
 ## Exit test of layer 0, item by item
 
@@ -41,11 +53,11 @@ Only `alert_responder` was driven durably. The other two packages run through th
 | --- | --- |
 | Three archetypes compile from their packages | yes; `zetra check` produced a lock for each |
 | Run in-process | yes; `pytest examples/agents` |
-| Run on the local Temporal dev server | `alert_responder` yes; the others not driven |
+| Run on the local Temporal dev server | yes, all three (`just sdk-dev-all`) |
 | One approval round-trips as an Update | round-trips as a **Signal** plus a Query, see deviation 1 |
 | A recorded history replays | yes, in `zetra dev` and in the unit test |
 | Per-agent line counts measured | yes, table below |
-| Inner-loop timings measured | in-process suite 0.30 s; durable run 2.5 s; durable test 1.2 s |
+| Inner-loop timings measured | in-process suite 0.30 s; durable runs 2.1 to 2.5 s each including dev-server start; the two durable tests 2.5 s |
 | Section 10 unknowns answered | items 4, 5, 7 (partly), 10 and 12, see below |
 
 ### Authored lines per agent
@@ -83,7 +95,8 @@ Items 1, 2, 3, 6, 8, 9 and 11 belong to later layers and were not touched.
 
 ## Before layer 1
 
-- Drive `handbook_qa` and `scheduled_report` through `zetra dev` as well, and `zetra worker` against a standing server.
+- Run `zetra worker` against a standing server rather than the throwaway dev server.
 - Exercise the real gateway path against the lab gateway with a bearer token, and the bounded retry against a refusing gateway.
-- Test approval expiry (the `wait_condition` timeout) and a worker kill between the write activity's commit and its completion, which is the case the idempotent receipt exists for.
+- Kill a worker between the write activity's commit and its completion, which is the case the idempotent receipt exists for, and confirm the retry returns the stored receipt.
 - Replace the signal with an Update plus validator (deviation 1) and decide whether strict mode returns at the receiver boundary only (deviation 2).
+- When several approvals are pending at once, the workflow waits for the shortest TTL among them; decide whether each should expire on its own clock.

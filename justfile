@@ -56,8 +56,14 @@ sdk-examples:
     PYDANTIC_AI_NO_BANNER=1 uv run --locked --all-extras python -m pytest examples/agents -q -p no:cacheprovider
 
 # Run one SDK example durably on a local Temporal dev server; needs the Temporal CLI (see docs).
-sdk-dev input='{"alert_id":"ALR-20261012","service":"checkout-api","severity":"critical","message":"5xx rate 40%"}':
-    PYDANTIC_AI_NO_BANNER=1 uv run --locked --all-extras zetra dev examples/agents/alert_responder --input '{{ input }}' --approve auto --model test
+sdk-dev package='alert_responder' input='{"alert_id":"ALR-20261012","service":"checkout-api","severity":"critical","message":"5xx rate 40%"}':
+    PYDANTIC_AI_NO_BANNER=1 uv run --locked --all-extras zetra dev examples/agents/{{ package }} --input '{{ input }}' --approve auto --model test
+
+# Run all three SDK examples durably, one after another.
+sdk-dev-all:
+    just sdk-dev handbook_qa '{"text":"How many vacation days do new hires get?"}'
+    just sdk-dev alert_responder
+    just sdk-dev scheduled_report '{"day":"2026-10-11"}'
 
 # Build the combined book and all standalone HTML chapters.
 docs:
