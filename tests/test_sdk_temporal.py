@@ -7,8 +7,11 @@ otherwise download one from temporal.download, which this suite never does.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import re
 import shutil
+import sys
 import tempfile
 import unittest
 import uuid
@@ -26,13 +29,29 @@ REPO = Path(__file__).resolve().parents[1]
 TEMPORAL_CLI = os.environ.get("ZETRA_TEMPORAL_CLI") or shutil.which("temporal")
 
 
+async def start_env():
+    """Start the local dev server; temporalio gives it 5 s, which a loaded host can miss once."""
+    from temporalio.testing import WorkflowEnvironment
+
+    from zetra.sdk.temporal import PydanticAIPlugin
+
+    for attempt in (1, 2):
+        try:
+            return await WorkflowEnvironment.start_local(
+                plugins=[PydanticAIPlugin()], dev_server_existing_path=TEMPORAL_CLI
+            )
+        except RuntimeError as exc:  # pragma: no cover - only under host load
+            if attempt == 2 or "did not start" not in str(exc):
+                raise
+    raise AssertionError("unreachable")
+
+
 @unittest.skipUnless(HAVE_SDK and TEMPORAL_CLI, "requires the sdk extra and a Temporal CLI")
 class DurableRunTests(unittest.TestCase):
     def test_approval_signal_commits_once_and_history_replays(self):
         asyncio.run(self._run())
 
     async def _run(self) -> None:
-        from temporalio.testing import WorkflowEnvironment
         from temporalio.worker import Replayer
 
         from zetra.sdk import temporal as t
@@ -72,9 +91,7 @@ class DurableRunTests(unittest.TestCase):
             },
             principal="test:durable",
         )
-        env = await WorkflowEnvironment.start_local(
-            plugins=[t.PydanticAIPlugin()], dev_server_existing_path=TEMPORAL_CLI
-        )
+        env = await start_env()
         async with env:
             async with t.worker(env.client, "zetra-test", [entry]):
                 handle = await t.start_run(
@@ -119,7 +136,6 @@ class DurableRunTests(unittest.TestCase):
 
     async def _expiry(self) -> None:
         from temporalio.service import RPCError
-        from temporalio.testing import WorkflowEnvironment
 
         from zetra.sdk import temporal as t
         from zetra.sdk.assemble import assemble
@@ -148,9 +164,7 @@ class DurableRunTests(unittest.TestCase):
             agent = assemble(bundle, Bindings({"notes": notes}), model=model.build(), durable=True)
             entry = t.register(bundle, agent)
             request = t.RunRequest(agent=bundle.name, input={"text": "hi"}, principal="test:expiry")
-            env = await WorkflowEnvironment.start_local(
-                plugins=[t.PydanticAIPlugin()], dev_server_existing_path=TEMPORAL_CLI
-            )
+            env = await start_env()
             async with env:
                 async with t.worker(env.client, "zetra-test", [entry]):
                     handle = await t.start_run(
@@ -188,3 +202,100 @@ class DurableRunTests(unittest.TestCase):
                 self.assertEqual(
                     len(fired), 1, "expiry must be a durable timer, not a worker sleep"
                 )
+
+    def test_worker_killed_after_commit_retries_onto_the_stored_receipt(self):
+        asyncio.run(self._crash())
+
+    async def _spawn_worker(self, address: str, queue: str, ledger: Path, mode: str):
+        helper = Path(__file__).with_name("_durable_worker.py")
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(helper),
+            address,
+            queue,
+            str(ledger),
+            mode,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env={**os.environ, "PYDANTIC_AI_NO_BANNER": "1"},
+        )
+        assert proc.stdout is not None
+        while True:
+            line = await asyncio.wait_for(proc.stdout.readline(), timeout=90)
+            if not line:
+                raise AssertionError(f"{mode} worker exited before it was ready")
+            if line.strip() == b"ready":
+                return proc
+
+    async def _crash(self) -> None:
+
+        from zetra.sdk import temporal as t
+        from zetra.sdk.receiver import SqliteReceiver
+
+        alert = {
+            "alert_id": "ALR-20261012",
+            "service": "checkout-api",
+            "severity": "critical",
+            "message": "5xx rate 40%",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp)
+            env = await start_env()
+            async with env:
+                address = env.client.service_client.config.target_host
+                queue = f"zetra-crash-{uuid.uuid4().hex[:6]}"
+                first = await self._spawn_worker(address, queue, ledger, "crash")
+                second = None
+                try:
+                    request = t.RunRequest(
+                        agent="alert-responder", input=alert, principal="test:crash"
+                    )
+                    handle = await t.start_run(
+                        env.client, queue, request, workflow_id=f"test:{uuid.uuid4().hex[:8]}"
+                    )
+                    pending: list[t.PendingApproval] = []
+                    for _ in range(400):
+                        pending = await handle.query(t.ZetraAgentWorkflow.pending_approvals)
+                        if pending:
+                            break
+                        await asyncio.sleep(0.05)
+                    [item] = pending
+                    decision = t.ApprovalDecision(
+                        tool_call_id=item.tool_call_id, approved=True, actor="oncall:bob"
+                    )
+                    await handle.signal(t.ZetraAgentWorkflow.approve, decision)
+                    stdout, _ = await asyncio.wait_for(first.communicate(), timeout=60)
+                    self.assertEqual(first.returncode, 137, stdout.decode(errors="replace"))
+                    match = re.search(r"committed (\w+)", stdout.decode(errors="replace"))
+                    assert match is not None, stdout
+                    receipt_id = match.group(1)
+                    self.assertEqual(SqliteReceiver("pager", ledger / "pager.db").count(), 1)
+                    # The activity is orphaned: the server times it out and schedules a retry,
+                    # which the second worker must answer with the receipt already written.
+                    second = await self._spawn_worker(address, queue, ledger, "normal")
+                    result = await asyncio.wait_for(handle.result(), timeout=120)
+                    history = await handle.fetch_history()
+                finally:
+                    for proc in (first, second):
+                        if proc is not None and proc.returncode is None:
+                            proc.terminate()
+                            await proc.wait()
+            self.assertEqual(result.output, {"kind": "paged", "reason": "paged"})
+            self.assertEqual(SqliteReceiver("pager", ledger / "pager.db").count(), 1)
+            retried = [
+                e.activity_task_started_event_attributes
+                for e in history.events
+                if e.HasField("activity_task_started_event_attributes")
+                and e.activity_task_started_event_attributes.attempt > 1
+            ]
+            self.assertEqual(len(retried), 1, "exactly one activity needed a second attempt")
+            self.assertTrue(retried[0].last_failure.HasField("timeout_failure_info"))
+            completed = [
+                e.activity_task_completed_event_attributes.result.payloads[0].data.decode()
+                for e in history.events
+                if e.HasField("activity_task_completed_event_attributes")
+            ]
+            self.assertTrue(
+                any(receipt_id in json.dumps(json.loads(c)) for c in completed),
+                "the retried write must return the receipt the dead worker wrote",
+            )

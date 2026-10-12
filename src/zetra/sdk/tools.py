@@ -16,6 +16,7 @@ import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -259,10 +260,16 @@ def ensure_importable(package_dir: Path) -> None:
 
 
 class Bindings:
-    """What the worker supplies: receivers by resource name."""
+    """What the worker supplies: receivers by resource name and the tool activity timeout."""
 
-    def __init__(self, receivers: dict[str, Receiver] | None = None):
+    def __init__(
+        self,
+        receivers: dict[str, Receiver] | None = None,
+        *,
+        tool_timeout: timedelta = timedelta(seconds=30),
+    ):
         self.receivers = dict(receivers or {})
+        self.tool_timeout = tool_timeout
 
     def receiver(self, resource: str) -> Receiver:
         try:
@@ -271,20 +278,18 @@ class Bindings:
             raise Denied(f"no receiver is bound for resource {resource!r}") from None
 
 
-def activity_config(decl: ToolDecl) -> Any:
+def activity_config(decl: ToolDecl, timeout: timedelta) -> Any:
     """Bounded Temporal activity options; None when temporalio is absent.
 
     Writes retry too: a repeated operation id returns the receiver's stored receipt, so a
     retry after a crash between commit and completion cannot commit twice.
     """
     try:
-        from datetime import timedelta
-
         from temporalio.common import RetryPolicy
     except ImportError:  # pragma: no cover - temporal extra not installed
         return None
     return {
-        "start_to_close_timeout": timedelta(seconds=30),
+        "start_to_close_timeout": timeout,
         "retry_policy": RetryPolicy(maximum_attempts=3, non_retryable_error_types=["Denied"]),
         "summary": decl.name,
     }
@@ -312,7 +317,7 @@ def build_toolset(
                 "approval": decl.approval,
             }
         }
-        config = activity_config(decl)
+        config = activity_config(decl, bindings.tool_timeout)
         if config is not None:
             metadata["temporal"] = config
         toolset.add_function(

@@ -33,8 +33,10 @@ Three example packages under `examples/agents/` share one `zetra.toml`: `handboo
 | `zetra dev examples/agents/handbook_qa --approve auto --model test` | gateway read through the stub toolset inside an activity, typed `answer` output, no proposals; 25 history events; replay passed; 2.1 s |
 | `zetra dev examples/agents/scheduled_report --approve auto --model test` | reversible write committed without a human: the `wiki` SQLite receiver holds one receipt with actor `policy:reversible`, operation id `<workflow id>:<tool call id>`, title `Service report 2026-10-11` derived from the injected day; 28 history events; replay passed; 2.1 s |
 | `just sdk-dev-all` | the three runs above, back to back |
-| `python -m unittest tests.test_sdk_temporal` | 2 passed in 2.5 s. First: scripted model and stub gateway inside activities, approval by signal, duplicate signal ignored, receiver committed once, history replays. Second: approval expiry, below |
+| `python -m unittest tests.test_sdk_temporal` | 3 passed in about 22 s. First: scripted model and stub gateway inside activities, approval by signal, duplicate signal ignored, receiver committed once, history replays. Second: approval expiry, below. Third: a worker killed between commit and completion, below |
 | `just check` | passes, with `actionlint` and `shellcheck` installed locally |
+
+`tests/test_sdk_temporal.py` spawns real worker processes and a dev server; it runs only when a Temporal CLI is on `PATH` or named by `ZETRA_TEMPORAL_CLI`, so a checkout without one still passes `just test` with those tests skipped.
 
 ### Approval expiry
 
@@ -46,6 +48,17 @@ A scaffolded package (`zetra new --write`) with its tool changed to `@approval(t
 - a late approval signal is rejected by the server (`RPCError`): a closed run has no pending operation to revive.
 
 Expiry of a *granted* approval is a separate rule and is tested in `tests/test_sdk.py`: a receiver refuses a `Grant` whose `expires_at` has passed.
+
+### Worker killed between commit and completion
+
+This is the case the idempotent receipt exists for. The test (`tests/test_sdk_temporal.py`, with `tests/_durable_worker.py` as the worker process) runs `alert_responder` with two real worker processes against one SQLite ledger on a throwaway dev server:
+
+1. Worker A serves the agent with the pager receiver wrapped so that, once the real receiver has committed, the process calls `os._exit(137)`. Nothing is reported to the server. The test confirms exit code 137 and one row in `pager.db`.
+2. The write activity is now orphaned. With no heartbeat on write activities, the server notices only through the activity's start-to-close timeout (set to 3 s here through `Bindings(tool_timeout=...)`; 30 s by default) and schedules the retry allowed by the bounded policy.
+3. Worker B, a plain worker on the same ledger, runs the retry. The write wrapper rebuilds the payload from the same arguments, re-validates the same `Grant` from `tool_call_metadata`, and calls `commit` with the same operation id. The receiver returns the stored receipt instead of writing again.
+4. The run completes with the typed `paged` output. The ledger still holds one row. The history shows exactly one activity that needed a second attempt, its `last_failure` is a timeout failure, and the completed activity's payload carries the receipt id that worker A printed before dying.
+
+Observed: about 19 s end to end, most of it the 3 s timeout, the sticky-queue fallback for the workflow task that worker A had cached, and two process start-ups. Recovery time in production is bounded by the tool activity timeout, which the worker chooses; a write that legitimately takes longer than that timeout would be retried while still running, which the receiver's operation-id rule makes safe but is worth noting when the timeout is set.
 
 ## Exit test of layer 0, item by item
 
@@ -97,6 +110,5 @@ Items 1, 2, 3, 6, 8, 9 and 11 belong to later layers and were not touched.
 
 - Run `zetra worker` against a standing server rather than the throwaway dev server.
 - Exercise the real gateway path against the lab gateway with a bearer token, and the bounded retry against a refusing gateway.
-- Kill a worker between the write activity's commit and its completion, which is the case the idempotent receipt exists for, and confirm the retry returns the stored receipt.
 - Replace the signal with an Update plus validator (deviation 1) and decide whether strict mode returns at the receiver boundary only (deviation 2).
 - When several approvals are pending at once, the workflow waits for the shortest TTL among them; decide whether each should expire on its own clock.
