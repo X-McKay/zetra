@@ -1,14 +1,18 @@
 """One generic Temporal workflow for every agent, and the worker that serves it.
 
 The workflow runs the same approval loop as the in-process runner; the only difference is
-that an approval arrives as a signal. PydanticAI's ``TemporalDurability`` makes each model
-request and tool call an activity. Requires the ``sdk`` extra (temporalio).
+that a decision arrives as a Temporal Update. The Update's validator rejects, without
+touching the history, a decision that names no pending operation, a payload digest other
+than the one shown to the approver, an operation already decided, or an actor that is not a
+named human; the handler re-runs the same checks because validators do not run on replay.
+PydanticAI's ``TemporalDurability`` makes each model request and tool call an activity.
+Requires the ``sdk`` extra (temporalio).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel
@@ -25,6 +29,7 @@ from .contracts import RunDeps
 from .runner import Decision, Pending, arun_agent, parse_duration
 
 WORKFLOW_TYPE = "zetra.agent"
+APPROVE_UPDATE = "approve"  # the Update name, for clients that address it by string
 
 
 class RunRequest(BaseModel):
@@ -34,10 +39,24 @@ class RunRequest(BaseModel):
 
 
 class ApprovalDecision(BaseModel):
-    tool_call_id: str
+    """What an approver sends: the operation and the exact payload digest they looked at."""
+
+    operation_id: str
+    digest: str
     approved: bool
     actor: str
     reason: str = ""
+
+
+class Decided(BaseModel):
+    """What the workflow returns once a decision is recorded."""
+
+    operation_id: str
+    digest: str
+    approved: bool
+    actor: str
+    reason: str
+    recorded_at: datetime
 
 
 class PendingApproval(BaseModel):
@@ -80,19 +99,67 @@ def register(bundle: Bundle, agent: Agent[RunDeps, Any]) -> Registered:
 
 @workflow.defn(name=WORKFLOW_TYPE)
 class ZetraAgentWorkflow(PydanticAIWorkflow):
-    __pydantic_ai_agents__: list[Agent[Any, Any]] = []  # noqa: RUF012 - populated by register() before the worker starts
+    __pydantic_ai_agents__: list[
+        Agent[Any, Any]
+    ] = []  # populated by register() before the worker starts
 
     def __init__(self) -> None:
-        self._decisions: dict[str, ApprovalDecision] = {}
+        self._decisions: dict[str, Decided] = {}
         self._pending: list[PendingApproval] = []
 
-    @workflow.signal
-    def approve(self, decision: ApprovalDecision) -> None:
-        self._decisions.setdefault(decision.tool_call_id, decision)  # first decision wins
+    def _check(self, decision: ApprovalDecision) -> None:
+        """Refuse anything but one fresh decision on exactly the payload the approver saw."""
+        previous = self._decisions.get(decision.operation_id)
+        if previous is not None:
+            raise ApplicationError(
+                f"operation {decision.operation_id!r} was already decided by {previous.actor}",
+                type="AlreadyDecided",
+                non_retryable=True,
+            )
+        pending = next((p for p in self._pending if p.operation_id == decision.operation_id), None)
+        if pending is None:
+            raise ApplicationError(
+                f"nothing is pending approval for operation {decision.operation_id!r}",
+                type="NotPending",
+                non_retryable=True,
+            )
+        if decision.digest != pending.digest:
+            raise ApplicationError(
+                "the decision names a payload digest other than the one pending",
+                type="DigestMismatch",
+                non_retryable=True,
+            )
+        actor = decision.actor.strip()
+        if not actor or actor == "none" or actor.startswith("policy:"):
+            raise ApplicationError(
+                "a human decision needs a named actor", type="InvalidActor", non_retryable=True
+            )
+
+    @workflow.update(name=APPROVE_UPDATE)
+    def approve(self, decision: ApprovalDecision) -> Decided:
+        self._check(decision)  # validators are skipped on replay; the handler re-checks
+        decided = Decided(
+            operation_id=decision.operation_id,
+            digest=decision.digest,
+            approved=decision.approved,
+            actor=decision.actor.strip(),
+            reason=decision.reason,
+            recorded_at=workflow.now(),
+        )
+        self._decisions[decision.operation_id] = decided
+        return decided
+
+    @approve.validator
+    def validate_approval(self, decision: ApprovalDecision) -> None:
+        self._check(decision)
 
     @workflow.query
     def pending_approvals(self) -> list[PendingApproval]:
         return list(self._pending)
+
+    @workflow.query
+    def decisions(self) -> list[Decided]:
+        return list(self._decisions.values())
 
     @workflow.run
     async def run(self, request: RunRequest) -> RunResult:
@@ -111,29 +178,20 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
         )
 
         async def approver(pending: list[Pending]) -> dict[str, Decision]:
-            self._pending = [
-                PendingApproval(
-                    tool_call_id=p.tool_call_id,
-                    tool=p.tool,
-                    operation_id=p.operation_id,
-                    payload=p.payload.model_dump(mode="json"),
-                    digest=p.digest,
-                )
-                for p in pending
-            ]
+            self._pending = [_pending_approval(p) for p in pending]
             ttl = min((parse_duration(p.ttl) for p in pending), default=timedelta(hours=24))
             try:
                 await workflow.wait_condition(
-                    lambda: all(p.tool_call_id in self._decisions for p in pending),
+                    lambda: all(p.operation_id in self._decisions for p in pending),
                     timeout=ttl,
                     timeout_summary="approval-expiry",
                 )
-            except TimeoutError:
+            except TimeoutError:  # asyncio.TimeoutError is this builtin on 3.11+
                 pass
             self._pending = []
             decisions: dict[str, Decision] = {}
             for p in pending:
-                decided = self._decisions.get(p.tool_call_id)
+                decided = self._decisions.get(p.operation_id)
                 decisions[p.tool_call_id] = (
                     Decision(decided.approved, decided.actor, decided.reason)
                     if decided
@@ -147,21 +205,22 @@ class ZetraAgentWorkflow(PydanticAIWorkflow):
         return RunResult(
             agent=bundle.name,
             output=outcome.output.model_dump(mode="json"),
-            proposals=[
-                PendingApproval(
-                    tool_call_id=p.tool_call_id,
-                    tool=p.tool,
-                    operation_id=p.operation_id,
-                    payload=p.payload.model_dump(mode="json"),
-                    digest=p.digest,
-                )
-                for p in outcome.proposals
-            ],
+            proposals=[_pending_approval(p) for p in outcome.proposals],
             decisions={
                 op: DecisionRecord(approved=d.approved, actor=d.actor, reason=d.reason)
                 for op, d in outcome.decisions.items()
             },
         )
+
+
+def _pending_approval(p: Pending) -> PendingApproval:
+    return PendingApproval(
+        tool_call_id=p.tool_call_id,
+        tool=p.tool,
+        operation_id=p.operation_id,
+        payload=p.payload.model_dump(mode="json"),
+        digest=p.digest,
+    )
 
 
 def workflow_runner(bundles: list[Bundle]) -> SandboxedWorkflowRunner:

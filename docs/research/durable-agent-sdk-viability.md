@@ -16,7 +16,7 @@ Layer 0 of the roadmap, under `src/zetra/sdk/` (14 modules, 2 378 lines includin
 | `assemble.py` | `Agent.from_spec` plus the toolset; `durable=True` adds `TemporalDurability` with bounded activity retries |
 | `receiver.py` | `Grant`, `Receipt`, memory and SQLite receivers with digest, expiry and operation-id rules |
 | `runner.py` | the approval loop shared by the in-process runner and the workflow |
-| `temporal.py` | one generic `zetra.agent` workflow, `approve` signal, `pending_approvals` query, worker, client helpers |
+| `temporal.py` | one generic `zetra.agent` workflow, the `approve` Update with its validator, `pending_approvals` and `decisions` queries, worker, client helpers |
 | `testing.py` | pytest `agent` fixture, scripted model, stub gateways |
 | `cli.py` | `zetra new`, `check` (writes the lock), `run`, `dev`, `worker` |
 
@@ -29,14 +29,26 @@ Three example packages under `examples/agents/` share one `zetra.toml`: `handboo
 | `zetra check examples/agents/<package>` for the three packages | each wrote `zetra.lock`; `--frozen` reports `current` afterwards |
 | `pytest examples/agents` | 6 passed in 0.30 s: approval round-trip, rejection, reversible write, gateway stub, union outputs |
 | `python -m unittest tests.test_sdk` | 11 passed: lock currency and tiers, scaffold plus check, refused irreversible write, AST purity rules, spec refusals, receiver rules, approval loop, hidden injected parameter |
-| `zetra dev examples/agents/alert_responder --approve auto --model test` | workflow `dev:alert-responder:f9a0c246` on a local dev server; one approval surfaced by query and decided by signal; the `pager` SQLite receiver holds one receipt for operation `…:c000001` with actor `cli:auto`; 49 history events; `Replayer` replay passed; 2.5 s wall clock including dev-server start |
+| `zetra dev examples/agents/alert_responder --approve auto --model test` | workflow `dev:alert-responder:f9a0c246` on a local dev server; one approval surfaced by query and decided by Update; the `pager` SQLite receiver holds one receipt for operation `…:c000001` with actor `cli:auto`; 49 history events; `Replayer` replay passed; 2.5 s wall clock including dev-server start |
 | `zetra dev examples/agents/handbook_qa --approve auto --model test` | gateway read through the stub toolset inside an activity, typed `answer` output, no proposals; 25 history events; replay passed; 2.1 s |
 | `zetra dev examples/agents/scheduled_report --approve auto --model test` | reversible write committed without a human: the `wiki` SQLite receiver holds one receipt with actor `policy:reversible`, operation id `<workflow id>:<tool call id>`, title `Service report 2026-10-11` derived from the injected day; 28 history events; replay passed; 2.1 s |
 | `just sdk-dev-all` | the three runs above, back to back |
-| `python -m unittest tests.test_sdk_temporal` | 3 passed in about 22 s. First: scripted model and stub gateway inside activities, approval by signal, duplicate signal ignored, receiver committed once, history replays. Second: approval expiry, below. Third: a worker killed between commit and completion, below |
+| `python -m unittest tests.test_sdk_temporal` | 3 passed in about 22 s. First: the approval Update and its validator, below. Second: approval expiry, below. Third: a worker killed between commit and completion, below |
 | `just check` | passes, with `actionlint` and `shellcheck` installed locally |
 
 `tests/test_sdk_temporal.py` spawns real worker processes and a dev server; it runs only when a Temporal CLI is on `PATH` or named by `ZETRA_TEMPORAL_CLI`, so a checkout without one still passes `just test` with those tests skipped.
+
+### The approval Update and its validator
+
+The first durable test scripts one model turn that proposes two pages at once, so the run keeps waiting after the first decision and the validator can be exercised deterministically:
+
+- four bad decisions are rejected with typed failures and change nothing: the second proposal's digest sent for the first operation (`DigestMismatch`), an unknown operation (`NotPending`), the actor `policy:reversible` and a blank actor (`InvalidActor`); the pending list and the `decisions` query are unchanged afterwards;
+- the first decision is recorded and returned to the caller with the workflow time; a second, contradicting decision on the same operation from another actor is rejected (`AlreadyDecided`), not merged or overwritten;
+- nothing commits while any proposal is still pending; once the second proposal is denied the run completes, the pager receiver holds exactly the approved page, and the denied one is recorded with its reason;
+- the history holds exactly two `WorkflowExecutionUpdateAccepted` events: rejected Updates never reach it, so the audit trail is the decisions, not the attempts;
+- the history replays.
+
+`zetra dev` goes through the same Update and prints what the workflow recorded for each decision.
 
 ### Approval expiry
 
@@ -45,7 +57,7 @@ A scaffolded package (`zetra new --write`) with its tool changed to `@approval(t
 - the proposal appears in `pending_approvals`, then the run completes on its own;
 - the history holds exactly one `TimerFired` event: the expiry is a durable timer set by `workflow.wait_condition(timeout=ttl)`, not a worker-side sleep, so it survives a worker restart;
 - the decision is recorded as `approved=False, actor="none", reason="approval expired"`, the model receives the denial and produces the typed fallback output, and the receiver holds no commit;
-- a late approval signal is rejected by the server (`RPCError`): a closed run has no pending operation to revive.
+- a late approval Update is rejected by the server (`RPCError`): a closed run has no pending operation to revive.
 
 Expiry of a *granted* approval is a separate rule and is tested in `tests/test_sdk.py`: a receiver refuses a `Grant` whose `expires_at` has passed.
 
@@ -67,7 +79,7 @@ Observed: about 19 s end to end, most of it the 3 s timeout, the sticky-queue fa
 | Three archetypes compile from their packages | yes; `zetra check` produced a lock for each |
 | Run in-process | yes; `pytest examples/agents` |
 | Run on the local Temporal dev server | yes, all three (`just sdk-dev-all`) |
-| One approval round-trips as an Update | round-trips as a **Signal** plus a Query, see deviation 1 |
+| One approval round-trips as an Update | yes: `approve` is an Update with a validator; the proposal is read through the `pending_approvals` Query |
 | A recorded history replays | yes, in `zetra dev` and in the unit test |
 | Per-agent line counts measured | yes, table below |
 | Inner-loop timings measured | in-process suite 0.30 s; durable runs 2.1 to 2.5 s each including dev-server start; the two durable tests 2.5 s |
@@ -98,7 +110,7 @@ Items 1, 2, 3, 6, 8, 9 and 11 belong to later layers and were not touched.
 
 ## Deviations from the proposal, and findings
 
-1. **Approval is a Signal, not an Update.** The workflow exposes `approve(ApprovalDecision)` as a signal with first-decision-wins semantics and `pending_approvals` as a query. An Update with a validator that rejects a stale or mismatched decision is the layer 1 shape; the signal was enough to prove the pause and resume.
+1. **Approval is an Update with a validator** (it began as a signal; replaced once the pause and resume were proven). The decision names the operation id and the payload digest the approver looked at. The validator rejects, before anything reaches the history, a decision on an operation already decided (`AlreadyDecided`), on no pending operation (`NotPending`), on a digest other than the pending one (`DigestMismatch`), or from an actor that is blank, `none` or `policy:*` (`InvalidActor`); the handler re-runs the same checks because validators do not run on replay, then records the decision and returns it with the workflow time. Update ids are left to the server for now; binding the Update id to a signed grant id is the layer 2 step the proposal describes.
 2. **`Contract` is not in strict mode.** Strict validation rejected JSON round-trips of `datetime` and `date` when the `Grant` came back through `tool_call_metadata` and when the run's `Input` was re-validated inside a tool activity. Digests are computed over canonical JSON of `model_dump(mode="json")`, which strict mode did not change.
 3. **Unbounded retries are the upstream default.** `TemporalDurability` inherits Temporal's unbounded `RetryPolicy`. In the first durable run the gateway URL was unreachable (403 from the egress proxy); the `get_tools` activity for the gateway toolset reached attempt 13 in ten minutes and the run never finished. The SDK now sets a base policy of three attempts with `Denied` and `CompileError` non-retryable, five attempts with backoff for gateway toolsets, and `zetra dev` terminates the workflow after `--timeout` (default 300 s) and reports the last pending activity's failure. Writes retry too: a repeated operation id returns the receiver's stored receipt.
 4. **Capability ids cannot contain a colon** in PydanticAI 2.55, so gateway toolsets are `gateway-<server>`, and custom capability types must be dataclasses.
@@ -110,5 +122,5 @@ Items 1, 2, 3, 6, 8, 9 and 11 belong to later layers and were not touched.
 
 - Run `zetra worker` against a standing server rather than the throwaway dev server.
 - Exercise the real gateway path against the lab gateway with a bearer token, and the bounded retry against a refusing gateway.
-- Replace the signal with an Update plus validator (deviation 1) and decide whether strict mode returns at the receiver boundary only (deviation 2).
+- Decide whether strict mode returns at the receiver boundary only (deviation 2).
 - When several approvals are pending at once, the workflow waits for the shortest TTL among them; decide whether each should expire on its own clock.

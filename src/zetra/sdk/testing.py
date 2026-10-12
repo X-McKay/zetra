@@ -45,7 +45,7 @@ class final:
     output: Contract | str
 
 
-Turn = call | final
+Turn = call | final | tuple[call, ...]  # a tuple of calls is one turn with several tool calls
 
 
 class ScriptedModel:
@@ -66,6 +66,12 @@ class ScriptedModel:
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             index = sum(isinstance(m, ModelResponse) for m in messages)
             turn = turns[min(index, len(turns) - 1)]
+            if isinstance(turn, tuple):
+                parts = [
+                    ToolCallPart(c.tool, c.args, tool_call_id=f"script:{index}:{c.tool}:{i}")
+                    for i, c in enumerate(turn)
+                ]
+                return ModelResponse(parts=parts)
             if isinstance(turn, call):
                 return ModelResponse(
                     parts=[

@@ -268,17 +268,22 @@ async def _dev(
                         f"last pending activity: {await _pending_activity(handle)}"
                     )
                 for p in await handle.query(t.ZetraAgentWorkflow.pending_approvals):
-                    if p.tool_call_id in decided:
+                    if p.operation_id in decided:
                         continue
-                    decided.add(p.tool_call_id)
+                    decided.add(p.operation_id)
                     d = _decide(approve, p.tool, p.operation_id, p.payload, p.digest)
                     decision = t.ApprovalDecision(
-                        tool_call_id=p.tool_call_id,
+                        operation_id=p.operation_id,
+                        digest=p.digest,
                         approved=d.approved,
                         actor=d.actor,
                         reason=d.reason,
                     )
-                    await handle.signal(t.ZetraAgentWorkflow.approve, decision)
+                    recorded = await handle.execute_update(
+                        t.APPROVE_UPDATE, decision, result_type=t.Decided
+                    )
+                    verdict = "approved" if recorded.approved else "denied"
+                    print(f"recorded: {verdict} by {recorded.actor}", file=sys.stderr)
                 try:
                     result = await asyncio.wait_for(asyncio.shield(handle.result()), timeout=0.5)
                     break

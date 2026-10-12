@@ -1,4 +1,4 @@
-"""Durable path: the generic workflow, approval signal, receiver commit and replay.
+"""Durable path: the generic workflow, the approval Update, receiver commit and replay.
 
 Runs only when a Temporal CLI is on PATH (or named by ZETRA_TEMPORAL_CLI); temporalio would
 otherwise download one from temporal.download, which this suite never does.
@@ -48,10 +48,12 @@ async def start_env():
 
 @unittest.skipUnless(HAVE_SDK and TEMPORAL_CLI, "requires the sdk extra and a Temporal CLI")
 class DurableRunTests(unittest.TestCase):
-    def test_approval_signal_commits_once_and_history_replays(self):
+    def test_approval_update_is_validated_and_commits_once(self):
         asyncio.run(self._run())
 
     async def _run(self) -> None:
+        from temporalio.client import WorkflowUpdateFailedError
+        from temporalio.exceptions import ApplicationError
         from temporalio.worker import Replayer
 
         from zetra.sdk import temporal as t
@@ -70,7 +72,10 @@ class DurableRunTests(unittest.TestCase):
         )
         model = ScriptedModel().script(
             call("read_status"),
-            call("page_oncall", urgency="high", summary="5xx storm"),
+            (  # one model turn proposing two pages: the second keeps the run waiting
+                call("page_oncall", urgency="high", summary="5xx storm"),
+                call("page_oncall", urgency="low", summary="follow-up"),
+            ),
             final(Paged(reason="critical and degraded")),
         )
         agent = assemble(
@@ -106,30 +111,83 @@ class DurableRunTests(unittest.TestCase):
                     if pending:
                         break
                     await asyncio.sleep(0.05)
-                [item] = pending
-                expected = Page(service="checkout-api", urgency="high", summary="5xx storm")
-                self.assertEqual(item.payload, expected.model_dump(mode="json"))
-                self.assertEqual(item.operation_id, f"{handle.id}:c000001")
-                self.assertEqual(pager.commits, [])
-                decision = t.ApprovalDecision(
-                    tool_call_id=item.tool_call_id, approved=True, actor="oncall:bob"
+                first, second = pending
+                shown = [
+                    Page(service="checkout-api", urgency="high", summary="5xx storm"),
+                    Page(service="checkout-api", urgency="low", summary="follow-up"),
+                ]
+                self.assertEqual(
+                    [p.payload for p in pending], [s.model_dump(mode="json") for s in shown]
                 )
-                await handle.signal(t.ZetraAgentWorkflow.approve, decision)
-                await handle.signal(t.ZetraAgentWorkflow.approve, decision)  # duplicate is ignored
+                self.assertEqual(first.operation_id, f"{handle.id}:c000001")
+                self.assertEqual(pager.commits, [])
+
+                def decision(**overrides) -> t.ApprovalDecision:
+                    fields: dict = {
+                        "operation_id": first.operation_id,
+                        "digest": first.digest,
+                        "approved": True,
+                        "actor": "oncall:bob",
+                    }
+                    fields.update(overrides)
+                    return t.ApprovalDecision(**fields)
+
+                async def send(d: t.ApprovalDecision) -> t.Decided:
+                    return await handle.execute_update(t.APPROVE_UPDATE, d, result_type=t.Decided)
+
+                async def rejected(bad: t.ApprovalDecision) -> str:
+                    with self.assertRaises(WorkflowUpdateFailedError) as ctx:
+                        await send(bad)
+                    cause = ctx.exception.cause
+                    assert isinstance(cause, ApplicationError)
+                    return cause.type or ""
+
+                self.assertEqual(await rejected(decision(digest=second.digest)), "DigestMismatch")
+                self.assertEqual(await rejected(decision(operation_id="run:c999999")), "NotPending")
+                self.assertEqual(
+                    await rejected(decision(actor="policy:reversible")), "InvalidActor"
+                )
+                self.assertEqual(await rejected(decision(actor="  ")), "InvalidActor")
+                self.assertEqual(
+                    await handle.query(t.ZetraAgentWorkflow.pending_approvals), pending
+                )
+                self.assertEqual(await handle.query(t.ZetraAgentWorkflow.decisions), [])
+
+                recorded = await send(decision())
+                self.assertEqual((recorded.approved, recorded.actor), (True, "oncall:bob"))
+                # a second decision on the same operation is refused, not merged or overwritten
+                late = decision(approved=False, actor="oncall:eve", reason="changed my mind")
+                self.assertEqual(await rejected(late), "AlreadyDecided")
+                self.assertEqual(pager.commits, [], "nothing commits while a proposal is pending")
+
+                deny = decision(
+                    operation_id=second.operation_id,
+                    digest=second.digest,
+                    approved=False,
+                    actor="oncall:eve",
+                    reason="one page is enough",
+                )
+                self.assertFalse((await send(deny)).approved)
                 result = await asyncio.wait_for(handle.result(), timeout=60)
                 history = await handle.fetch_history()
             self.assertEqual(result.output, {"kind": "paged", "reason": "critical and degraded"})
-            self.assertEqual(result.decisions[item.operation_id].actor, "oncall:bob")
-            self.assertEqual(pager.commits, [expected])
+            self.assertEqual(result.decisions[first.operation_id].actor, "oncall:bob")
+            self.assertEqual(result.decisions[second.operation_id].reason, "one page is enough")
+            self.assertEqual(pager.commits, shown[:1])
             self.assertEqual(alerts.commits, [])
             self.assertEqual(status.calls, [("read_status", {})])
+            accepted = [
+                e
+                for e in history.events
+                if e.HasField("workflow_execution_update_accepted_event_attributes")
+            ]
+            self.assertEqual(len(accepted), 2, "only the two accepted decisions reach the history")
             replayer = Replayer(
                 workflows=[t.ZetraAgentWorkflow],
                 plugins=[t.PydanticAIPlugin()],
                 workflow_runner=t.workflow_runner([bundle]),
             )
             await replayer.replay_workflow(history)
-            self.assertGreater(len(history.events), 20)
 
     def test_unanswered_approval_expires_as_a_durable_timer_and_is_denied(self):
         asyncio.run(self._expiry())
@@ -185,12 +243,13 @@ class DurableRunTests(unittest.TestCase):
                     self.assertEqual(await handle.query(t.ZetraAgentWorkflow.pending_approvals), [])
                     history = await handle.fetch_history()
                     late = t.ApprovalDecision(
-                        tool_call_id=item.tool_call_id, approved=True, actor="oncall:late"
+                        operation_id=item.operation_id,
+                        digest=item.digest,
+                        approved=True,
+                        actor="oncall:late",
                     )
-                    with self.assertRaises(
-                        RPCError
-                    ):  # the run is closed; a late approval has no target
-                        await handle.signal(t.ZetraAgentWorkflow.approve, late)
+                    with self.assertRaises(RPCError):  # the run is closed; nothing to decide
+                        await handle.execute_update(t.APPROVE_UPDATE, late, result_type=t.Decided)
                 record = result.decisions[item.operation_id]
                 self.assertEqual(
                     (record.approved, record.actor, record.reason),
@@ -261,9 +320,12 @@ class DurableRunTests(unittest.TestCase):
                         await asyncio.sleep(0.05)
                     [item] = pending
                     decision = t.ApprovalDecision(
-                        tool_call_id=item.tool_call_id, approved=True, actor="oncall:bob"
+                        operation_id=item.operation_id,
+                        digest=item.digest,
+                        approved=True,
+                        actor="oncall:bob",
                     )
-                    await handle.signal(t.ZetraAgentWorkflow.approve, decision)
+                    await handle.execute_update(t.APPROVE_UPDATE, decision, result_type=t.Decided)
                     stdout, _ = await asyncio.wait_for(first.communicate(), timeout=60)
                     self.assertEqual(first.returncode, 137, stdout.decode(errors="replace"))
                     match = re.search(r"committed (\w+)", stdout.decode(errors="replace"))
