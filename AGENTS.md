@@ -1,13 +1,22 @@
 # Zetra contributor instructions
 
-Zetra is the opinionated, zero-trust implementation of the technology-neutral [Playbooks](https://github.com/X-McKay/playbooks). Concrete stack choices, SDK-specific guidance, code and evidence belong here; generic guidance that applies to any stack belongs in the Playbooks. When a change alters which playbook standard Zetra meets, update `docs/playbook-conformance.md`.
+Zetra implements the technology-neutral Playbooks with Google ADK, Temporal and
+OpenShell. Agent code runs inside a fresh sandbox per session; the external worker
+owns accepted progress. Read README.md, SECURITY.md and docs/architecture.md.
 
-Read `CONTRIBUTING.md`, `SECURITY.md` and the relevant package before changing code. Use `nix develop` or the pinned mise environment, `uv.lock` and the `justfile`. `just check` is the standard local gate; run affected live qualifications separately when a boundary changes.
+Use the locked environment: `nix develop`, `just bootstrap`, `just check`. Live
+qualification runs separately against the explicit `kind-zetra-validation`
+context and `.state/kubeconfig`. Never change a global runtime or kube context.
 
-The editable playbooks are `docs/chapters/*.html`, `docs/research/source-review.html` and `docs/assets/`. Rebuild committed standalone HTML with `just docs`. Keep examples, CLI behavior, schema and prose consistent. The target enterprise architecture is broader than the implemented v0.1 toolkit: distinguish proposals, candidate artifacts, discovery, tested enforcement and approved production operation.
+Keep one implementation and public API. Update examples, installed templates,
+documentation and tests together. Static commands must not import agent code.
+Do not weaken profile admission, unknown-outcome handling or confirmed deletion.
 
-Never edit recorded evidence to turn a failure into a pass. Re-run the applicable probe; preserve meaningful initial failures and record the actual compatibility tuple. Hashes and local timestamps do not create trusted signatures. Profiling observations never grant permissions, and denied observations must stay outside permission candidates.
+Tests and measurements establish only the behavior actually exercised. Skips do
+not prove enforcement; unsigned evidence is not production authorization. Never
+rewrite recorded failures into passes. Preserve meaningful failures in the PR
+qualification report and rerun changed boundaries.
 
-Keep kubeconfigs, private certificates, keys and tool downloads in ignored local paths. All disposable lab mutations use the explicit `kind-zetra-validation` context and dedicated kubeconfig. Do not switch to a shared cluster or change a default runtime connection implicitly. Follow the user's authorization when deciding the scope of deployments, cleanup or external publication.
-
-The optional reviewed workflow drafts live in `skills/`; installation instructions and test limits are in `docs/research/skills-guide.md`. A skill guides work but grants no authority. Report behavior tested, evidence paths and material gaps. Do not describe this initial toolkit as production-qualified.
+Keep client certificates, keys, kubeconfigs and session/artifact state in ignored
+paths. Do not commit model credentials or sensitive prompts. Update
+`docs/playbook-conformance.md` whenever implementation or qualification changes.

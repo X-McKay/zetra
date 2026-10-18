@@ -1,4 +1,0 @@
-interface:
-  display_name: "Implement Temporal Agent"
-  short_description: "Add durable Temporal agent execution"
-  default_prompt: "Use $zetra-temporal-agent to implement durable execution for this agent."

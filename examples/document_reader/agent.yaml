@@ -1,0 +1,7 @@
+schema_version: 1
+name: document_reader
+owner: local-development
+entrypoint: document_reader.agent:create_agent
+model: fixture
+profile: serial-v1
+policy: workspace

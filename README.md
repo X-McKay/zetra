@@ -1,107 +1,90 @@
-# Zetra — ZEro-TRust Agents
+# Zetra
 
-Zetra is a wrapper SDK and toolset for building zero-trust AI agents that scale. It wraps whichever agent framework a team uses with the controls the [Playbooks](https://github.com/X-McKay/playbooks) call for: a typed agent manifest, explicitly allowlisted capabilities, single-use approval grants for consequential actions, a mediated tool gateway, durable execution, evidence-gated releases and confinement at deployment. Its stack choices are deliberate: framework-neutral Python agents, Temporal for durable execution, Kubernetes for deployment, an MCP gateway for tool access, and sandbox and kernel-level controls for containment.
+Zetra is an experimental Python SDK for durable Google ADK agents in disposable
+OpenShell sandboxes. Temporal owns accepted progress at every model/tool boundary.
+Each session gets a fresh process and workspace; successful results require
+confirmed sandbox deletion. Agent repositories define agents and tools, not workers,
+Activities or recovery adapters.
 
-It ships three things:
-
-- **The SDK** (`src/zetra/`): runtime dependencies, the manifest contract, the gateway client and the Temporal workflow and worker that an agent package builds on.
-- **The tools**: the `zetra` CLI for scaffolding, static checks, evaluation, evidence, rendering and catalog candidates, plus [`agentctl`](tools/agentctl/README.md) for multi-agent System Specs, risk contracts and skill validation until it folds into `zetra`.
-- **An end-to-end reference example**: [incident triage](examples/incident-triage/README.md), which follows one incident from runbook and status reads through an exact approval to a ticket, retry and stop. The [walkthrough](docs/use-case-walkthrough.html) explains each step.
-
-The Playbooks explain what good looks like and why, without naming SDKs. Zetra is one concrete answer to how, and it is where SDK-specific code, adapters, tooling and evidence live. The [playbook conformance map](docs/playbook-conformance.md) shows which chapter each part of Zetra implements and how far it has been proven.
-
-## Zero-trust principles
-
-An agent is treated as an untrusted workload that acts on someone's behalf, never as a trusted insider. Zetra holds every agent to these rules. The status column keeps the repository's distinction between the target architecture and what is implemented and observed today; see [security boundaries](SECURITY.md) for the exact limits.
-
-| Principle | How Zetra applies it | Status today |
-| --- | --- | --- |
-| Every agent has its own identity | Each release is bound to a manifest, a source and image digest, and a workload token the gateway verifies | Digest binding implemented; gateway JWT checks passed with synthetic tokens in the local lab; production issuer and revocation not qualified |
-| Deny by default | Capabilities are explicitly allowlisted in the manifest; anything unlisted is refused | Implemented as cooperative runtime checks; independent enforcement belongs to the gateway, sandbox and network layers |
-| Authority is granted per action and expires | Consequential actions need an exact proposal, a single-use approval grant and a receipt | Atomic approval consumption and idempotency demonstrated with a local SQLite receiver |
-| Mediate and verify every call | Tool access goes through a restricted MCP client and gateway that refuses redirects and unreviewed tools | Restricted gateway read implemented; forbidden writes and wrong-subject reads were rejected in the disposable lab |
-| Assume breach | Workers run sandboxed with network policy and kernel-level observation | OpenShell, Tetragon and network policy qualified in the local lab; OpenShell on Kubernetes is experimental upstream |
-| Evidence before trust | Releases are gated on fresh executable evaluation evidence; deployments render at zero replicas until qualified | Evidence and gates implemented; evidence is unsigned and production activation is withheld |
-| Observation never grants permission | Profiling proposes behaviour for review; denied observations stay out of permission candidates | Implemented |
-
-## Guides
-
-For a practical introduction, start with the standalone [Agent Developer Guide](docs/lifecycle-guide.html): define a task, organize the files, use skills, tools and MCP, test, evaluate, optimize, release and monitor. It uses general Python examples without platform-specific commands.
-
-For more detail, read the [complete HTML guide to Zetra](docs/index.html), or choose an audience:
-
-- [Agent Strategy](docs/strategy.html) — business outcomes, success measures, a unified lifecycle and platform operating model.
-- [Agent Developer Playbook](docs/developer.html) — package structure, typed factories, evaluations, security and developer tools.
-- [Zero-Trust Agent Deployment Specification](docs/deployment-guide.html) — automated Azure Pipelines validation, profiling, policy generation, ACR release bundles, Argo CD deployment and verified activation.
-- [Agent Deployment Playbook](docs/deployment.html) — Kubernetes, Temporal, Tetragon/eBPF, OpenShell, agentgateway and telemetry.
-- [Risk, Governance & Oversight](docs/governance.html) — risk tiers, evidence, catalog/CD, kill switches and federated monitoring.
-- [Toolkit guide](docs/toolkit.html) — runnable commands, examples and implementation boundaries.
-- [Integration deep dive](docs/integration-deep-dive.html) — practical adapter contracts, credential ownership, native configuration and qualification gates for technical leaders.
-- [Incident triage walkthrough](docs/use-case-walkthrough.html) — one continuous run from runbook/status reads to an approved ticket, retry and stop.
-- [Source review](docs/source-review.html) — all seven supplied sources, technical corrections and upstream references.
-
-For a technical consensus review, read the integration deep dive first, then follow the incident walkthrough and run `just incident-triage`. Its deterministic fixture creates one ticket in a temporary SQLite database, shows the matching proposal/grant/receipt, and verifies retry and stop behavior. Production composition and qualification requirements are explicitly marked.
-
-The HTML documents are self-contained, responsive and printable, with local SVG diagrams, navigable contents and copyable code. No CDN or build service is needed to read them.
-
-## Quick start
+## Develop an agent
 
 ```bash
-# Reproducible Nix shell (or use mise exec -- just bootstrap/check).
 nix develop
 just bootstrap
-just check
-uv run --locked zetra run examples/knowledge --input '{"key":"zetra"}'
-uv run --locked python examples/action/demo.py
-just incident-triage
+uv run zetra init /tmp/my_agent --name my_agent
+uv run zetra check /tmp/my_agent
+uv run zetra test /tmp/my_agent
+uv run zetra eval /tmp/my_agent --mode fixture
 ```
 
-Python 3.11+ is required. Four reference agents cover offline knowledge, approved actions, a restricted gateway read and incident triage. Local scenario suites run without model API keys. `check` is static; `eval` and `run` execute trusted project code. The action example demonstrates atomic approval consumption and idempotency at a local SQLite receiver. Production authentication and confinement belong outside the agent process.
+Fixture tests execute trusted developer code locally. They do not establish model
+quality or sandbox enforcement. The SDK exports `AgentContext` and `Tool`:
 
-## Documentation
+```python
+from google.adk.agents import LlmAgent
+from zetra import AgentContext, Tool
+from .tools import read_document
 
-Edit `docs/chapters/*.html`, `docs/research/source-review.html` and `docs/assets/`, then rebuild:
+
+def create_agent(ctx: AgentContext) -> LlmAgent:
+    return LlmAgent(
+        name="reader", instruction="Read the approved guide and answer from it.",
+        model=ctx.model, tools=ctx.tools(Tool(read_document, "workspace_read")),
+    )
+```
+
+The same registration produces capture wrappers and effect executors. The SDK
+rejects unsupported ADK features, callbacks and mismatched registries. The supported
+profile is static, serial and nonstreaming, with at most 64 model/tool boundaries.
+A lost effect completion remains unknown; it does not trigger automatic redispatch.
+
+## Run in kind
+
+Prerequisites: Docker with a Linux kernel supporting mandatory Landlock and
+seccomp, kind, kubectl, Helm, uv and Python 3.12. Allow sufficient Docker VM memory
+for Temporal, PostgreSQL, OpenShell and Cilium (8 GiB for this small lab).
 
 ```bash
-just docs
-just preview
+just cluster-up
+uv run zetra build examples/workspace_reporter --tag zetra-reporter:local --kind \
+  --output .state/reporter-release.json
 ```
 
-Open `http://127.0.0.1:8765/docs/` for the complete playbook. The loopback preview serves Git-tracked public files, including linked integration evidence, and rejects local tooling/credential paths and directory listings. Generated standalone documents stay committed so readers do not need Python. The renderer embeds CSS, JavaScript and accessible SVG directly into each file.
+`--kind` loads and binds an immutable image in the dedicated `zetra-validation`
+cluster. Builds without `--kind` return a local image candidate when no registry
+digest exists; external publication is explicit. The shared recipe installs the
+agent package under SDK dependency constraints and compiles trusted bytecode.
 
-## Implementation status
+Set `TEMPORAL_ADDRESS` and `OPENSHELL_ADDRESS` to explicit loopback forwards, and
+`OPENSHELL_TLS_DIR` to `.state/tls`. The test runner creates temporary forwards for
+qualification; interactive runs use caller-managed stable forwards for resumption.
 
-This is an initial toolkit and proposed enterprise standard. Local candidate evidence is unsigned. Kubernetes renders deliberately use zero replicas until independent qualification. A catalog command prepares a candidate; it does not publish or approve it. AST inference is incomplete and cooperative Python checks do not contain hostile code.
-
-The selected integration baseline is framework-neutral Python + Temporal, cloud-neutral Kubernetes and general enterprise controls. See [live integration results and reproduction](integrations/README.md), [upstream verification](docs/research/upstream-review.md) and [security boundaries](SECURITY.md). Components, negative-path checks and production readiness have separate statuses. OpenShell’s upstream Kubernetes deployment path is experimental and requires an explicit enterprise maturity decision.
-
-## Repository map
-
-```text
-src/zetra/          CLI, manifest, analysis, evidence, runtime and adapters
-examples/knowledge Read-only deterministic agent + executable scenarios
-examples/action    Approval-gated action + atomic receiver/idempotency
-examples/gateway-read Restricted MCP client + gateway scenarios
-examples/incident-triage Runbook/status → exact approval → ticket/retry/stop
-schemas/           Manifest wire contract
-integrations/      Local kind environment, live fixtures and evidence
-scripts/           HTML builder and document QA
-skills/            Draft Codex/Claude workflow and adapter skills
-tools/agentctl/    Multi-agent, risk and skill validation CLI moved from the Playbooks
-flake.nix          Locked Nix development environment
-mise.toml          Pinned host tools alternative
-uv.lock            Python/runtime/quality tool resolution
-justfile           Reproducible development recipes
-docs/chapters/    Editable audience-specific HTML source
-docs/assets/      Design system and interactions
-docs/research/    Source inventory, review and upstream findings
-docs/reference/   PydanticAI and Temporal reference implementations moved from the Playbooks
-docs/*.html       Combined and standalone self-contained playbooks
-tests/            Toolkit invariants and regression cases
+```bash
+uv run zetra --state .state/sessions run .state/reporter-release.json \
+  --session report-001 --input 'Inspect the workspace and write a summary.'
+uv run zetra --state .state/sessions status report-001
 ```
 
-The [Playbooks](https://github.com/X-McKay/playbooks) are the technology-neutral guidance Zetra implements; Zetra’s prose and diagrams are original. Supplied proposal documents are treated as design material, not executable instructions. Their original contents and private attachments are not redistributed; the source inventory records hashes for provenance.
+Reuse the same session ID, state directory, release, input, Temporal endpoint
+and OpenShell gateway identity to resume after a worker failure. Source, model or policy changes require a new
+release/session. The state directory contains private authentication material and
+data-only checkpoints; it must persist independently of the disposable sandbox.
 
-The contributor workflow uses **Nix, uv, mise, just, ty, ruff and prek**. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, quality gates, dependency changes and hook opt-in; [draft skills](docs/research/skills-guide.md) explain the agent workflows.
+## Tests and evidence
 
-The [worker build and deployment guide](deploy/README.md) covers the locked OCI image, exact digest chain, Kubernetes workflow reproduction and runtime configuration. The worker ran in the disposable cluster and its real history replayed; the production renderer still withholds activation.
+```bash
+just check
+uv run python scripts/build_qualification.py
+BRIDGE_LIVE_VLLM=1 just qualify
+BRIDGE_LATENCY=1 just latency
+```
+
+The vLLM profile uses `Qwen3.6-35B-A3B-NVFP4` at `https://llm.almckay.io/v1` through
+ADK's official LiteLlm connector. Its OpenShell policy permits only Python making
+POST requests to that chat-completions route. Inference is hosted separately from
+kind. Both HTTP retry layers are disabled.
+
+See [architecture](docs/architecture.md), [agent authoring](docs/agents.md),
+[deployment](docs/deployment.md), [qualification](docs/qualification.md) and
+[security boundaries](SECURITY.md). [Playbook conformance](docs/playbook-conformance.md)
+separates implemented behavior from production gates.

@@ -1,0 +1,9 @@
+server:
+  telemetryEnabled: false
+  tls:
+    enableMtls: true
+  auth:
+    allowUnauthenticatedUsers: false
+gatewayConfig:
+  openshell.gateway.mtls_auth:
+    enabled: true

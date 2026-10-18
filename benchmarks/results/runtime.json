@@ -1,0 +1,142 @@
+{
+  "captured_at": "2026-10-18T02:50:31.145915+00:00",
+  "trust": "local-unsigned",
+  "cluster": "kind-zetra-validation",
+  "architecture": "linux/arm64",
+  "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+  "lockfile_sha256": "996dbe557a097a1914913e25f679b19f964b417bdbe0e57d4c0ce50675948347",
+  "model_settings": {
+    "api_base": "https://llm.almckay.io/v1",
+    "model": "openai/Qwen3.6-35B-A3B-NVFP4",
+    "max_tokens": 512,
+    "timeout": 20,
+    "num_retries": 0,
+    "temperature": 0,
+    "parallel_tool_calls": false,
+    "enable_thinking": false
+  },
+  "images": [
+    {
+      "tag": "zetra-validation:local",
+      "image_digest": "sha256:03ebb26b5854b19d2acf57cc56ec70c44417adba80eb9639312459d78ace53c9",
+      "docker_reported_bytes": 180202670,
+      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd"
+    },
+    {
+      "tag": "zetra-validation:source",
+      "image_digest": "sha256:0388672a26b13464f26b6f79fbec2389a1c85f258ae1ed530a0fa6922a722275",
+      "docker_reported_bytes": 144427495,
+      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd"
+    },
+    {
+      "tag": "zetra-reporter:local",
+      "image_digest": "sha256:d33fad9b7165e6d3ec5a67c1bb4ed081df45f7767a21908fecf0de45567156ed",
+      "docker_reported_bytes": 191675271,
+      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "release": {
+        "schema_version": 1,
+        "agent": {
+          "schema_version": 1,
+          "name": "workspace_reporter",
+          "owner": "local-development",
+          "entrypoint": "workspace_reporter.agent:create_agent",
+          "model": "fixture",
+          "profile": "serial-v1",
+          "policy": "workspace"
+        },
+        "image": "docker.io/library/zetra-reporter@sha256:d33fad9b7165e6d3ec5a67c1bb4ed081df45f7767a21908fecf0de45567156ed",
+        "source_sha256": "dc2b952be80904791b6ae3604455be20721bb0f790b6766cdd41a8c3b9a25f62",
+        "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
+        "sdk": "0.1.0"
+      }
+    },
+    {
+      "tag": "zetra-reader:local",
+      "image_digest": "sha256:a37ce7b80faeb4186bdd3653942d964541753e114a990b3f9a4bf7e9ee547aa4",
+      "docker_reported_bytes": 191674588,
+      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "release": {
+        "schema_version": 1,
+        "agent": {
+          "schema_version": 1,
+          "name": "document_reader",
+          "owner": "local-development",
+          "entrypoint": "document_reader.agent:create_agent",
+          "model": "fixture",
+          "profile": "serial-v1",
+          "policy": "workspace"
+        },
+        "image": "docker.io/library/zetra-reader@sha256:a37ce7b80faeb4186bdd3653942d964541753e114a990b3f9a4bf7e9ee547aa4",
+        "source_sha256": "21e52fe1a825d2df142a44a1a244cb513dd81700f0954c92b8d4f8911e74c67d",
+        "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
+        "sdk": "0.1.0"
+      }
+    },
+    {
+      "tag": "zetra-live:local",
+      "image_digest": "sha256:5307496dd4cc141bc0529327f363165dc4b163aa3b19f267521b945d810372a7",
+      "docker_reported_bytes": 191675108,
+      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "release": {
+        "schema_version": 1,
+        "agent": {
+          "schema_version": 1,
+          "name": "workspace_reporter",
+          "owner": "local-development",
+          "entrypoint": "workspace_reporter.agent:create_agent",
+          "model": "vllm",
+          "profile": "serial-v1",
+          "policy": "vllm-chat"
+        },
+        "image": "docker.io/library/zetra-live@sha256:5307496dd4cc141bc0529327f363165dc4b163aa3b19f267521b945d810372a7",
+        "source_sha256": "8e309b16654bdaaeb0f96c592d567463f02b811cc283bd61943ba59023c45015",
+        "policy_sha256": "fe6f7b41ff223ef430fe11d10bfdac1010c2437545b8e6756c2e1a8af1eb3f03",
+        "sdk": "0.1.0"
+      }
+    },
+    {
+      "tag": "zetra-blocked:local",
+      "image_digest": "sha256:ae03d80688aa8e3649f7e781e754119acb77bf23dc1d6464c608fe1285adbaf6",
+      "docker_reported_bytes": 191675362,
+      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "release": {
+        "schema_version": 1,
+        "agent": {
+          "schema_version": 1,
+          "name": "workspace_reporter",
+          "owner": "local-development",
+          "entrypoint": "workspace_reporter.agent:create_agent",
+          "model": "fixture",
+          "profile": "serial-v1",
+          "policy": "workspace"
+        },
+        "image": "docker.io/library/zetra-blocked@sha256:ae03d80688aa8e3649f7e781e754119acb77bf23dc1d6464c608fe1285adbaf6",
+        "source_sha256": "7fc32792cf0a0bd5142e9ddfe75b76cf41584bff1a9c2a9dd0c2847e38fe1e24",
+        "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
+        "sdk": "0.1.0"
+      }
+    },
+    {
+      "tag": "zetra-generated:local",
+      "image_digest": "sha256:ecc1edbee7f7d66008acab3a630b95aae6b761154a94bfbc3c9c2a1f7d455022",
+      "docker_reported_bytes": 191674966,
+      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "release": {
+        "schema_version": 1,
+        "agent": {
+          "schema_version": 1,
+          "name": "generated_agent",
+          "owner": "local-development",
+          "entrypoint": "generated_agent.agent:create_agent",
+          "model": "fixture",
+          "profile": "serial-v1",
+          "policy": "workspace"
+        },
+        "image": "docker.io/library/zetra-generated@sha256:ecc1edbee7f7d66008acab3a630b95aae6b761154a94bfbc3c9c2a1f7d455022",
+        "source_sha256": "01ce29be43e636fd186260cd556ce28bf0851b239f6e9ea345e99f9b3b49e2a4",
+        "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
+        "sdk": "0.1.0"
+      }
+    }
+  ]
+}

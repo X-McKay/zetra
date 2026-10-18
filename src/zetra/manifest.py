@@ -1,148 +1,103 @@
-"""Small strict manifest contract. Unknown fields fail rather than silently disappear."""
+"""Strict data-only metadata. This module never imports agent code."""
 
-from __future__ import annotations
-
-import math
+import hashlib
+import json
 import re
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Literal
 
 import yaml
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class ContractError(ValueError):
-    """A manifest or evidence fails the contract."""
+class AgentSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal[1] = 1
+    name: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,47}$")
+    owner: str = Field(min_length=1, max_length=128)
+    entrypoint: str = Field(pattern=r"^[a-zA-Z_]\w*(\.[a-zA-Z_]\w*)*:[a-zA-Z_]\w*$")
+    model: Literal["fixture", "vllm"] = "fixture"
+    profile: Literal["serial-v1"] = "serial-v1"
+    policy: Literal["workspace", "vllm-chat"] = "workspace"
+
+    def validate_policy(self):
+        if (self.model == "vllm") != (self.policy == "vllm-chat"):
+            raise ValueError("model and reviewed policy do not match")
+        return self
 
 
-class UniqueLoader(yaml.SafeLoader):
-    """Reject duplicate keys: otherwise a reviewed value could be shadowed."""
+class Release(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal[1] = 1
+    agent: AgentSpec
+    image: str
+    source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    policy_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    sdk: Literal["0.1.0"] = "0.1.0"
 
-
-def _mapping(loader: UniqueLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
-    result: dict = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        if not isinstance(key, str) or key in result:
-            raise ContractError("YAML keys must be unique strings")
-        result[key] = loader.construct_object(value_node, deep=deep)
-    return result
-
-
-UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _mapping)
-
-
-def mapping(value: Any, keys: set[str], at: str) -> dict:
-    if not isinstance(value, dict) or set(value) != keys:
-        got = set(value) if isinstance(value, dict) else set()
-        raise ContractError(
-            f"{at}: expected keys {sorted(keys)}, missing {sorted(keys - got)}, unknown {sorted(got - keys)}"
-        )
-    return value
-
-
-def string(value: Any, at: str) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > 256:
-        raise ContractError(f"{at}: expected nonempty string of at most 256 characters")
-    return value
-
-
-def choice(value: Any, choices: set[str], at: str) -> str:
-    if not isinstance(value, str) or value not in choices:
-        raise ContractError(f"{at}: expected one of {sorted(choices)}")
-    return value
-
-
-def number(value: Any, at: str, ceiling: float, integer: bool = False) -> int | float:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(value)
-        or not 0 < value <= ceiling
-    ):
-        raise ContractError(f"{at}: expected finite positive number <= {ceiling}")
-    if integer and type(value) is not int:
-        raise ContractError(f"{at}: expected integer")
-    return value
-
-
-@dataclass(frozen=True)
-class Manifest:
-    name: str
-    owner: str
-    business_function: str
-    entrypoint: str
-    capabilities: tuple[str, ...]
-    data_classification: str
-    autonomy: str
-    execution: str
-    max_steps: int
-    max_seconds: int
-    max_cost_usd: float
-    raw: dict
-
+    @field_validator("image")
     @classmethod
-    def parse(cls, raw: Any) -> Manifest:
-        mapping(raw, {"apiVersion", "kind", "metadata", "spec"}, "manifest")
-        if raw["apiVersion"] != "zetra.dev/v1alpha1" or raw["kind"] != "Agent":
-            raise ContractError("Unsupported apiVersion/kind")
-        meta = mapping(raw["metadata"], {"name", "owner", "businessFunction"}, "metadata")
-        name = string(meta["name"], "metadata.name")
-        if not re.fullmatch(r"[a-z][a-z0-9-]{0,47}", name):
-            raise ContractError("metadata.name must be a DNS-safe lowercase label <= 48 characters")
-        spec = mapping(
-            raw["spec"],
-            {
-                "entrypoint",
-                "capabilities",
-                "dataClassification",
-                "autonomy",
-                "execution",
-                "budgets",
-            },
-            "spec",
-        )
-        entrypoint = string(spec["entrypoint"], "spec.entrypoint")
-        if not re.fullmatch(r"[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*:[a-zA-Z_]\w*", entrypoint):
-            raise ContractError("entrypoint must be dotted.module:factory")
-        caps = spec["capabilities"]
-        if (
-            not isinstance(caps, list)
-            or len(caps) > 64
-            or len(set(c for c in caps if isinstance(c, str))) != len(caps)
-        ):
-            raise ContractError("capabilities must be a unique list of strings")
-        for cap in caps:
-            if not isinstance(cap, str) or not re.fullmatch(
-                r"[a-z][a-z0-9_-]*\.[a-z][a-z0-9_-]*", cap
-            ):
-                raise ContractError("Capabilities use resource.operation syntax")
-        budget = mapping(spec["budgets"], {"maxSteps", "maxSeconds", "maxCostUsd"}, "spec.budgets")
-        return cls(
-            name,
-            string(meta["owner"], "metadata.owner"),
-            string(meta["businessFunction"], "metadata.businessFunction"),
-            entrypoint,
-            tuple(caps),
-            choice(
-                spec["dataClassification"],
-                {"public", "internal", "confidential", "restricted", "unknown"},
-                "dataClassification",
-            ),
-            choice(spec["autonomy"], {"assist", "supervised", "autonomous", "unknown"}, "autonomy"),
-            choice(spec["execution"], {"local", "temporal"}, "execution"),
-            int(number(budget["maxSteps"], "maxSteps", 10000, True)),
-            int(number(budget["maxSeconds"], "maxSeconds", 86400, True)),
-            float(number(budget["maxCostUsd"], "maxCostUsd", 10000)),
-            raw,
-        )
+    def immutable_image(cls, value):
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._:/-]*@sha256:[a-f0-9]{64}", value):
+            raise ValueError("image must use repository@sha256 digest")
+        return value
+
+    @property
+    def identity(self):
+        return "zetra-" + digest(self.model_dump())
 
 
-def load(root: Path) -> Manifest:
+def digest(value):
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+
+
+def load_agent(root):
+    root = Path(root)
     path = root / "agent.yaml"
-    if not path.is_file() or path.stat().st_size > 128_000:
-        raise ContractError("agent.yaml must exist and be <= 128 KB")
-    try:
-        return Manifest.parse(yaml.load(path.read_text(), Loader=UniqueLoader))
-    except yaml.YAMLError as exc:
-        raise ContractError(f"Invalid YAML: {exc}") from exc
+    if path.stat().st_size > 128_000:
+        raise ValueError("manifest too large")
+
+    class UniqueLoader(yaml.SafeLoader):
+        pass
+
+    def mapping(loader, node):
+        result = {}
+        for key, value in node.value:
+            key = loader.construct_object(key)
+            if key in result:
+                raise ValueError("duplicate manifest key")
+            result[key] = loader.construct_object(value)
+        return result
+
+    UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
+    return AgentSpec.model_validate(
+        yaml.load(path.read_text(), Loader=UniqueLoader)
+    ).validate_policy()
+
+
+def source_digest(root):
+    root = Path(root).resolve()
+    h = hashlib.sha256()
+    excluded = {".git", ".venv", ".zetra", "__pycache__", ".pytest_cache", "dist", "build"}
+    for path in sorted(root.rglob("*")):
+        rel = path.relative_to(root)
+        if any(p in excluded or p.endswith(".egg-info") for p in rel.parts):
+            continue
+        if path.is_symlink():
+            raise ValueError("agent packages cannot contain symlinks")
+        if path.is_file():
+            if path.stat().st_size > 20_000_000:
+                raise ValueError("package file too large")
+            name = rel.as_posix().encode("utf-8")
+            h.update(
+                len(name).to_bytes(8, "big") + name + hashlib.sha256(path.read_bytes()).digest()
+            )
+    return h.hexdigest()
+
+
+def load_release(path):
+    release = Release.model_validate_json(Path(path).read_text())
+    release.agent.validate_policy()
+    return release
