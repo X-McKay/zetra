@@ -5,6 +5,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -46,6 +47,9 @@ provenance = {
     "repository": "https://github.com/X-McKay/zetra-template",
     "revision": revision,
     "tree_sha256": identity,
+    "qualified_sdk_revision": tomllib.loads(expected["pyproject.toml"].decode())["tool"]["uv"][
+        "sources"
+    ]["zetra"]["rev"],
 }
 if args.check:
     if content(target) != expected:

@@ -6,6 +6,10 @@ Start with `zetra init ./my-agent --name my-agent`, then `cd my-agent` and
 The template pins a qualified SDK Git commit, not the newest branch head. Updating
 that pin is an explicit dependency upgrade followed by lockfile regeneration and
 qualification. Initialization performs no network lookup or dependency rewriting.
+Scaffolding requires a qualified bundle. Execution-only SDK revisions reject
+`init` before writing files; use the final SDK CLI or canonical template renderer
+to create repositories. This keeps image execution pins independent of template
+release packaging.
 
 ```text
 agent-project/

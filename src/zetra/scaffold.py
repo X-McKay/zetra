@@ -1,7 +1,9 @@
 """One runnable package template, shared by CLI and installed wheel."""
 
+import json
 import re
 import shutil
+import tomllib
 from importlib.resources import files
 from pathlib import Path
 
@@ -13,6 +15,15 @@ def scaffold(target, name):
     if target.exists() and any(target.iterdir()):
         raise ValueError("destination must be empty")
     source = Path(str(files("zetra") / "templates" / "agent"))
+    provenance = json.loads(source.parent.joinpath("provenance.json").read_text())
+    qualified = provenance.get("qualified_sdk_revision")
+    pinned = tomllib.loads((source / "pyproject.toml").read_text())["tool"]["uv"]["sources"][
+        "zetra"
+    ]["rev"]
+    if not qualified or qualified != pinned:
+        raise ValueError(
+            "this execution revision has no qualified template; use the released SDK CLI or canonical zetra-template renderer"
+        )
     shutil.copytree(
         source,
         target,
