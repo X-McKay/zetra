@@ -12,7 +12,7 @@ dependencies = ["zetra==0.1.0"]
 dev = ["pytest>=8,<9", "ruff>=0.11,<1"]
 
 [tool.uv.sources]
-zetra = { git = "https://github.com/X-McKay/zetra.git", rev = "f8b064685ce07bc633ba6d28b1c8c2786d9bdaa8" }
+zetra = { git = "https://github.com/X-McKay/zetra.git", rev = "4830a5f5eb7cf8400b4665b2706434c52aaa17cf" }
 
 [tool.zetra.agents]
 document_reader = "src/agent_package/agents/document_reader/agent.yaml"

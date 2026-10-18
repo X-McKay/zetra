@@ -114,3 +114,45 @@ async def test_evidence_binds_selected_agent_and_dataset(tmp_path):
         report["dataset_sha256"]
         == hashlib.sha256((root / "evals/document_reader/cases.jsonl").read_bytes()).hexdigest()
     )
+
+
+def test_bundled_template_matches_recorded_canonical_tree():
+    import hashlib
+    from importlib.resources import files
+
+    root = files("zetra").joinpath("templates/agent")
+    content = {
+        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+        and not any(
+            part in {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv", "dist"}
+            for part in path.relative_to(root).parts
+        )
+    }
+    expected = json.loads(files("zetra").joinpath("templates/provenance.json").read_text())
+    assert (
+        hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
+        == expected["tree_sha256"]
+    )
+
+
+@pytest.mark.parametrize("qualified", [None, "0" * 40])
+def test_unqualified_execution_revision_cannot_generate_incompatible_project(
+    tmp_path, monkeypatch, qualified
+):
+    import importlib
+    import shutil
+    from importlib.resources import files
+
+    module = importlib.import_module("zetra.scaffold")
+    package = tmp_path / "sdk"
+    shutil.copytree(files("zetra").joinpath("templates"), package / "templates")
+    provenance = package / "templates/provenance.json"
+    data = json.loads(provenance.read_text())
+    data["qualified_sdk_revision"] = qualified
+    provenance.write_text(json.dumps(data))
+    monkeypatch.setattr(module, "files", lambda _: package)
+    with pytest.raises(ValueError, match="qualified template"):
+        scaffold(tmp_path / "new-project", "reader")
+    assert not (tmp_path / "new-project").exists()

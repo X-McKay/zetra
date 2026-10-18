@@ -13,4 +13,4 @@ packages = ["src/document_reader"]
 document_reader = "src/document_reader/agents/document_reader/agent.yaml"
 
 [tool.uv.sources]
-zetra = { git = "https://github.com/X-McKay/zetra.git", rev = "f8b064685ce07bc633ba6d28b1c8c2786d9bdaa8" }
+zetra = { git = "https://github.com/X-McKay/zetra.git", rev = "4830a5f5eb7cf8400b4665b2706434c52aaa17cf" }
