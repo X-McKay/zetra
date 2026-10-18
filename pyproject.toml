@@ -40,8 +40,3 @@ markers = ["cluster: requires a real Temporal service via TEMPORAL_ADDRESS", "li
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-
-[tool.hatch.build.targets.wheel.force-include]
-"pyproject.toml" = "zetra/_build/pyproject.toml"
-"uv.lock" = "zetra/_build/uv.lock"
-"Dockerfile" = "zetra/_build/Dockerfile"

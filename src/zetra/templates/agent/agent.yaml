@@ -1,7 +1,0 @@
-schema_version: 1
-name: agent_package
-owner: local-development
-entrypoint: agent_package.agent:create_agent
-model: fixture
-profile: serial-v1
-policy: workspace

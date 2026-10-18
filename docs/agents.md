@@ -1,11 +1,96 @@
 # Agent authoring and evaluation
 
-An agent package contains `agent.yaml`, a Python project, `src/<package>/agent.py`,
-`tools.py`, tests and evaluation cases. The factory returns an ADK LlmAgent using
-`ctx.model` and `ctx.tools(Tool(function, effect), ...)`. Tools must be async,
-nonvariadic and callable with named arguments. Supported effects are
-`workspace_read` and `workspace_write`; the latter is confined session data, not
-permission for external business-system writes.
+Start with `zetra init ./my-agent --name my-agent`, then `cd my-agent` and
+`uv sync --locked`. The SDK bundles a generated copy of the canonical
+[X-McKay/zetra-template](https://github.com/X-McKay/zetra-template) tree.
+The template pins a qualified SDK Git commit, not the newest branch head. Updating
+that pin is an explicit dependency upgrade followed by lockfile regeneration and
+qualification. Initialization performs no network lookup or dependency rewriting.
+
+```text
+agent-project/
+├── README.md, AGENTS.md, pyproject.toml, uv.lock, Justfile, .gitignore
+├── .github/workflows/{validate,qualify,release}.yml
+├── src/my_agent/
+│   ├── __init__.py
+│   └── agents/document_reader/
+│       ├── __init__.py, agent.yaml, factory.py
+│       ├── instructions/base.md
+│       └── tools/{__init__,document_read}.py
+├── tests/unit/document_reader/
+├── tests/packaging/
+└── evals/document_reader/cases.jsonl
+```
+
+The project index is data, never imported Python:
+
+```toml
+[tool.zetra.agents]
+document_reader = "src/my_agent/agents/document_reader/agent.yaml"
+```
+
+One agent is inferred; multiple agents require `--agent NAME` for `check`, `build`,
+`release` and `eval`. `test` validates every indexed manifest and runs the whole
+project test suite. Names must match their manifest. Manifest and instruction paths
+must remain inside the project and cannot contain symlinks.
+
+```yaml
+schema_version: 1
+name: document_reader
+owner: local-development
+entrypoint: my_agent.agents.document_reader.factory:create_agent
+instructions: my_agent.agents.document_reader:instructions/base.md
+model: fixture
+profile: serial-v1
+policy: workspace
+```
+
+The factory returns an ADK LlmAgent using `ctx.model`, `ctx.instruction` and
+`ctx.tools(Tool(function, effect), ...)`. The instruction resource is loaded from
+the installed package inside the sandbox and passed as static text; it is not a
+callback, skill loader or permission grant. Hatchling includes the packaged YAML
+and Markdown. CI compares those resources byte-for-byte inside the built wheel.
+Tools must be async, nonvariadic and callable with named arguments. Supported
+effects are `workspace_read` and `workspace_write`; the latter is confined session
+data, not permission for external business-system writes.
+
+`agent.yaml` owns identity, factory/resource references and reviewed runtime
+profile. Python owns typed behavior. Add `models.py`, `dependencies.py`, `toolset.py`,
+shared tools or application settings only when the application needs them.
+Development skills belong under `.agents/skills`; runtime skills are ordinary
+packaged resources only if explicitly consumed by the agent. There is no automatic
+skill execution or dynamic profile expansion. Custom Temporal workflows, platform
+adapters, observability and deployment files are optional application additions;
+the starter copies none of the SDK's runtime machinery.
+
+### Locked images and evidence
+
+`zetra build . --tag my-agent:local --kind` snapshots only `pyproject.toml`,
+`uv.lock`, optional root README/LICENSE and nonhidden `src/**` package files
+(excluding caches and egg metadata). The same file selection determines the source
+hash. Tests, evals, `.agents`, `.github`, artifacts, local state and secrets outside
+`src` are not copied into images. Do not put credentials in package source.
+Other install inputs or local dependency overlays are unsupported. The Docker
+recipe installs that snapshot with `uv sync --locked --no-dev --no-editable`.
+There is no injected SDK checkout or second constraints environment. The lock must
+pin Zetra to a full HTTPS Git commit. Missing or stale locks fail the build.
+
+The release schema is version 2. This experimental SDK does not migrate earlier
+release/history formats; use a new runtime identity and queue for this format.
+
+A release binds image digest, selected manifest, source hash, lockfile hash and
+SDK Git revision. Docker labels are consistency checks, not signatures or proof
+against a malicious image builder. Dependency locking does not make mutable base
+images, OS repositories or Python build-system dependencies bit reproducible.
+Eval reports additionally bind the selected agent and dataset hash; generated
+evidence cannot change the source identity it describes. These reports remain
+local and unsigned.
+
+`validate` runs static checks, unit/fixture cases and wheel-resource tests.
+`qualify` is explicitly invoked on a configured dedicated kind runner and executes
+sandbox cases. `release` builds a wheel plus checksums; it does not attest,
+promote, publish or deploy infrastructure. Add those platform steps only with a
+real consumer and explicit authorization policy.
 
 Factories perform no I/O and return the same registration on reconstruction.
 Arbitrary callbacks, dynamic instructions, subagents, streaming, parallel tool

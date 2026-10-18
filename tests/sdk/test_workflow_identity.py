@@ -10,6 +10,8 @@ from zetra.manifest import AgentSpec, Release
 
 def release():
     return Release(
+        lock_sha256="a" * 64,
+        sdk_revision="b" * 40,
         agent=AgentSpec(name="test", owner="test", entrypoint="test:create"),
         image="test@sha256:" + "a" * 64,
         source_sha256="b" * 64,

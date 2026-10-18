@@ -42,14 +42,14 @@ for name, package in [
             ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"),
         )
         if name == "live":
-            manifest = path / "agent.yaml"
+            manifest = path / "src/workspace_reporter/agents/workspace_reporter/agent.yaml"
             manifest.write_text(
                 manifest.read_text()
                 .replace("model: fixture", "model: vllm")
                 .replace("policy: workspace", "policy: vllm-chat")
             )
         else:
-            tools = path / "src/workspace_reporter/tools.py"
+            tools = path / "src/workspace_reporter/agents/workspace_reporter/tools/workspace.py"
             tools.write_text(
                 tools.read_text()
                 .replace("def tools_for(workspace):", "import asyncio\n\ndef tools_for(workspace):")

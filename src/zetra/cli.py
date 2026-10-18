@@ -18,6 +18,8 @@ def parser():
     for name in ("check", "test", "build", "release", "eval"):
         cmd = sub.add_parser(name)
         cmd.add_argument("path")
+        if name != "test":
+            cmd.add_argument("--agent", help="agent name from [tool.zetra.agents]")
         if name == "build":
             cmd.add_argument("--tag", required=True)
             cmd.add_argument(
@@ -66,7 +68,7 @@ async def execute(args, load_release):
     if args.command == "eval" and args.mode == "fixture":
         from .evaluation import evaluate
 
-        return await evaluate(args.path, mode="fixture")
+        return await evaluate(args.path, mode="fixture", agent=args.agent)
 
     from temporalio.client import Client
 
@@ -108,6 +110,7 @@ async def execute(args, load_release):
         return await evaluate(
             args.path,
             mode=args.mode,
+            agent=args.agent,
             release=load_release(args.release) if args.release else None,
             client=client,
         )
@@ -139,7 +142,7 @@ def main(argv=None):
 
             result = scaffold(args.path, args.name)
         elif args.command == "check":
-            spec = load_agent(args.path)
+            spec = load_agent(args.path, args.agent)
             result = {
                 "status": "VALID_METADATA",
                 "agent": spec.model_dump(),
@@ -148,7 +151,12 @@ def main(argv=None):
             }
         elif args.command == "test":
             root = Path(args.path).resolve()
-            load_agent(root)
+            # Project tests may cover multiple indexed agents.
+            from .manifest import project_agents
+
+            names = project_agents(root)
+            for name in names:
+                load_agent(root, name)
             env = {**os.environ, "PYTHONPATH": str(root / "src")}
             return subprocess.call(
                 [sys.executable, "-m", "pytest", str(root / "tests"), "-q"], env=env
@@ -157,9 +165,9 @@ def main(argv=None):
             from .build import build, release_for
 
             result = (
-                build(args.path, tag=args.tag, kind=args.kind)
+                build(args.path, tag=args.tag, kind=args.kind, agent=args.agent)
                 if args.command == "build"
-                else release_for(args.path, args.image).model_dump()
+                else release_for(args.path, args.image, agent=args.agent).model_dump()
             )
         elif args.command == "profile":
             from .policy import profile

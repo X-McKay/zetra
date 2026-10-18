@@ -52,7 +52,7 @@ def sdk_worker(temporal, gateway, key, options):
     return worker
 
 
-@pytest.mark.parametrize("name,cursor", [("reporter", 5), ("reader", 3), ("generated", 5)])
+@pytest.mark.parametrize("name,cursor", [("reporter", 5), ("reader", 3), ("generated", 3)])
 async def test_public_sdk_release_session_and_repeated_submission(tmp_path, name, cursor):
     async with sdk_runtime(tmp_path) as (temporal, client, gateway, key, options):
         release_path = Path(".state") / f"{name}-release.json"
@@ -77,7 +77,7 @@ async def test_public_sdk_release_session_and_repeated_submission(tmp_path, name
             assert await client.wait(repeated) == result
             assert (await client.status(handle))["result"] == result
             files = await client.read_files(handle)
-            if name != "reader":
+            if name == "reporter":
                 assert files["summary.md"]
             with pytest.raises(ValueError):
                 await client.submit(release, session=session, message="Changed input")

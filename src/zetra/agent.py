@@ -24,10 +24,11 @@ class Tool:
 
 
 class AgentContext:
-    def __init__(self, bridge, *, workspace: Path, model: str):
+    def __init__(self, bridge, *, workspace: Path, model: str, instruction: str = ""):
         from ._runtime.capture import BridgeModel
 
         self.workspace = Path(workspace)
+        self.instruction = instruction
         self.model = BridgeModel(bridge, model=model)
         self._bridge = bridge
         self._specs = {}

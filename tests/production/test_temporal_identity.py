@@ -53,6 +53,8 @@ def request_for(store, *, queue, runtime_id="lab"):
         message="Validate execution identity.",
         position=Position(workspace=snapshot),
         release=Release(
+            lock_sha256="a" * 64,
+            sdk_revision="b" * 40,
             agent=AgentSpec(name="identity", owner="test", entrypoint="identity.agent:create"),
             image="identity@sha256:" + "1" * 64,
             source_sha256="2" * 64,

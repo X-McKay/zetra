@@ -20,7 +20,8 @@ and the limitations that remain before production deployment.
 | Worker rollouts | Native Temporal Worker options | Replay-compatible changes and native deployment versioning require rollout qualification |
 | Key lifecycle | Per-execution capability derivation from persistent worker secret | Rotation is not versioned; retain original key and runtime configuration |
 | Evaluation | Fixture and sandbox modes; release-bound evidence | Evidence is unsigned and observations remain scoped |
-| Developer workflow | Scaffold, CLI, image recipe, public client and worker factory | Local kind harness is separate from production deployment |
+| Developer workflow | Canonical nested template; data-only agent index; packaged instructions; one project lock used by image build | Optional application layers are not generated; local kind harness is separate from production deployment |
+| Build/evidence identity | Image/source/manifest/lock/SDK revision binding; eval agent and dataset identity | Unsigned consistency checks; OS and build-system inputs are not bit reproducible |
 | External actions and MCP | Not admitted | Future AgentGateway integration requires scoped identity, authorization, operation idempotency and reconciliation |
 | Multi-agent execution | Not admitted | Requires a separately admitted execution design |
 

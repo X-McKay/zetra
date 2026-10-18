@@ -8,3 +8,9 @@ requires-python = ">=3.12,<3.13"
 dependencies = ["zetra==0.1.0"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/workspace_reporter"]
+
+[tool.zetra.agents]
+workspace_reporter = "src/workspace_reporter/agents/workspace_reporter/agent.yaml"
+
+[tool.uv.sources]
+zetra = { git = "https://github.com/X-McKay/zetra.git", rev = "f8b064685ce07bc633ba6d28b1c8c2786d9bdaa8" }

@@ -10,5 +10,7 @@ from zetra.evaluation import _fixture_run_in_process
 if __name__ == "__main__":
     request = json.load(sys.stdin)
     with redirect_stdout(sys.stderr):
-        result = asyncio.run(_fixture_run_in_process(request["root"], request["message"]))
+        result = asyncio.run(
+            _fixture_run_in_process(request["root"], request["message"], agent=request.get("agent"))
+        )
     print(json.dumps(result))

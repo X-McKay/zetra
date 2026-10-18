@@ -1,7 +1,7 @@
 import asyncio
 
 import pytest
-from document_reader.tools import read_document
+from document_reader.agents.document_reader.tools.document_read import read_document
 
 
 def test_approved_document_only():

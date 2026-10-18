@@ -1,0 +1,7 @@
+name: document_reader
+owner: local-development
+entrypoint: agent_package.agents.document_reader.factory:create_agent
+model: fixture
+profile: serial-v1
+policy: workspace
+instructions: agent_package.agents.document_reader:instructions/base.md

@@ -1,6 +1,6 @@
 import asyncio
 
-from agent_package.tools import tools_for
+from workspace_reporter.agents.workspace_reporter.tools.workspace import tools_for
 
 
 def test_tools_are_scoped(tmp_path):
