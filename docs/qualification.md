@@ -6,10 +6,17 @@ production service deployment.
 
 ## Identity and environment
 
-[Runtime identities](../benchmarks/results/runtime.json) bind the SDK source,
-unchanged lockfile, seven rebuilt images and five agent releases. All seven
-installed image packages matched source SHA-256
-`0c50877de9810ad3eeb953fdc982640e62b61875b687d9496b5304f930e81fbe`.
+[Runtime identities](../benchmarks/results/runtime.json) bind the SDK execution
+package, dependency environments, template provenance, seven rebuilt images and
+five agent releases. All seven installed packages matched execution-package
+SHA-256 `01be1acc2c2a0c5157824e3ea0bee9893cd1a896c1cc655bf57445002f89374e`. This hash covers `src/zetra` except generated template
+assets, build-metadata copies and Python caches; it includes the agent Dockerfile.
+The five agent images install SDK Git revision
+`4830a5f5eb7cf8400b4665b2706434c52aaa17cf` from their own authoritative uv.lock.
+Installed Git provenance is checked against each release. They do not receive a
+checkout overlay. The newer CLI bundle pins that execution revision explicitly;
+template provenance and each image's installed dependency versions are recorded
+separately. Base-image/OS/build-system inputs are not bit reproducible.
 Docker Hub repository names were normalized before comparing exact image digests.
 
 The run used `kind-zetra-validation` on Linux arm64 in a local Docker VM with
@@ -27,13 +34,30 @@ This is a functional/recovery check, not a model-quality evaluation.
 
 | Gate | Result |
 | --- | --- |
-| Locked local `just check` | 186 passed, 37 deselected; lint, format, lock, docs, both example tests and fixture evaluations passed |
-| Full suite through Temporal/OpenShell in kind with live vLLM | 223 passed, zero failures/errors/skips, 676.53 s |
-| Bridge and SDK latency benchmarks | 2 passed, zero failures/errors/skips, 175.60 s |
-| Fresh provisioning benchmark | 1 passed, zero failures/errors/skips, 128.39 s |
-| Installed wheel outside checkout | Scaffold, generated-agent test, fixture evaluation and embedded build assets passed |
+| Locked local `just check` | 207 passed, 37 deselected; lint, format, lock, docs, both example tests and fixture evaluations passed |
+| Full suite through Temporal/OpenShell in kind with live vLLM | 244 passed, zero failures/errors/skips, 754.44 s |
+| Bridge and SDK latency benchmarks | 2 passed, zero failures/errors/skips, 214.28 s |
+| Fresh provisioning benchmark | 1 passed, zero failures/errors/skips, 156.72 s |
+| Installed wheel outside checkout | Scaffold, generated-agent tests, fixture evaluation, hidden CI/gitignore files and agent build recipe passed |
 
-[Test evidence](../benchmarks/results/tests.json) lists the full run. The new SDK
+[Test evidence](../benchmarks/results/tests.json) lists the full run.
+
+The document reader and workspace reporter use nested manifests, factories, tools
+and packaged instructions. Discovery is data-only and requires explicit selection
+for multi-agent projects. New tests cover unsafe/symlinked resource paths, packaged
+instruction delivery, source/evidence separation, lock pin failures, renderer name
+normalization, selected-agent/dataset evidence identity and canonical bundle
+integrity. The generated document reader completes three durable boundaries
+(model, tool, model) through the public SDK, including sandbox evaluation and
+confirmed deletion. The reporter retains its five-boundary recovery coverage.
+
+Canonical template validation uses an independently rendered project and its
+actual Git-installed SDK, with no checkout PYTHONPATH override. Seven template-repository
+tests and four generated-agent tests passed. Validation includes unit tests,
+fixture evaluation, wheel archive checks and resource loading outside the source
+checkout. The canonical repository and generated project have separate CI.
+Fixture checks establish deterministic behavior, not model answer quality.
+ The new SDK
 coverage exercises independent client/worker lifetimes, repeated submission,
 concurrent session workspace separation, exact-run inspection and raw Temporal
 reset/foreign-runtime rejection before sandbox access. At cursor 2, a worker is
@@ -80,37 +104,45 @@ model performance result. Replay microbenchmarks remain a separate measurement.
 
 Times are seconds. Full session wall time includes a fresh sandbox, execution and
 confirmed deletion. Component medians need not sum to median wall time. Small
-samples and shared-machine load limit interpretation. The cleanup retry change adds
-no remote call to a successful session; these fresh measurements do not isolate
-a small latency difference from normal host/model variation.
+samples and shared-machine load limit interpretation. The project-layout change adds no bridge round trip to a successful session.
+These measurements do not isolate a small latency difference from normal host,
+image dependency and model variation.
 
 [Bridge samples](../benchmarks/results/latency.json)
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| Full session wall | 15.121 | 22.502 |
-| Provision Activity | 9.806 | 9.502 |
-| Active history interval | 2.384 | 10.457 |
-| Cleanup Activity | 2.749 | 2.324 |
+| Full session wall | 16.285 | 22.125 |
+| Provision Activity | 9.163 | 9.036 |
+| Active history interval | 3.994 | 9.572 |
+| Cleanup Activity | 3.318 | 3.143 |
 
 Native comparison
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| Native ADK body | 0.310 | 3.509 |
-| Native process | 0.851 | 3.835 |
-| Native OpenShell exec | 0.999 | 4.590 |
+| Native ADK body | 0.363 | 5.196 |
+| Native process | 1.148 | 5.739 |
+| Native OpenShell exec | 1.360 | 6.786 |
 
 [Public SDK samples](../benchmarks/results/sdk-latency.json)
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| Full session wall | 14.505 | 18.206 |
-| Provision Activity | 9.187 | 9.328 |
-| Active history interval | 2.484 | 5.701 |
-| Cleanup Activity | 2.561 | 3.065 |
+| Full session wall | 16.580 | 21.320 |
+| Provision Activity | 9.025 | 10.024 |
+| Active history interval | 3.944 | 7.880 |
+| Cleanup Activity | 3.120 | 3.273 |
 
-All four SDK samples completed with confirmed deletion. Each used 13 Activities. Reconstruction body medians for prefixes 0, 1, 8, 32, 63 and 64 (n=3 each) were 0.202, 0.281, 0.268, 0.496, 0.580, 0.485 s.
+All four SDK samples completed with confirmed deletion. Each used 13 Activities. Reconstruction body medians for prefixes 0, 1, 8, 32, 63 and 64 (n=3 each) were 0.334, 0.390, 0.833, 0.443, 0.745, 0.544 s.
+
+The public SDK fixture median was 16.580 s, compared with 14.505 s in the preceding
+recorded run; the live sample was 21.320 s versus 18.206 s. Both used 13 Activities.
+Fixture provision medians were 9.025 s versus 9.187 s, active intervals 3.944 s
+versus 2.484 s, and cleanup 3.120 s versus 2.561 s. These small, separate samples
+show higher observed wall time, without isolating a cause or establishing a
+statistically significant regression. No improvement is claimed from this layout
+change. Component medians are not additive.
 
 The bridge active/native differences are observed path differences, not isolated
 Temporal overhead. Native OpenShell execution includes a fresh process; durable
@@ -123,10 +155,10 @@ difference does not isolate SDK wrapper overhead.
 
 | Median, seconds | Uncompiled | Precompiled |
 | --- | ---: | ---: |
-| Fixture (n=3 per image) provision | 9.762 | 8.601 |
-| Fixture (n=3 per image) import probe | 1.517 | 0.488 |
-| vLLM policy (n=2 per image) provision | 9.133 | 8.684 |
-| vLLM policy (n=2 per image) import probe | 1.328 | 0.489 |
+| Fixture (n=3 per image) provision | 10.843 | 10.943 |
+| Fixture (n=3 per image) import probe | 1.518 | 0.624 |
+| vLLM policy (n=2 per image) provision | 10.378 | 9.228 |
+| vLLM policy (n=2 per image) import probe | 1.538 | 0.694 |
 
 Each provisioning trial uses a distinct fresh sandbox, empty writable workspace
 and confirmed deletion. Both images are preloaded. The vLLM-policy provisioning
@@ -171,6 +203,22 @@ Test-first runs exposed five missing permanent-error classifications (six other
 cases passed), then the new kind recovery test failed because the old policy
 stopped after three transient failures. Those expected red runs are preserved
 separately and excluded from the final qualification counts.
+
+Three Sol reviews assessed the project/lock architecture, implementation and
+canonical template. Findings prompted consistent renderer naming, agent identity
+in eval reports, actual built-wheel resource checks, root template CI and checked
+template provenance. A final bootstrap review added a small provenance gate: execution-only SDK
+commits cannot silently scaffold an incompatible provisional template. The final
+CLI bundle and canonical renderer create the qualified project offline. Seed-commit
+scaffold CI failures are not final-release results. The experimental release format is explicitly version 2;
+there is no migration of prior release/history formats.
+
+Project test-first runs failed before discovery/instruction support existed. An
+initial scaffold run exposed copied Ruff caches as non-text files; cache exclusion
+fixed it and the SDK tests passed. An early broad restricted-environment run
+reported five subprocess timeouts with 65 passes before interruption; it is not
+counted as qualification. The subsequent locked and cluster runs are reported
+above. No timeout budget or durability assertion was relaxed.
 
 Final cluster inspection found zero Sandbox resources, session pods, session PVCs
 and session PVs. The 7 shared OpenShell/Temporal pods were Ready; shared
