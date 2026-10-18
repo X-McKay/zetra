@@ -88,7 +88,10 @@ blocking thread-safe methods and verify immutable bytes against `Ref`.
 Retain history, artifacts and the original worker key/configuration for execution
 recovery and cleanup. Key rotation is not versioned. Hard-terminal cleanup is an
 explicit durable reconciliation operation; wait for its result. Failed normal
-cleanup can also be reconciled. Status does not perform cleanup. Provisioning
+cleanup can also be reconciled. Both cleanup paths retry transient failures for
+up to ten minutes with backoff capped at 30 seconds. Explicit gateway authorization
+or invalid-operation failures stop promptly; correct the cause before reconciling.
+These retries do not repeat agent effects. Status does not perform cleanup. Provisioning
 uncertainty can leave `NOT_CONFIRMED` even after observed deletion, pending a future
 gateway-side lifecycle fence or platform reconciliation. No janitor is implemented.
 Native create request IDs use the caller's existing gateway identity; retain that

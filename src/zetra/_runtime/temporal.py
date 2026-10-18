@@ -7,6 +7,7 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError, is_cancelled_exception
 
 SAFE_RETRY = RetryPolicy(maximum_attempts=3)
+CLEANUP_RETRY = RetryPolicy(maximum_interval=timedelta(seconds=30))
 ONCE = RetryPolicy(maximum_attempts=1)
 
 
@@ -44,7 +45,11 @@ class SessionWorkflow:
                 else 100
             ),
             heartbeat_timeout=timedelta(seconds=10),
-            retry_policy=ONCE if effect else SAFE_RETRY,
+            retry_policy=ONCE
+            if effect
+            else CLEANUP_RETRY
+            if name == "close_session"
+            else SAFE_RETRY,
             cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
 
@@ -148,5 +153,5 @@ class CleanupWorkflow:
             start_to_close_timeout=timedelta(seconds=120),
             schedule_to_close_timeout=timedelta(minutes=10),
             heartbeat_timeout=timedelta(seconds=10),
-            retry_policy=SAFE_RETRY,
+            retry_policy=CLEANUP_RETRY,
         )

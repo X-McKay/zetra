@@ -9,7 +9,7 @@ production service deployment.
 [Runtime identities](../benchmarks/results/runtime.json) bind the SDK source,
 unchanged lockfile, seven rebuilt images and five agent releases. All seven
 installed image packages matched source SHA-256
-`4cde2df3f9456b778dd399f19a22a96cf28061208cf2dc9ce66b75d824e72cc6`.
+`0c50877de9810ad3eeb953fdc982640e62b61875b687d9496b5304f930e81fbe`.
 Docker Hub repository names were normalized before comparing exact image digests.
 
 The run used `kind-zetra-validation` on Linux arm64 in a local Docker VM with
@@ -27,10 +27,10 @@ This is a functional/recovery check, not a model-quality evaluation.
 
 | Gate | Result |
 | --- | --- |
-| Locked local `just check` | 175 passed, 35 deselected; lint, format, lock, docs, both example tests and fixture evaluations passed |
-| Full suite through Temporal/OpenShell in kind with live vLLM | 210 passed, zero failures/errors/skips, 676.32 s |
-| Bridge and SDK latency benchmarks | 2 passed, zero failures/errors/skips, 210.31 s |
-| Fresh provisioning benchmark | 1 passed, zero failures/errors/skips, 128.90 s |
+| Locked local `just check` | 186 passed, 37 deselected; lint, format, lock, docs, both example tests and fixture evaluations passed |
+| Full suite through Temporal/OpenShell in kind with live vLLM | 223 passed, zero failures/errors/skips, 676.53 s |
+| Bridge and SDK latency benchmarks | 2 passed, zero failures/errors/skips, 175.60 s |
+| Fresh provisioning benchmark | 1 passed, zero failures/errors/skips, 128.39 s |
 | Installed wheel outside checkout | Scaffold, generated-agent test, fixture evaluation and embedded build assets passed |
 
 [Test evidence](../benchmarks/results/tests.json) lists the full run. The new SDK
@@ -53,6 +53,17 @@ are bounded client-transport faults, not injected gateway transaction/process
 failures. Transport tests also reject a retry whose original Activity window has
 expired even when its current attempt and reconstructed adapter are fresh.
 
+Cleanup recovery adds two real-cluster cases with client-boundary gateway faults.
+Normal close survives four consecutive `UNAVAILABLE` responses and confirms deletion
+on Activity attempt five. A `PERMISSION_DENIED` close stops on its first attempt;
+a fresh worker then reconciles that exact terminal run through four transient
+failures and succeeds on attempt five. Temporal history verifies the ten-minute
+cleanup window, original three model/two tool Activities with one attempt each,
+and an unchanged original execution during reconciliation. The successful agent
+result survives cleanup recovery. These are transport faults, not gateway outages
+or a ten-minute wall-clock exhaustion test. Unit tests distinguish five explicit
+permanent gateway statuses from transient errors and OpenShell deletion wait expiry.
+
 Existing cases additionally exercise subprocess loss/SIGKILL, sandbox replacement,
 lost effect completion, heartbeat expiry, cancellation, hard termination, history
 replay, policy denials and malformed receipts/workspaces. Cleanup and effect
@@ -69,35 +80,37 @@ model performance result. Replay microbenchmarks remain a separate measurement.
 
 Times are seconds. Full session wall time includes a fresh sandbox, execution and
 confirmed deletion. Component medians need not sum to median wall time. Small
-samples and shared-machine load limit interpretation.
+samples and shared-machine load limit interpretation. The cleanup retry change adds
+no remote call to a successful session; these fresh measurements do not isolate
+a small latency difference from normal host/model variation.
 
 [Bridge samples](../benchmarks/results/latency.json)
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| Full session wall | 18.291 | 28.226 |
-| Provision Activity | 10.490 | 15.710 |
-| Active history interval | 3.541 | 10.227 |
-| Cleanup Activity | 3.089 | 1.876 |
+| Full session wall | 15.121 | 22.502 |
+| Provision Activity | 9.806 | 9.502 |
+| Active history interval | 2.384 | 10.457 |
+| Cleanup Activity | 2.749 | 2.324 |
 
 Native comparison
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| Native ADK body | 0.507 | 6.407 |
-| Native process | 1.057 | 6.860 |
-| Native OpenShell exec | 1.255 | 8.030 |
+| Native ADK body | 0.310 | 3.509 |
+| Native process | 0.851 | 3.835 |
+| Native OpenShell exec | 0.999 | 4.590 |
 
 [Public SDK samples](../benchmarks/results/sdk-latency.json)
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| Full session wall | 15.238 | 22.337 |
-| Provision Activity | 9.418 | 10.577 |
-| Active history interval | 2.565 | 8.356 |
-| Cleanup Activity | 3.108 | 3.260 |
+| Full session wall | 14.505 | 18.206 |
+| Provision Activity | 9.187 | 9.328 |
+| Active history interval | 2.484 | 5.701 |
+| Cleanup Activity | 2.561 | 3.065 |
 
-All four SDK samples completed with confirmed deletion. Each used 13 Activities. Reconstruction body medians for prefixes 0, 1, 8, 32, 63 and 64 (n=3 each) were 0.274, 0.275, 0.307, 0.307, 0.641, 0.524 s.
+All four SDK samples completed with confirmed deletion. Each used 13 Activities. Reconstruction body medians for prefixes 0, 1, 8, 32, 63 and 64 (n=3 each) were 0.202, 0.281, 0.268, 0.496, 0.580, 0.485 s.
 
 The bridge active/native differences are observed path differences, not isolated
 Temporal overhead. Native OpenShell execution includes a fresh process; durable
@@ -110,10 +123,10 @@ difference does not isolate SDK wrapper overhead.
 
 | Median, seconds | Uncompiled | Precompiled |
 | --- | ---: | ---: |
-| Fixture (n=3 per image) provision | 9.145 | 7.377 |
-| Fixture (n=3 per image) import probe | 1.480 | 0.409 |
-| vLLM policy (n=2 per image) provision | 9.740 | 9.370 |
-| vLLM policy (n=2 per image) import probe | 1.736 | 0.549 |
+| Fixture (n=3 per image) provision | 9.762 | 8.601 |
+| Fixture (n=3 per image) import probe | 1.517 | 0.488 |
+| vLLM policy (n=2 per image) provision | 9.133 | 8.684 |
+| vLLM policy (n=2 per image) import probe | 1.328 | 0.489 |
 
 Each provisioning trial uses a distinct fresh sandbox, empty writable workspace
 and confirmed deletion. Both images are preloaded. The vLLM-policy provisioning
@@ -148,6 +161,17 @@ field access, including its teardown. Both were corrected and the exact leaked
 instance was confirmed deleted. A formatting gate also caught the new test file.
 Those failed/interrupted runs are not counted as final qualification passes.
 
+Two additional Sol reviews checked the cleanup implementation, conformance tests
+and upstream proposal. Cleanup reuses the existing Activity boundary and Temporal
+retry policy; no public API, service, registry or new persistence was added. Review
+kept generic OpenShell deletion timeouts retryable and simplified the RFC to use
+permanent tombstones as its minimal design. The proposal is a local draft only.
+
+Test-first runs exposed five missing permanent-error classifications (six other
+cases passed), then the new kind recovery test failed because the old policy
+stopped after three transient failures. Those expected red runs are preserved
+separately and excluded from the final qualification counts.
+
 Final cluster inspection found zero Sandbox resources, session pods, session PVCs
 and session PVs. The 7 shared OpenShell/Temporal pods were Ready; shared
 service volumes remain. The dedicated test cluster was retained.
@@ -166,7 +190,9 @@ reset/retry/continue-as-new and cron lineages are rejected. Worker rollouts requ
 replay-compatible code or qualified native Temporal deployment versioning. Temporal's Workflow-ID
 deduplication lasts only within retained history.
 
-Normal cleanup and explicit cleanup Workflows use Temporal retries. There is no
+Normal cleanup and explicit cleanup Workflows retry transient errors within their
+existing ten-minute window, with 30-second maximum backoff. Explicit permanent
+errors stop promptly; terminal `NOT_CONFIRMED` results are not retried. There is no
 continuous janitor. A retired or unacknowledged provisioning attempt can create a
 sandbox late; its history remains `NOT_CONFIRMED` even after observed instances
 are removed. Native request IDs deduplicate creates but do not fence late admission.

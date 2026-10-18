@@ -89,6 +89,16 @@ confirmation and do not allocate request IDs.
 
 Normal cleanup runs in the session Workflow. Explicit reconciliation schedules a
 durable cleanup Workflow for terminal runs, including failed normal cleanup.
+Both paths retry transient cleanup failures with Temporal's exponential backoff
+(default one-second initial interval, capped at 30 seconds), within the existing
+ten-minute schedule-to-close window. Each attempt has a two-minute limit and
+heartbeat coverage. No attempt-count cap cuts that window short. Explicit gateway
+permission, authentication, invalid-request, failed-precondition and unsupported
+operation errors stop retries at the cleanup boundary; identity conflicts remain
+terminal. A successful cleanup result of `NOT_CONFIRMED` is not a retryable error.
+Model/tool execution still has exactly one Activity attempt. Callers can explicitly
+reconcile a terminal execution after correcting a failure or restoring access.
+
 Callers wait for cleanup after cancellation or hard termination; status is read-only.
 Confirmed deletion does not resolve unknown effects. Provisioning history with a
 retired or unacknowledged create attempt prevents deletion proof: cleanup returns
@@ -96,6 +106,9 @@ retired or unacknowledged create attempt prevents deletion proof: cleanup return
 duplicate creation but do not close admission or certify that outstanding work has
 stopped. A stronger guarantee requires a gateway-side
 lifecycle fence or platform reconciliation; there is no custom janitor in the SDK.
+The [draft upstream proposal](openshell-admission-closure-proposal.md) requests a
+native close-create-admission operation, including absent-request tombstones and
+backend settlement/fencing. It is not an implemented capability or a cleanup claim.
 
 ## Future external actions
 

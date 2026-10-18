@@ -2,458 +2,458 @@
   "worker_startup_included": false,
   "samples": [
     {
-      "release": "zetra-88b6db9a4c857ae5ff53e53e3456ba5bd03764848d912d9b1b4200661f2f8677",
+      "release": "zetra-68a2c260bfe608f3cdbc376322f52e487485b7a066e594864bd4f619a9ce86fa",
       "model": "fixture",
-      "wall_seconds": 16.225467375013977,
-      "active_seconds": 2.903414011001587,
+      "wall_seconds": 13.812474874779582,
+      "active_seconds": 2.4840171337127686,
       "activities": [
         {
           "name": "provision_session",
-          "scheduled": 1792374708.682603,
-          "started": 1792374708.682683,
-          "completed": 1792374719.358438,
-          "queue_seconds": 8.0108642578125e-05,
-          "seconds": 10.675755023956299
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374719.398326,
-          "started": 1792374719.398396,
-          "completed": 1792374720.270893,
-          "queue_seconds": 7.009506225585938e-05,
-          "seconds": 0.8724970817565918
-        },
-        {
-          "name": "execute_model",
-          "scheduled": 1792374720.289206,
-          "started": 1792374720.289244,
-          "completed": 1792374720.519913,
-          "queue_seconds": 3.790855407714844e-05,
-          "seconds": 0.2306690216064453
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374720.533457,
-          "started": 1792374720.533476,
-          "completed": 1792374720.802268,
-          "queue_seconds": 1.9073486328125e-05,
-          "seconds": 0.26879191398620605
-        },
-        {
-          "name": "execute_tool",
-          "scheduled": 1792374720.825706,
-          "started": 1792374720.825742,
-          "completed": 1792374721.043386,
-          "queue_seconds": 3.600120544433594e-05,
-          "seconds": 0.21764397621154785
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374721.063519,
-          "started": 1792374721.063548,
-          "completed": 1792374721.247185,
-          "queue_seconds": 2.9087066650390625e-05,
-          "seconds": 0.18363690376281738
-        },
-        {
-          "name": "execute_model",
-          "scheduled": 1792374721.26444,
-          "started": 1792374721.265716,
-          "completed": 1792374721.447929,
-          "queue_seconds": 0.0012760162353515625,
-          "seconds": 0.18221282958984375
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374721.460212,
-          "started": 1792374721.460243,
-          "completed": 1792374721.620883,
-          "queue_seconds": 3.0994415283203125e-05,
-          "seconds": 0.16064000129699707
-        },
-        {
-          "name": "execute_tool",
-          "scheduled": 1792374721.632294,
-          "started": 1792374721.632479,
-          "completed": 1792374721.81498,
+          "scheduled": 1792376870.374952,
+          "started": 1792376870.375137,
+          "completed": 1792376878.649962,
           "queue_seconds": 0.0001850128173828125,
-          "seconds": 0.18250107765197754
+          "seconds": 8.274824857711792
         },
         {
           "name": "advance_runner",
-          "scheduled": 1792374721.825563,
-          "started": 1792374721.825593,
-          "completed": 1792374721.979999,
-          "queue_seconds": 3.0040740966796875e-05,
-          "seconds": 0.15440607070922852
+          "scheduled": 1792376878.681412,
+          "started": 1792376878.681556,
+          "completed": 1792376879.378677,
+          "queue_seconds": 0.00014400482177734375,
+          "seconds": 0.6971209049224854
         },
         {
           "name": "execute_model",
-          "scheduled": 1792374721.995808,
-          "started": 1792374721.99589,
-          "completed": 1792374722.162907,
-          "queue_seconds": 8.20159912109375e-05,
-          "seconds": 0.16701698303222656
+          "scheduled": 1792376879.395307,
+          "started": 1792376879.395352,
+          "completed": 1792376879.55078,
+          "queue_seconds": 4.482269287109375e-05,
+          "seconds": 0.15542817115783691
         },
         {
           "name": "advance_runner",
-          "scheduled": 1792374722.172047,
-          "started": 1792374722.172061,
-          "completed": 1792374722.30174,
-          "queue_seconds": 1.4066696166992188e-05,
-          "seconds": 0.12967896461486816
-        },
-        {
-          "name": "close_session",
-          "scheduled": 1792374722.315102,
-          "started": 1792374722.315131,
-          "completed": 1792374724.755751,
-          "queue_seconds": 2.8848648071289062e-05,
-          "seconds": 2.440619945526123
-        }
-      ],
-      "cleanup": "DELETED"
-    },
-    {
-      "release": "zetra-88b6db9a4c857ae5ff53e53e3456ba5bd03764848d912d9b1b4200661f2f8677",
-      "model": "fixture",
-      "wall_seconds": 15.053166666068137,
-      "active_seconds": 2.397836923599243,
-      "activities": [
-        {
-          "name": "provision_session",
-          "scheduled": 1792374724.850107,
-          "started": 1792374724.850142,
-          "completed": 1792374734.268106,
-          "queue_seconds": 3.504753112792969e-05,
-          "seconds": 9.417963981628418
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374734.294012,
-          "started": 1792374734.294078,
-          "completed": 1792374735.065922,
-          "queue_seconds": 6.604194641113281e-05,
-          "seconds": 0.7718439102172852
-        },
-        {
-          "name": "execute_model",
-          "scheduled": 1792374735.079578,
-          "started": 1792374735.079609,
-          "completed": 1792374735.231288,
-          "queue_seconds": 3.0994415283203125e-05,
-          "seconds": 0.15167903900146484
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374735.242275,
-          "started": 1792374735.242288,
-          "completed": 1792374735.376165,
-          "queue_seconds": 1.3113021850585938e-05,
-          "seconds": 0.13387680053710938
-        },
-        {
-          "name": "execute_tool",
-          "scheduled": 1792374735.394427,
-          "started": 1792374735.394446,
-          "completed": 1792374735.51657,
-          "queue_seconds": 1.8835067749023438e-05,
-          "seconds": 0.12212419509887695
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374735.525237,
-          "started": 1792374735.525261,
-          "completed": 1792374735.638903,
-          "queue_seconds": 2.384185791015625e-05,
-          "seconds": 0.11364197731018066
-        },
-        {
-          "name": "execute_model",
-          "scheduled": 1792374735.649322,
-          "started": 1792374735.649405,
-          "completed": 1792374735.810683,
-          "queue_seconds": 8.296966552734375e-05,
-          "seconds": 0.16127800941467285
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374735.819715,
-          "started": 1792374735.819745,
-          "completed": 1792374735.976929,
-          "queue_seconds": 3.0040740966796875e-05,
-          "seconds": 0.15718388557434082
-        },
-        {
-          "name": "execute_tool",
-          "scheduled": 1792374735.988235,
-          "started": 1792374735.988269,
-          "completed": 1792374736.180029,
-          "queue_seconds": 3.409385681152344e-05,
-          "seconds": 0.19175982475280762
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374736.191551,
-          "started": 1792374736.191592,
-          "completed": 1792374736.337177,
-          "queue_seconds": 4.100799560546875e-05,
-          "seconds": 0.1455850601196289
-        },
-        {
-          "name": "execute_model",
-          "scheduled": 1792374736.348706,
-          "started": 1792374736.34875,
-          "completed": 1792374736.518287,
-          "queue_seconds": 4.410743713378906e-05,
-          "seconds": 0.16953682899475098
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374736.532968,
-          "started": 1792374736.53302,
-          "completed": 1792374736.691849,
-          "queue_seconds": 5.1975250244140625e-05,
-          "seconds": 0.1588289737701416
-        },
-        {
-          "name": "close_session",
-          "scheduled": 1792374736.709717,
-          "started": 1792374736.709759,
-          "completed": 1792374739.81758,
-          "queue_seconds": 4.1961669921875e-05,
-          "seconds": 3.107820987701416
-        }
-      ],
-      "cleanup": "DELETED"
-    },
-    {
-      "release": "zetra-88b6db9a4c857ae5ff53e53e3456ba5bd03764848d912d9b1b4200661f2f8677",
-      "model": "fixture",
-      "wall_seconds": 15.237868667114526,
-      "active_seconds": 2.565385103225708,
-      "activities": [
-        {
-          "name": "provision_session",
-          "scheduled": 1792374739.93736,
-          "started": 1792374739.937405,
-          "completed": 1792374749.242369,
-          "queue_seconds": 4.506111145019531e-05,
-          "seconds": 9.304963827133179
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374749.25942,
-          "started": 1792374749.259492,
-          "completed": 1792374749.987039,
-          "queue_seconds": 7.200241088867188e-05,
-          "seconds": 0.7275471687316895
-        },
-        {
-          "name": "execute_model",
-          "scheduled": 1792374750.004888,
-          "started": 1792374750.004952,
-          "completed": 1792374750.248195,
-          "queue_seconds": 6.389617919921875e-05,
-          "seconds": 0.24324297904968262
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374750.266985,
-          "started": 1792374750.267024,
-          "completed": 1792374750.428975,
-          "queue_seconds": 3.910064697265625e-05,
-          "seconds": 0.16195106506347656
-        },
-        {
-          "name": "execute_tool",
-          "scheduled": 1792374750.445845,
-          "started": 1792374750.445923,
-          "completed": 1792374750.603205,
-          "queue_seconds": 7.82012939453125e-05,
-          "seconds": 0.15728187561035156
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374750.61689,
-          "started": 1792374750.61692,
-          "completed": 1792374750.775041,
-          "queue_seconds": 3.0040740966796875e-05,
-          "seconds": 0.15812110900878906
-        },
-        {
-          "name": "execute_model",
-          "scheduled": 1792374750.792098,
-          "started": 1792374750.792127,
-          "completed": 1792374750.955048,
-          "queue_seconds": 2.8848648071289062e-05,
-          "seconds": 0.16292119026184082
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374750.967431,
-          "started": 1792374750.967499,
-          "completed": 1792374751.128248,
-          "queue_seconds": 6.794929504394531e-05,
-          "seconds": 0.16074895858764648
-        },
-        {
-          "name": "execute_tool",
-          "scheduled": 1792374751.139098,
-          "started": 1792374751.139163,
-          "completed": 1792374751.32037,
-          "queue_seconds": 6.508827209472656e-05,
-          "seconds": 0.18120694160461426
-        },
-        {
-          "name": "advance_runner",
-          "scheduled": 1792374751.335495,
-          "started": 1792374751.335522,
-          "completed": 1792374751.474972,
+          "scheduled": 1792376879.565275,
+          "started": 1792376879.565302,
+          "completed": 1792376879.766311,
           "queue_seconds": 2.6941299438476562e-05,
-          "seconds": 0.1394500732421875
+          "seconds": 0.20100903511047363
         },
         {
-          "name": "execute_model",
-          "scheduled": 1792374751.486541,
-          "started": 1792374751.486573,
-          "completed": 1792374751.659713,
-          "queue_seconds": 3.1948089599609375e-05,
-          "seconds": 0.1731400489807129
+          "name": "execute_tool",
+          "scheduled": 1792376879.780923,
+          "started": 1792376879.780949,
+          "completed": 1792376879.936907,
+          "queue_seconds": 2.6226043701171875e-05,
+          "seconds": 0.15595793724060059
         },
         {
           "name": "advance_runner",
-          "scheduled": 1792374751.669391,
-          "started": 1792374751.669418,
-          "completed": 1792374751.824805,
+          "scheduled": 1792376879.947214,
+          "started": 1792376879.947241,
+          "completed": 1792376880.113873,
           "queue_seconds": 2.7179718017578125e-05,
-          "seconds": 0.15538692474365234
+          "seconds": 0.16663193702697754
+        },
+        {
+          "name": "execute_model",
+          "scheduled": 1792376880.127293,
+          "started": 1792376880.127391,
+          "completed": 1792376880.306678,
+          "queue_seconds": 9.799003601074219e-05,
+          "seconds": 0.17928695678710938
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376880.318811,
+          "started": 1792376880.318858,
+          "completed": 1792376880.453209,
+          "queue_seconds": 4.696846008300781e-05,
+          "seconds": 0.13435101509094238
+        },
+        {
+          "name": "execute_tool",
+          "scheduled": 1792376880.463357,
+          "started": 1792376880.46339,
+          "completed": 1792376880.611884,
+          "queue_seconds": 3.314018249511719e-05,
+          "seconds": 0.14849400520324707
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376880.624404,
+          "started": 1792376880.624452,
+          "completed": 1792376880.756919,
+          "queue_seconds": 4.8160552978515625e-05,
+          "seconds": 0.13246679306030273
+        },
+        {
+          "name": "execute_model",
+          "scheduled": 1792376880.768792,
+          "started": 1792376880.768842,
+          "completed": 1792376880.936335,
+          "queue_seconds": 5.0067901611328125e-05,
+          "seconds": 0.16749310493469238
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376880.949434,
+          "started": 1792376880.949454,
+          "completed": 1792376881.165429,
+          "queue_seconds": 2.002716064453125e-05,
+          "seconds": 0.21597504615783691
         },
         {
           "name": "close_session",
-          "scheduled": 1792374751.838158,
-          "started": 1792374751.838194,
-          "completed": 1792374755.013686,
-          "queue_seconds": 3.600120544433594e-05,
-          "seconds": 3.17549204826355
+          "scheduled": 1792376881.201337,
+          "started": 1792376881.201404,
+          "completed": 1792376883.732956,
+          "queue_seconds": 6.699562072753906e-05,
+          "seconds": 2.5315518379211426
         }
       ],
       "cleanup": "DELETED"
     },
     {
-      "release": "zetra-28ed6d2744e27707312a6ea3d8c1f9708ac147b73c3332b03d8ec6d65ec7af28",
-      "model": "vllm",
-      "wall_seconds": 22.337238374631852,
-      "active_seconds": 8.355687856674194,
+      "release": "zetra-68a2c260bfe608f3cdbc376322f52e487485b7a066e594864bd4f619a9ce86fa",
+      "model": "fixture",
+      "wall_seconds": 14.504645041655749,
+      "active_seconds": 2.521527051925659,
       "activities": [
         {
           "name": "provision_session",
-          "scheduled": 1792374755.211009,
-          "started": 1792374755.211052,
-          "completed": 1792374765.788395,
-          "queue_seconds": 4.291534423828125e-05,
-          "seconds": 10.577342987060547
+          "scheduled": 1792376884.313688,
+          "started": 1792376884.314804,
+          "completed": 1792376893.501684,
+          "queue_seconds": 0.001116037368774414,
+          "seconds": 9.186879873275757
         },
         {
           "name": "advance_runner",
-          "scheduled": 1792374765.818299,
-          "started": 1792374765.818393,
-          "completed": 1792374766.772752,
-          "queue_seconds": 9.393692016601562e-05,
-          "seconds": 0.9543590545654297
+          "scheduled": 1792376893.560071,
+          "started": 1792376893.560194,
+          "completed": 1792376894.345009,
+          "queue_seconds": 0.00012302398681640625,
+          "seconds": 0.7848150730133057
         },
         {
           "name": "execute_model",
-          "scheduled": 1792374766.791824,
-          "started": 1792374766.79191,
-          "completed": 1792374771.195762,
-          "queue_seconds": 8.58306884765625e-05,
-          "seconds": 4.4038519859313965
+          "scheduled": 1792376894.362942,
+          "started": 1792376894.362966,
+          "completed": 1792376894.519942,
+          "queue_seconds": 2.4080276489257812e-05,
+          "seconds": 0.15697598457336426
         },
         {
           "name": "advance_runner",
-          "scheduled": 1792374771.226022,
-          "started": 1792374771.226114,
-          "completed": 1792374771.47133,
-          "queue_seconds": 9.202957153320312e-05,
-          "seconds": 0.24521589279174805
+          "scheduled": 1792376894.530681,
+          "started": 1792376894.530699,
+          "completed": 1792376894.669366,
+          "queue_seconds": 1.811981201171875e-05,
+          "seconds": 0.13866686820983887
         },
         {
           "name": "execute_tool",
-          "scheduled": 1792374771.492585,
-          "started": 1792374771.492633,
-          "completed": 1792374771.750337,
-          "queue_seconds": 4.8160552978515625e-05,
-          "seconds": 0.2577037811279297
+          "scheduled": 1792376894.682931,
+          "started": 1792376894.682956,
+          "completed": 1792376894.829722,
+          "queue_seconds": 2.5033950805664062e-05,
+          "seconds": 0.14676594734191895
         },
         {
           "name": "advance_runner",
-          "scheduled": 1792374771.768526,
-          "started": 1792374771.768572,
-          "completed": 1792374771.953039,
-          "queue_seconds": 4.601478576660156e-05,
-          "seconds": 0.18446683883666992
+          "scheduled": 1792376894.841083,
+          "started": 1792376894.841108,
+          "completed": 1792376894.983857,
+          "queue_seconds": 2.5033950805664062e-05,
+          "seconds": 0.14274883270263672
         },
         {
           "name": "execute_model",
-          "scheduled": 1792374771.967625,
-          "started": 1792374771.967665,
-          "completed": 1792374772.649649,
-          "queue_seconds": 4.00543212890625e-05,
-          "seconds": 0.6819839477539062
+          "scheduled": 1792376894.99522,
+          "started": 1792376894.995238,
+          "completed": 1792376895.209685,
+          "queue_seconds": 1.811981201171875e-05,
+          "seconds": 0.214447021484375
         },
         {
           "name": "advance_runner",
-          "scheduled": 1792374772.665184,
-          "started": 1792374772.665226,
-          "completed": 1792374772.874507,
-          "queue_seconds": 4.1961669921875e-05,
-          "seconds": 0.20928096771240234
+          "scheduled": 1792376895.226897,
+          "started": 1792376895.22695,
+          "completed": 1792376895.407579,
+          "queue_seconds": 5.2928924560546875e-05,
+          "seconds": 0.18062901496887207
         },
         {
           "name": "execute_tool",
-          "scheduled": 1792374772.903447,
-          "started": 1792374772.903628,
-          "completed": 1792374773.085369,
-          "queue_seconds": 0.0001811981201171875,
-          "seconds": 0.18174099922180176
+          "scheduled": 1792376895.418849,
+          "started": 1792376895.418896,
+          "completed": 1792376895.578576,
+          "queue_seconds": 4.696846008300781e-05,
+          "seconds": 0.15968012809753418
         },
         {
           "name": "advance_runner",
-          "scheduled": 1792374773.098739,
-          "started": 1792374773.098771,
-          "completed": 1792374773.240192,
-          "queue_seconds": 3.218650817871094e-05,
-          "seconds": 0.14142084121704102
+          "scheduled": 1792376895.590808,
+          "started": 1792376895.590833,
+          "completed": 1792376895.740363,
+          "queue_seconds": 2.5033950805664062e-05,
+          "seconds": 0.14952993392944336
         },
         {
           "name": "execute_model",
-          "scheduled": 1792374773.254663,
-          "started": 1792374773.254684,
-          "completed": 1792374773.958154,
-          "queue_seconds": 2.09808349609375e-05,
-          "seconds": 0.70346999168396
+          "scheduled": 1792376895.752961,
+          "started": 1792376895.752991,
+          "completed": 1792376895.91746,
+          "queue_seconds": 3.0040740966796875e-05,
+          "seconds": 0.16446900367736816
         },
         {
           "name": "advance_runner",
-          "scheduled": 1792374773.986105,
-          "started": 1792374773.986182,
-          "completed": 1792374774.173987,
-          "queue_seconds": 7.700920104980469e-05,
-          "seconds": 0.1878049373626709
+          "scheduled": 1792376895.928975,
+          "started": 1792376895.928993,
+          "completed": 1792376896.081598,
+          "queue_seconds": 1.7881393432617188e-05,
+          "seconds": 0.1526050567626953
         },
         {
           "name": "close_session",
-          "scheduled": 1792374774.18646,
-          "started": 1792374774.186478,
-          "completed": 1792374777.446796,
-          "queue_seconds": 1.7881393432617188e-05,
-          "seconds": 3.2603180408477783
+          "scheduled": 1792376896.099392,
+          "started": 1792376896.099424,
+          "completed": 1792376898.660375,
+          "queue_seconds": 3.1948089599609375e-05,
+          "seconds": 2.5609512329101562
+        }
+      ],
+      "cleanup": "DELETED"
+    },
+    {
+      "release": "zetra-68a2c260bfe608f3cdbc376322f52e487485b7a066e594864bd4f619a9ce86fa",
+      "model": "fixture",
+      "wall_seconds": 14.882052416913211,
+      "active_seconds": 2.4710240364074707,
+      "activities": [
+        {
+          "name": "provision_session",
+          "scheduled": 1792376898.823891,
+          "started": 1792376898.82394,
+          "completed": 1792376908.259638,
+          "queue_seconds": 4.9114227294921875e-05,
+          "seconds": 9.43569803237915
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376908.29596,
+          "started": 1792376908.29611,
+          "completed": 1792376908.910325,
+          "queue_seconds": 0.0001499652862548828,
+          "seconds": 0.6142151355743408
+        },
+        {
+          "name": "execute_model",
+          "scheduled": 1792376908.923719,
+          "started": 1792376908.923852,
+          "completed": 1792376909.084595,
+          "queue_seconds": 0.00013303756713867188,
+          "seconds": 0.16074299812316895
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376909.104937,
+          "started": 1792376909.105121,
+          "completed": 1792376909.251292,
+          "queue_seconds": 0.0001838207244873047,
+          "seconds": 0.14617109298706055
+        },
+        {
+          "name": "execute_tool",
+          "scheduled": 1792376909.264438,
+          "started": 1792376909.264472,
+          "completed": 1792376909.413086,
+          "queue_seconds": 3.409385681152344e-05,
+          "seconds": 0.14861392974853516
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376909.424279,
+          "started": 1792376909.424303,
+          "completed": 1792376909.565051,
+          "queue_seconds": 2.4080276489257812e-05,
+          "seconds": 0.1407480239868164
+        },
+        {
+          "name": "execute_model",
+          "scheduled": 1792376909.578462,
+          "started": 1792376909.578861,
+          "completed": 1792376909.816042,
+          "queue_seconds": 0.0003991127014160156,
+          "seconds": 0.2371809482574463
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376909.838111,
+          "started": 1792376909.838159,
+          "completed": 1792376910.017785,
+          "queue_seconds": 4.8160552978515625e-05,
+          "seconds": 0.1796259880065918
+        },
+        {
+          "name": "execute_tool",
+          "scheduled": 1792376910.034455,
+          "started": 1792376910.034496,
+          "completed": 1792376910.199276,
+          "queue_seconds": 4.100799560546875e-05,
+          "seconds": 0.1647799015045166
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376910.211135,
+          "started": 1792376910.211164,
+          "completed": 1792376910.430526,
+          "queue_seconds": 2.9087066650390625e-05,
+          "seconds": 0.2193620204925537
+        },
+        {
+          "name": "execute_model",
+          "scheduled": 1792376910.446444,
+          "started": 1792376910.44652,
+          "completed": 1792376910.613466,
+          "queue_seconds": 7.605552673339844e-05,
+          "seconds": 0.1669459342956543
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376910.625077,
+          "started": 1792376910.625094,
+          "completed": 1792376910.766984,
+          "queue_seconds": 1.6927719116210938e-05,
+          "seconds": 0.1418900489807129
+        },
+        {
+          "name": "close_session",
+          "scheduled": 1792376910.777705,
+          "started": 1792376910.777728,
+          "completed": 1792376913.633244,
+          "queue_seconds": 2.3126602172851562e-05,
+          "seconds": 2.855515956878662
+        }
+      ],
+      "cleanup": "DELETED"
+    },
+    {
+      "release": "zetra-daf0d7f0e64d15e274bed4c15026bacd2317d622d075098da1747c261e3dfdb2",
+      "model": "vllm",
+      "wall_seconds": 18.20648862514645,
+      "active_seconds": 5.7013959884643555,
+      "activities": [
+        {
+          "name": "provision_session",
+          "scheduled": 1792376913.692186,
+          "started": 1792376913.692222,
+          "completed": 1792376923.019983,
+          "queue_seconds": 3.600120544433594e-05,
+          "seconds": 9.327760934829712
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376923.049013,
+          "started": 1792376923.049132,
+          "completed": 1792376923.679539,
+          "queue_seconds": 0.00011920928955078125,
+          "seconds": 0.6304068565368652
+        },
+        {
+          "name": "execute_model",
+          "scheduled": 1792376923.692666,
+          "started": 1792376923.69269,
+          "completed": 1792376926.231119,
+          "queue_seconds": 2.384185791015625e-05,
+          "seconds": 2.538429021835327
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376926.241641,
+          "started": 1792376926.241747,
+          "completed": 1792376926.367524,
+          "queue_seconds": 0.00010585784912109375,
+          "seconds": 0.125777006149292
+        },
+        {
+          "name": "execute_tool",
+          "scheduled": 1792376926.376644,
+          "started": 1792376926.376676,
+          "completed": 1792376926.520742,
+          "queue_seconds": 3.218650817871094e-05,
+          "seconds": 0.14406585693359375
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376926.531849,
+          "started": 1792376926.531884,
+          "completed": 1792376926.668802,
+          "queue_seconds": 3.504753112792969e-05,
+          "seconds": 0.1369180679321289
+        },
+        {
+          "name": "execute_model",
+          "scheduled": 1792376926.680498,
+          "started": 1792376926.680778,
+          "completed": 1792376927.341166,
+          "queue_seconds": 0.00028014183044433594,
+          "seconds": 0.6603879928588867
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376927.351039,
+          "started": 1792376927.351063,
+          "completed": 1792376927.509828,
+          "queue_seconds": 2.4080276489257812e-05,
+          "seconds": 0.15876507759094238
+        },
+        {
+          "name": "execute_tool",
+          "scheduled": 1792376927.555925,
+          "started": 1792376927.555982,
+          "completed": 1792376927.755078,
+          "queue_seconds": 5.7220458984375e-05,
+          "seconds": 0.1990959644317627
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376927.769391,
+          "started": 1792376927.769407,
+          "completed": 1792376927.929117,
+          "queue_seconds": 1.5974044799804688e-05,
+          "seconds": 0.15970993041992188
+        },
+        {
+          "name": "execute_model",
+          "scheduled": 1792376927.943232,
+          "started": 1792376927.94332,
+          "completed": 1792376928.551711,
+          "queue_seconds": 8.797645568847656e-05,
+          "seconds": 0.6083910465240479
+        },
+        {
+          "name": "advance_runner",
+          "scheduled": 1792376928.564815,
+          "started": 1792376928.56484,
+          "completed": 1792376928.750409,
+          "queue_seconds": 2.5033950805664062e-05,
+          "seconds": 0.18556880950927734
+        },
+        {
+          "name": "close_session",
+          "scheduled": 1792376928.763749,
+          "started": 1792376928.763773,
+          "completed": 1792376931.828401,
+          "queue_seconds": 2.4080276489257812e-05,
+          "seconds": 3.0646281242370605
         }
       ],
       "cleanup": "DELETED"
     }
   ],
-  "sdk_source_sha256": "4cde2df3f9456b778dd399f19a22a96cf28061208cf2dc9ce66b75d824e72cc6",
+  "sdk_source_sha256": "0c50877de9810ad3eeb953fdc982640e62b61875b687d9496b5304f930e81fbe",
   "trust": "local-unsigned"
 }

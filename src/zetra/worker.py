@@ -208,8 +208,8 @@ class ActivityRouter:
                 ).status.name
                 if status == "RUNNING":
                     raise ValueError("cannot reconcile a running Workflow")
-                result = await context.activities.heartbeating(
-                    context.activities.lifecycle.close_all()
+                result = await context.activities.close_session(
+                    {"start": {**context.start, "session": execution_session(handle)}}
                 )
                 if not await settled_provisioning(self.temporal, handle):
                     return {"cleanup": "NOT_CONFIRMED", "reason": "unsettled provisioning"}

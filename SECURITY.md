@@ -32,7 +32,9 @@ immutable sandbox instance. Cancellation and hard termination do not establish
 that deletion or resolve effect uncertainty.
 
 Explicit durable cleanup reconciles terminal executions, including normal cleanup
-failures. Hard-terminal callers must wait for that cleanup result. Status inspection
+failures. Transient cleanup errors retry within a ten-minute Temporal window;
+explicit gateway authorization/request failures stop promptly. Neither retries nor
+elapsed time promote uncertainty to confirmed deletion. Hard-terminal callers must wait for that cleanup result. Status inspection
 is read-only. A retired or unacknowledged provisioning attempt can outlive its
 Activity; observed deletion alone cannot rule out a later sandbox creation. Such
 history remains `NOT_CONFIRMED`. Native create IDs deduplicate a generation within OpenShell's

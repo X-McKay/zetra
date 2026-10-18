@@ -4,6 +4,7 @@ import asyncio
 import json
 from contextlib import suppress
 
+import grpc
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
@@ -101,7 +102,20 @@ class Activities:
 
     @activity.defn
     async def close_session(self, command: dict) -> dict:
-        return await self.heartbeating(self.lifecycle.close(command))
+        try:
+            return await self.heartbeating(self.lifecycle.close(command))
+        except grpc.RpcError as exc:
+            if exc.code() in (
+                grpc.StatusCode.PERMISSION_DENIED,
+                grpc.StatusCode.UNAUTHENTICATED,
+                grpc.StatusCode.INVALID_ARGUMENT,
+                grpc.StatusCode.FAILED_PRECONDITION,
+                grpc.StatusCode.UNIMPLEMENTED,
+            ):
+                raise ApplicationError(
+                    f"OpenShell cleanup rejected: {exc.code().name}", non_retryable=True
+                ) from exc
+            raise
 
     def registered(self):
         return [
