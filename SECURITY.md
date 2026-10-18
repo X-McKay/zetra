@@ -35,8 +35,10 @@ Explicit durable cleanup reconciles terminal executions, including normal cleanu
 failures. Hard-terminal callers must wait for that cleanup result. Status inspection
 is read-only. A retired or unacknowledged provisioning attempt can outlive its
 Activity; observed deletion alone cannot rule out a later sandbox creation. Such
-history remains `NOT_CONFIRMED`. An independent reconciler that fences late creates
-is future work; no continuous janitor is implemented.
+history remains `NOT_CONFIRMED`. Native create IDs deduplicate a generation within OpenShell's
+retention contract, but neither those IDs nor a client RPC deadline fence late
+admission. Stronger closure requires a gateway-side lifecycle fence or platform
+reconciliation; the SDK implements no continuous janitor.
 
 The admitted profile is serial, nonstreaming and bounded to 64 model/tool
 boundaries in one invocation. External business writes, MCP actions, arbitrary

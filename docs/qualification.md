@@ -9,7 +9,7 @@ production service deployment.
 [Runtime identities](../benchmarks/results/runtime.json) bind the SDK source,
 unchanged lockfile, seven rebuilt images and five agent releases. All seven
 installed image packages matched source SHA-256
-`275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8`.
+`4cde2df3f9456b778dd399f19a22a96cf28061208cf2dc9ce66b75d824e72cc6`.
 Docker Hub repository names were normalized before comparing exact image digests.
 
 The run used `kind-zetra-validation` on Linux arm64 in a local Docker VM with
@@ -27,10 +27,10 @@ This is a functional/recovery check, not a model-quality evaluation.
 
 | Gate | Result |
 | --- | --- |
-| Locked local `just check` | 172 passed; 33 cluster tests deselected; lint, format, lock, docs, both example tests and fixture evaluations passed |
-| Full suite through Temporal/OpenShell in kind with live vLLM | 205 passed, zero failures/errors/skips, 838.70 s |
-| Bridge and SDK latency benchmarks | 2 passed, zero failures/errors/skips, 277.13 s |
-| Fresh provisioning benchmark | 1 passed, zero failures/errors/skips, 131.78 s |
+| Locked local `just check` | 175 passed, 35 deselected; lint, format, lock, docs, both example tests and fixture evaluations passed |
+| Full suite through Temporal/OpenShell in kind with live vLLM | 210 passed, zero failures/errors/skips, 676.32 s |
+| Bridge and SDK latency benchmarks | 2 passed, zero failures/errors/skips, 210.31 s |
+| Fresh provisioning benchmark | 1 passed, zero failures/errors/skips, 128.90 s |
 | Installed wheel outside checkout | Scaffold, generated-agent test, fixture evaluation and embedded build assets passed |
 
 [Test evidence](../benchmarks/results/tests.json) lists the full run. The new SDK
@@ -40,6 +40,18 @@ reset/foreign-runtime rejection before sandbox access. At cursor 2, a worker is
 stopped during a safe advance; a newly constructed Worker/router/FileStore resumes
 and completes with exactly three model and two tool execution Activities. This is
 fresh worker-object/cache recovery on one host, not a multi-host availability test.
+
+Native create coverage adds two real-gateway fault cases. One drops a successful
+create acknowledgement and replaces the worker: native replay returns the same
+immutable sandbox for the identical request ID/payload, then execution completes
+with exactly three model and two tool Activities. The retired attempt still yields
+`REMEDIATION_REQUIRED` / `NOT_CONFIRMED`. The other holds client dispatch until after
+hard termination and durable cleanup reports `NOT_CONFIRMED`, then releases the
+request and observes an actual late sandbox. After exact-instance deletion, native
+replay refuses with `REQUEST_REPLAY_UNAVAILABLE` and creates no replacement. These
+are bounded client-transport faults, not injected gateway transaction/process
+failures. Transport tests also reject a retry whose original Activity window has
+expired even when its current attempt and reconstructed adapter are fresh.
 
 Existing cases additionally exercise subprocess loss/SIGKILL, sandbox replacement,
 lost effect completion, heartbeat expiry, cancellation, hard termination, history
@@ -63,29 +75,29 @@ samples and shared-machine load limit interpretation.
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| Full session wall | 17.194 | 25.929 |
-| Provision Activity | 10.145 | 11.727 |
-| Active history interval | 3.994 | 10.816 |
-| Cleanup Activity | 3.003 | 3.159 |
+| Full session wall | 18.291 | 28.226 |
+| Provision Activity | 10.490 | 15.710 |
+| Active history interval | 3.541 | 10.227 |
+| Cleanup Activity | 3.089 | 1.876 |
 
 Native comparison
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| Native ADK body | 1.014 | 8.835 |
-| Native process | 6.122 | 9.324 |
-| Native OpenShell exec | 6.497 | 10.428 |
+| Native ADK body | 0.507 | 6.407 |
+| Native process | 1.057 | 6.860 |
+| Native OpenShell exec | 1.255 | 8.030 |
 
 [Public SDK samples](../benchmarks/results/sdk-latency.json)
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| Full session wall | 15.929 | 19.051 |
-| Provision Activity | 10.029 | 8.867 |
-| Active history interval | 3.590 | 6.641 |
-| Cleanup Activity | 2.829 | 3.405 |
+| Full session wall | 15.238 | 22.337 |
+| Provision Activity | 9.418 | 10.577 |
+| Active history interval | 2.565 | 8.356 |
+| Cleanup Activity | 3.108 | 3.260 |
 
-All four SDK samples completed with confirmed deletion. Each used 13 Activities. Reconstruction body medians for prefixes 0, 1, 8, 32, 63 and 64 (n=3 each) were 0.384, 0.295, 0.598, 0.461, 0.642, 0.606 s.
+All four SDK samples completed with confirmed deletion. Each used 13 Activities. Reconstruction body medians for prefixes 0, 1, 8, 32, 63 and 64 (n=3 each) were 0.274, 0.275, 0.307, 0.307, 0.641, 0.524 s.
 
 The bridge active/native differences are observed path differences, not isolated
 Temporal overhead. Native OpenShell execution includes a fresh process; durable
@@ -98,10 +110,10 @@ difference does not isolate SDK wrapper overhead.
 
 | Median, seconds | Uncompiled | Precompiled |
 | --- | ---: | ---: |
-| Fixture (n=3 per image) provision | 10.618 | 7.935 |
-| Fixture (n=3 per image) import probe | 1.474 | 0.500 |
-| vLLM policy (n=2 per image) provision | 9.831 | 9.191 |
-| vLLM policy (n=2 per image) import probe | 1.776 | 0.792 |
+| Fixture (n=3 per image) provision | 9.145 | 7.377 |
+| Fixture (n=3 per image) import probe | 1.480 | 0.409 |
+| vLLM policy (n=2 per image) provision | 9.740 | 9.370 |
+| vLLM policy (n=2 per image) import probe | 1.736 | 0.549 |
 
 Each provisioning trial uses a distinct fresh sandbox, empty writable workspace
 and confirmed deletion. Both images are preloaded. The vLLM-policy provisioning
@@ -126,6 +138,16 @@ tests now call the real validator with forged chains and missing/corrupt snapsho
 the expectations retain the same integrity requirements. The corrected local gate
 and real suite were rerun. Those initial failures are not counted as final passes.
 
+Two further Sol reviews checked native admission, recovery and test coverage;
+no implementation blockers remained. Review corrections made the 64-generation
+limit and post-retention re-execution risk explicit. Three new transport tests
+failed before implementation, then passed. The old lifecycle fake initially caused
+ten failures and an interrupted wait because it lacked the native transport seam;
+it now supplies that seam. The first new live test failed on protobuf metadata
+field access, including its teardown. Both were corrected and the exact leaked
+instance was confirmed deleted. A formatting gate also caught the new test file.
+Those failed/interrupted runs are not counted as final qualification passes.
+
 Final cluster inspection found zero Sandbox resources, session pods, session PVCs
 and session PVs. The 7 shared OpenShell/Temporal pods were Ready; shared
 service volumes remain. The dedicated test cluster was retained.
@@ -147,7 +169,9 @@ deduplication lasts only within retained history.
 Normal cleanup and explicit cleanup Workflows use Temporal retries. There is no
 continuous janitor. A retired or unacknowledged provisioning attempt can create a
 sandbox late; its history remains `NOT_CONFIRMED` even after observed instances
-are removed. Independent reconciliation/fencing is a remaining platform requirement,
-not a custom SDK scheduler. Resource removal does not prove physical erasure.
+are removed. Native request IDs deduplicate creates but do not fence late admission.
+Successful receipts expire after 24 hours; unresolved receipts persist; the caller
+quota is 1,000. A gateway-side lifecycle fence or platform reconciliation remains
+necessary for a stronger closure claim, not a custom SDK scheduler. Resource removal does not prove physical erasure.
 No p95, throughput, cold-pull, hostile-code or production availability claim follows
 from these measurements.

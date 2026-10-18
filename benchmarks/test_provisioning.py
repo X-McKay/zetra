@@ -12,6 +12,7 @@ import secrets
 import time
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from openshell import SandboxClient, TlsConfig
@@ -36,17 +37,23 @@ print(json.dumps({'import_seconds':elapsed,'import_user_cpu_seconds':cpu,
 
 
 class ObservedClient:
-    """Times public SDK calls without changing their readiness or retry behavior."""
+    """Times SDK operations, including the pinned native create RPC."""
 
     def __init__(self, client):
         self.client = client
         self.calls = []
+        self._stub = SimpleNamespace(
+            CreateSandbox=self.observe("create", client._stub.CreateSandbox)
+        )
 
     def __getattr__(self, name):
         method = getattr(self.client, name)
         if name not in ("get", "create", "wait_ready", "exec"):
             return method
 
+        return self.observe(name, method)
+
+    def observe(self, name, method):
         def observed(*args, **kwargs):
             begin = time.perf_counter()
             try:
@@ -108,6 +115,7 @@ async def test_fresh_provisioning_comparison(tmp_path):
                 binding = await remote.provision(start)
                 elapsed = time.perf_counter() - begin
                 calls = list(observed.calls)
+                assert sum(call["method"] == "create" for call in calls) == 1
                 assert binding["sandbox_id"] not in identities
                 identities.add(binding["sandbox_id"])
                 probe = await asyncio.to_thread(

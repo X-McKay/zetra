@@ -15,7 +15,8 @@ and the limitations that remain before production deployment.
 | Session isolation | Fresh sandbox/workspace; authority/release labels; immutable deletion confirmation | OpenShell/Linux enforcement requires scoped qualification; tools share agent trust domain |
 | Artifact storage | Caller `ArtifactStore`; blocking thread-safe immutable hash/size-verified methods | Caller durability and aligned artifact/history retention |
 | Connection security | Caller-configured Temporal client and OpenShell client | TLS, authentication, codecs and secret management are caller responsibilities |
-| Lifecycle | Normal Workflow cleanup and explicit durable terminal reconciliation; read-only status | Late provisioning uncertainty remains `NOT_CONFIRMED`; independent fencing reconciler and janitor are future work |
+| Create admission | Native OpenShell request ID per generation; bounded original Activity window | 24-hour successful receipt retention, unresolved admission and shared caller quota; no lifecycle fence |
+| Lifecycle | Normal Workflow cleanup and explicit durable terminal reconciliation; read-only status | Late provisioning uncertainty remains `NOT_CONFIRMED`; stronger closure needs gateway fencing or platform reconciliation |
 | Worker rollouts | Native Temporal Worker options | Replay-compatible changes and native deployment versioning require rollout qualification |
 | Key lifecycle | Per-execution capability derivation from persistent worker secret | Rotation is not versioned; retain original key and runtime configuration |
 | Evaluation | Fixture and sandbox modes; release-bound evidence | Evidence is unsigned and observations remain scoped |

@@ -8,11 +8,15 @@ import asyncio
 import base64
 import hashlib
 import json
+import time
 from contextlib import closing
+from uuid import NAMESPACE_URL, uuid5
 
 import grpc
 from openshell import ExecChunk, ExecResult
 from openshell._proto import openshell_pb2, sandbox_pb2
+from openshell.sandbox import _sandbox_ref
+from temporalio import activity
 
 from .artifacts import Position, Ref
 from .chunks import CHUNK_BYTES
@@ -21,6 +25,26 @@ from .records import canonical_bytes
 from .transport import Authority, ProtocolError
 
 PYTHON = "/app/.venv/bin/python"
+# Match the Workflow's provisioning schedule-to-close window; far below the
+# gateway's 24-hour successful replay retention. This is not a server fence.
+CREATE_WINDOW_SECONDS = 600
+
+
+def native_create(client, request, deadline):
+    """Pinned OpenShell 0.1.4 shim: curated create() omits request_id.
+
+    Reuse its authenticated, error-mapped stub and result conversion, avoiding a
+    second connection/configuration or a copied SDK client. Remove this shim when
+    the upstream public helper accepts request_id.
+    """
+    remaining = deadline - time.time()
+    if remaining <= 0:
+        raise ProtocolError("provisioning admission window expired")
+    response = client._stub.CreateSandbox(request, timeout=min(client._timeout, remaining))
+    ref = _sandbox_ref(response.sandbox, response.service_urls)
+    if not ref.id:
+        raise ProtocolError("CreateSandbox returned empty sandbox identity")
+    return ref
 
 
 def policy():
@@ -109,6 +133,7 @@ class OpenShellSession:
         self.binding = None
         self.creations = set()
         self.closing = False
+        self.admission_deadline = time.time() + CREATE_WINDOW_SECONDS
 
     def verify_release(self, ref):
         if any(ref.labels.get(k) != v for k, v in self.release_labels.items()):
@@ -146,7 +171,20 @@ class OpenShellSession:
         # bounded SDK call settles, including before terminal reconciliation.
         if self.closing:
             raise ProtocolError("session is closing")
-        task = asyncio.create_task(asyncio.to_thread(self.client.create, **kwargs))
+        deadline = self.admission_deadline
+        if activity.in_activity():
+            # scheduled_time is the original Activity schedule, not this retry's
+            # start. Reconstructed worker caches must not renew admission.
+            deadline = activity.info().scheduled_time.timestamp() + CREATE_WINDOW_SECONDS
+        workspace = kwargs.pop("workspace")
+        request = openshell_pb2.CreateSandboxRequest(
+            workspace_scope={"workspace": workspace},
+            request_id=str(
+                uuid5(NAMESPACE_URL, f"zetra/create/v1/{self.session}/{self.generation}")
+            ),
+            **kwargs,
+        )
+        task = asyncio.create_task(asyncio.to_thread(native_create, self.client, request, deadline))
         self.creations.add(task)
         try:
             return await asyncio.shield(task)
@@ -164,33 +202,42 @@ class OpenShellSession:
         if start["session"] != self.session:
             raise ValueError("wrong provision session")
         try:
-            ref = await asyncio.to_thread(self.client.get, self.name, workspace="default")
+            existing = await asyncio.to_thread(self.client.get, self.name, workspace="default")
         except grpc.RpcError as exc:
             if exc.code() != grpc.StatusCode.NOT_FOUND:
                 raise
-            ref = await self.create_settled(
-                workspace="default",
-                name=self.name,
-                labels={
-                    **self.release_labels,
-                    "bridge-session": hashlib.sha256(self.session.encode()).hexdigest()[:32],
-                    "bridge-generation": str(self.generation),
+        else:
+            self.verify_release(existing)
+            if (
+                existing.labels.get("bridge-session")
+                != hashlib.sha256(self.session.encode()).hexdigest()[:32]
+            ):
+                raise ProtocolError("existing sandbox belongs to another session")
+        # A name lookup alone cannot acknowledge an earlier admitted create.
+        # Always replay the same logical request, including after worker loss.
+        ref = await self.create_settled(
+            workspace="default",
+            name=self.name,
+            labels={
+                **self.release_labels,
+                "bridge-session": hashlib.sha256(self.session.encode()).hexdigest()[:32],
+                "bridge-generation": str(self.generation),
+            },
+            spec=openshell_pb2.SandboxSpec(
+                template=openshell_pb2.SandboxTemplate(image=self.image),
+                policy=self.policy,
+                environment={
+                    **({"ZETRA_AGENT": json.dumps(self.agent_spec)} if self.agent_spec else {}),
+                    "BRIDGE_SESSION": self.session,
+                    "BRIDGE_PROVIDER": self.provider,
+                    "BRIDGE_GENERATION": str(self.generation),
+                    "BRIDGE_MANIFEST": self.manifest,
+                    "BRIDGE_KEY": self.key.hex(),
+                    "BRIDGE_MESSAGE": start["message"],
                 },
-                spec=openshell_pb2.SandboxSpec(
-                    template=openshell_pb2.SandboxTemplate(image=self.image),
-                    policy=self.policy,
-                    environment={
-                        **({"ZETRA_AGENT": json.dumps(self.agent_spec)} if self.agent_spec else {}),
-                        "BRIDGE_SESSION": self.session,
-                        "BRIDGE_PROVIDER": self.provider,
-                        "BRIDGE_GENERATION": str(self.generation),
-                        "BRIDGE_MANIFEST": self.manifest,
-                        "BRIDGE_KEY": self.key.hex(),
-                        "BRIDGE_MESSAGE": start["message"],
-                    },
-                    command=[PYTHON, "-m", self.runtime_module],
-                ),
-            )
+                command=[PYTHON, "-m", self.runtime_module],
+            ),
+        )
         if (
             ref.labels.get("bridge-session")
             != hashlib.sha256(self.session.encode()).hexdigest()[:32]

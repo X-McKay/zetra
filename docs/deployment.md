@@ -90,7 +90,12 @@ recovery and cleanup. Key rotation is not versioned. Hard-terminal cleanup is an
 explicit durable reconciliation operation; wait for its result. Failed normal
 cleanup can also be reconciled. Status does not perform cleanup. Provisioning
 uncertainty can leave `NOT_CONFIRMED` even after observed deletion, pending a future
-independent reconciler that can fence late creates. No janitor is implemented.
+gateway-side lifecycle fence or platform reconciliation. No janitor is implemented.
+Native create request IDs use the caller's existing gateway identity; retain that
+identity during recovery. OpenShell 0.1.4 retains successful admissions for 24 hours
+and caps them at 1,000 per caller, including creates whose sandboxes were deleted.
+Unresolved admissions do not expire. See [native admission](architecture.md#native-create-admission)
+for the bounded retry contract and private SDK compatibility seam.
 
 ## Qualification
 
