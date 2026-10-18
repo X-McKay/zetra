@@ -134,3 +134,19 @@ class SessionWorkflow:
             except ActivityError:
                 result["cleanup"] = "REMEDIATION_REQUIRED"
         return result
+
+
+@workflow.defn
+class CleanupWorkflow:
+    """Durable, explicit cleanup of an exact terminal execution; no effect retry."""
+
+    @workflow.run
+    async def run(self, target: dict) -> dict:
+        return await workflow.execute_activity(
+            "reconcile_session",
+            target,
+            start_to_close_timeout=timedelta(seconds=120),
+            schedule_to_close_timeout=timedelta(minutes=10),
+            heartbeat_timeout=timedelta(seconds=10),
+            retry_policy=SAFE_RETRY,
+        )

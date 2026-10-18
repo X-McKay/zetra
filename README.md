@@ -1,10 +1,10 @@
 # Zetra
 
 Zetra is an experimental Python SDK for durable Google ADK agents in disposable
-OpenShell sandboxes. Temporal owns accepted progress at every model/tool boundary.
-Each session gets a fresh process and workspace; successful results require
-confirmed sandbox deletion. Agent repositories define agents and tools, not workers,
-Activities or recovery adapters.
+OpenShell sandboxes. Temporal history owns accepted progress at every model/tool
+boundary. Callers supply a Temporal connection, OpenShell client, immutable artifact
+store and persistent worker secret. Independently running workers can replace one
+another without client-local recovery state.
 
 ## Develop an agent
 
@@ -18,7 +18,7 @@ uv run zetra eval /tmp/my_agent --mode fixture
 ```
 
 Fixture tests execute trusted developer code locally. They do not establish model
-quality or sandbox enforcement. The SDK exports `AgentContext` and `Tool`:
+quality or sandbox enforcement. Agent packages define factories and tools:
 
 ```python
 from google.adk.agents import LlmAgent
@@ -33,58 +33,55 @@ def create_agent(ctx: AgentContext) -> LlmAgent:
     )
 ```
 
-The same registration produces capture wrappers and effect executors. The SDK
-rejects unsupported ADK features, callbacks and mismatched registries. The supported
+The same registration produces capture wrappers and effect executors. The admitted
 profile is static, serial and nonstreaming, with at most 64 model/tool boundaries.
-A lost effect completion remains unknown; it does not trigger automatic redispatch.
+Each effect has one Temporal Activity attempt. Lost completion remains unknown.
 
-## Run in kind
+## Embed the SDK
 
-Prerequisites: Docker with a Linux kernel supporting mandatory Landlock and
-seccomp, kind, kubectl, Helm, uv and Python 3.12. Allow sufficient Docker VM memory
-for Temporal, PostgreSQL, OpenShell and Cilium (8 GiB for this small lab).
+```python
+from zetra.artifacts import ArtifactStore, FileStore, Ref
+from zetra.client import SessionClient
+from zetra.worker import create_worker
 
-```bash
-just cluster-up
-uv run zetra build examples/workspace_reporter --tag zetra-reporter:local --kind \
-  --output .state/reporter-release.json
+# temporal and gateway are caller-configured clients; worker_key comes from
+# the caller's secret manager and contains at least 32 persistent random bytes.
+artifacts = FileStore("/durable/zetra/objects")
+worker = create_worker(
+    temporal, task_queue="agents", runtime_id="agents-v1",
+    sandbox_client=gateway, artifacts=artifacts, key=worker_key,
+)
+client = SessionClient(
+    temporal, task_queue="agents", runtime_id="agents-v1", artifacts=artifacts,
+)
+# In the worker service: await worker.run()
+# In a submitting process:
+handle = await client.submit(release, session="report-001", message="Inspect the workspace.")
+result = await client.wait(handle)
 ```
 
-`--kind` loads and binds an immutable image in the dedicated `zetra-validation`
-cluster. Builds without `--kind` return a local image candidate when no registry
-digest exists; external publication is explicit. The shared recipe installs the
-agent package under SDK dependency constraints and compiles trusted bytecode.
+The returned worker is an ordinary Temporal `Worker`. Configure Temporal TLS,
+authentication, namespace and payload codecs on the supplied connection. The caller
+owns connections and their lifetime. All workers on a queue must share its stable
+`runtime_id`, gateway identity, artifact backing and derivation key; different
+configurations require separate queues. Artifact methods are blocking and must be
+thread-safe, immutable and verify bytes against `Ref`. `FileStore` is a local
+implementation; shared workers need access to the same durable backing.
 
-Set `TEMPORAL_ADDRESS` and `OPENSHELL_ADDRESS` to explicit loopback forwards, and
-`OPENSHELL_TLS_DIR` to `.state/tls`. The test runner creates temporary forwards for
-qualification; interactive runs use caller-managed stable forwards for resumption.
+Persist the exact `SessionHandle` for inspection, cancellation or reconciliation.
+It pins namespace, Workflow ID, run ID and runtime identity. Reset, continuation,
+cron and Workflow retry lineages are unsupported. Temporal history and artifacts,
+with the original worker key/configuration, support worker replacement.
 
-```bash
-uv run zetra --state .state/sessions run .state/reporter-release.json \
-  --session report-001 --input 'Inspect the workspace and write a summary.'
-uv run zetra --state .state/sessions status report-001
-```
+## Local harness
 
-Reuse the same session ID, state directory, release, input, Temporal endpoint
-and OpenShell gateway identity to resume after a worker failure. Source, model or policy changes require a new
-release/session. The state directory contains private authentication material and
-data-only checkpoints; it must persist independently of the disposable sandbox.
-
-## Tests and evidence
-
-```bash
-just check
-uv run python scripts/build_qualification.py
-BRIDGE_LIVE_VLLM=1 just qualify
-BRIDGE_LATENCY=1 just latency
-```
-
-The vLLM profile uses `Qwen3.6-35B-A3B-NVFP4` at `https://llm.almckay.io/v1` through
-ADK's official LiteLlm connector. Its OpenShell policy permits only Python making
-POST requests to that chat-completions route. Inference is hosted separately from
-kind. Both HTTP retry layers are disabled.
+The disposable kind lab and CLI connection settings are described in
+[deployment](docs/deployment.md). Run a separate `zetra worker --key-file ...`
+process before submitting CLI work. `zetra run` emits its handle to stderr before
+waiting and returns handle/result JSON on stdout; status and cancel take a handle
+JSON file. The local harness is separate from production deployment.
 
 See [architecture](docs/architecture.md), [agent authoring](docs/agents.md),
-[deployment](docs/deployment.md), [qualification](docs/qualification.md) and
-[security boundaries](SECURITY.md). [Playbook conformance](docs/playbook-conformance.md)
-separates implemented behavior from production gates.
+[security boundaries](SECURITY.md), [qualification](docs/qualification.md) and
+[Playbook conformance](docs/playbook-conformance.md). Qualification describes only
+the observations actually recorded for the tested environment.

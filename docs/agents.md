@@ -34,7 +34,9 @@ prompt-injection resistance. Add explicit cases and assertions for those needs.
 `examples/document_reader` exposes one approved document ID and rejects other
 IDs. Both use the same SDK runtime with distinct factories and registries.
 
-After a successful session and confirmed deletion, `await client.read_files(session)`
+After a successful session and confirmed deletion, `await client.read_files(handle)`
 returns workspace-relative paths and bytes from the validated accepted snapshot.
-It does not reconnect to the deleted sandbox. Keep the private state directory
-until all required outputs have been retrieved.
+It reads from the caller-supplied artifact store after checking the exact Temporal
+execution result. Retain the handle, history and artifacts until outputs and any
+required recovery or cleanup are complete. Agent packages do not implement the
+worker, transport adapter or lifecycle scheduler.

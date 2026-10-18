@@ -6,7 +6,12 @@ def test_sandbox_labels_pin_release_image_and_policy():
         None, None, session="one", manifest="release", key=b"x" * 32, agent_spec={"name": "agent"}
     )
     assert hasattr(remote, "release_labels")
-    assert set(remote.release_labels) == {"zetra-release", "zetra-image", "zetra-policy"}
+    assert set(remote.release_labels) == {
+        "zetra-release",
+        "zetra-image",
+        "zetra-policy",
+        "zetra-authority",
+    }
 
 
 from types import SimpleNamespace

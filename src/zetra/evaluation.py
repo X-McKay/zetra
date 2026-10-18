@@ -77,9 +77,6 @@ async def _fixture_run_in_process(root, message):
 async def evaluate(root, *, mode, release=None, client=None):
     import uuid
 
-    from ._runtime.artifacts import FileStore, Ref
-    from ._runtime.workspace import validate_snapshot
-
     root = Path(root)
     spec = load_agent(root)
     source = source_digest(root)
@@ -101,13 +98,10 @@ async def evaluate(root, *, mode, release=None, client=None):
             result = await fixture_run(root, case["input"])
         elif mode == "sandbox":
             session = "eval-" + uuid.uuid4().hex
-            result = await client.run(release, session=session, message=case["input"])
+            handle = await client.submit(release, session=session, message=case["input"])
+            result = await client.wait(handle)
             if result.get("status") == "SUCCEEDED":
-                store = FileStore(client.state / session / "objects")
-                _, files = validate_snapshot(
-                    store.get(Ref.model_validate(result["position"]["workspace"]))
-                )
-                result["files"] = [name.as_posix() for name, _ in files]
+                result["files"] = list(await client.read_files(handle))
         else:
             raise ValueError("unknown evaluation mode")
         passed = (

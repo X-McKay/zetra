@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,6 +20,14 @@ class Ref(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     byte_length: int = Field(ge=0, le=268435456)
+
+
+class ArtifactStore(Protocol):
+    """Caller-owned blocking immutable storage; implementations verify bytes against Ref."""
+
+    def put(self, data: bytes) -> Ref: ...
+
+    def get(self, ref: Ref) -> bytes: ...
 
 
 class Position(BaseModel):

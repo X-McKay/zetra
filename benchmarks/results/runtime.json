@@ -1,9 +1,9 @@
 {
-  "captured_at": "2026-10-18T02:50:31.145915+00:00",
+  "captured_at": "2026-10-18T19:28:50.276256+00:00",
   "trust": "local-unsigned",
   "cluster": "kind-zetra-validation",
   "architecture": "linux/arm64",
-  "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+  "sdk_source_sha256": "275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8",
   "lockfile_sha256": "996dbe557a097a1914913e25f679b19f964b417bdbe0e57d4c0ce50675948347",
   "model_settings": {
     "api_base": "https://llm.almckay.io/v1",
@@ -18,21 +18,30 @@
   "images": [
     {
       "tag": "zetra-validation:local",
-      "image_digest": "sha256:03ebb26b5854b19d2acf57cc56ec70c44417adba80eb9639312459d78ace53c9",
-      "docker_reported_bytes": 180202670,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd"
+      "image_id": "sha256:b484b12625dcd1541a5f4858f71743d925e5995b6e164dda84d8d7701cbde86c",
+      "repo_digests": [
+        "zetra-validation@sha256:b484b12625dcd1541a5f4858f71743d925e5995b6e164dda84d8d7701cbde86c"
+      ],
+      "docker_reported_bytes": 180219637,
+      "sdk_source_sha256": "275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8"
     },
     {
       "tag": "zetra-validation:source",
-      "image_digest": "sha256:0388672a26b13464f26b6f79fbec2389a1c85f258ae1ed530a0fa6922a722275",
-      "docker_reported_bytes": 144427495,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd"
+      "image_id": "sha256:fda56ec752ec39e8a6c4129adc5a9ddaf76775268fc27c4a13683fd5f4b0fae1",
+      "repo_digests": [
+        "zetra-validation@sha256:fda56ec752ec39e8a6c4129adc5a9ddaf76775268fc27c4a13683fd5f4b0fae1"
+      ],
+      "docker_reported_bytes": 144432472,
+      "sdk_source_sha256": "275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8"
     },
     {
       "tag": "zetra-reporter:local",
-      "image_digest": "sha256:d33fad9b7165e6d3ec5a67c1bb4ed081df45f7767a21908fecf0de45567156ed",
-      "docker_reported_bytes": 191675271,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:6289e6c5e84b151ae13a5592ef45a7a86f932e5908ca24611ec96ca713823b97",
+      "repo_digests": [
+        "zetra-reporter@sha256:6289e6c5e84b151ae13a5592ef45a7a86f932e5908ca24611ec96ca713823b97"
+      ],
+      "docker_reported_bytes": 191708724,
+      "sdk_source_sha256": "275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8",
       "release": {
         "schema_version": 1,
         "agent": {
@@ -44,7 +53,7 @@
           "profile": "serial-v1",
           "policy": "workspace"
         },
-        "image": "docker.io/library/zetra-reporter@sha256:d33fad9b7165e6d3ec5a67c1bb4ed081df45f7767a21908fecf0de45567156ed",
+        "image": "docker.io/library/zetra-reporter@sha256:6289e6c5e84b151ae13a5592ef45a7a86f932e5908ca24611ec96ca713823b97",
         "source_sha256": "dc2b952be80904791b6ae3604455be20721bb0f790b6766cdd41a8c3b9a25f62",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
         "sdk": "0.1.0"
@@ -52,9 +61,12 @@
     },
     {
       "tag": "zetra-reader:local",
-      "image_digest": "sha256:a37ce7b80faeb4186bdd3653942d964541753e114a990b3f9a4bf7e9ee547aa4",
-      "docker_reported_bytes": 191674588,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:49d449bbb4a6f9381b061a9c715846a3b2f92cd3bb9174c60bf725783918c817",
+      "repo_digests": [
+        "zetra-reader@sha256:49d449bbb4a6f9381b061a9c715846a3b2f92cd3bb9174c60bf725783918c817"
+      ],
+      "docker_reported_bytes": 191707757,
+      "sdk_source_sha256": "275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8",
       "release": {
         "schema_version": 1,
         "agent": {
@@ -66,7 +78,7 @@
           "profile": "serial-v1",
           "policy": "workspace"
         },
-        "image": "docker.io/library/zetra-reader@sha256:a37ce7b80faeb4186bdd3653942d964541753e114a990b3f9a4bf7e9ee547aa4",
+        "image": "docker.io/library/zetra-reader@sha256:49d449bbb4a6f9381b061a9c715846a3b2f92cd3bb9174c60bf725783918c817",
         "source_sha256": "21e52fe1a825d2df142a44a1a244cb513dd81700f0954c92b8d4f8911e74c67d",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
         "sdk": "0.1.0"
@@ -74,9 +86,12 @@
     },
     {
       "tag": "zetra-live:local",
-      "image_digest": "sha256:5307496dd4cc141bc0529327f363165dc4b163aa3b19f267521b945d810372a7",
-      "docker_reported_bytes": 191675108,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:3538e2501da09606210e9d3b99e5ebb41a9634a111c784b4d2dee886c2946df0",
+      "repo_digests": [
+        "zetra-live@sha256:3538e2501da09606210e9d3b99e5ebb41a9634a111c784b4d2dee886c2946df0"
+      ],
+      "docker_reported_bytes": 191708509,
+      "sdk_source_sha256": "275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8",
       "release": {
         "schema_version": 1,
         "agent": {
@@ -88,7 +103,7 @@
           "profile": "serial-v1",
           "policy": "vllm-chat"
         },
-        "image": "docker.io/library/zetra-live@sha256:5307496dd4cc141bc0529327f363165dc4b163aa3b19f267521b945d810372a7",
+        "image": "docker.io/library/zetra-live@sha256:3538e2501da09606210e9d3b99e5ebb41a9634a111c784b4d2dee886c2946df0",
         "source_sha256": "8e309b16654bdaaeb0f96c592d567463f02b811cc283bd61943ba59023c45015",
         "policy_sha256": "fe6f7b41ff223ef430fe11d10bfdac1010c2437545b8e6756c2e1a8af1eb3f03",
         "sdk": "0.1.0"
@@ -96,9 +111,12 @@
     },
     {
       "tag": "zetra-blocked:local",
-      "image_digest": "sha256:ae03d80688aa8e3649f7e781e754119acb77bf23dc1d6464c608fe1285adbaf6",
-      "docker_reported_bytes": 191675362,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:58af929abd955b95401d9500b83dd1f66e9039067bbf9345f8094e4893ca762a",
+      "repo_digests": [
+        "zetra-blocked@sha256:58af929abd955b95401d9500b83dd1f66e9039067bbf9345f8094e4893ca762a"
+      ],
+      "docker_reported_bytes": 191708374,
+      "sdk_source_sha256": "275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8",
       "release": {
         "schema_version": 1,
         "agent": {
@@ -110,7 +128,7 @@
           "profile": "serial-v1",
           "policy": "workspace"
         },
-        "image": "docker.io/library/zetra-blocked@sha256:ae03d80688aa8e3649f7e781e754119acb77bf23dc1d6464c608fe1285adbaf6",
+        "image": "docker.io/library/zetra-blocked@sha256:58af929abd955b95401d9500b83dd1f66e9039067bbf9345f8094e4893ca762a",
         "source_sha256": "7fc32792cf0a0bd5142e9ddfe75b76cf41584bff1a9c2a9dd0c2847e38fe1e24",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
         "sdk": "0.1.0"
@@ -118,9 +136,12 @@
     },
     {
       "tag": "zetra-generated:local",
-      "image_digest": "sha256:ecc1edbee7f7d66008acab3a630b95aae6b761154a94bfbc3c9c2a1f7d455022",
-      "docker_reported_bytes": 191674966,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:a1f508380a32aaaf6418c0c8febb247bcaf6d4aee5f3a571230377ae18266bbe",
+      "repo_digests": [
+        "zetra-generated@sha256:a1f508380a32aaaf6418c0c8febb247bcaf6d4aee5f3a571230377ae18266bbe"
+      ],
+      "docker_reported_bytes": 191708199,
+      "sdk_source_sha256": "275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8",
       "release": {
         "schema_version": 1,
         "agent": {
@@ -132,7 +153,7 @@
           "profile": "serial-v1",
           "policy": "workspace"
         },
-        "image": "docker.io/library/zetra-generated@sha256:ecc1edbee7f7d66008acab3a630b95aae6b761154a94bfbc3c9c2a1f7d455022",
+        "image": "docker.io/library/zetra-generated@sha256:a1f508380a32aaaf6418c0c8febb247bcaf6d4aee5f3a571230377ae18266bbe",
         "source_sha256": "01ce29be43e636fd186260cd556ce28bf0851b239f6e9ea345e99f9b3b49e2a4",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
         "sdk": "0.1.0"

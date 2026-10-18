@@ -1,161 +1,153 @@
 # Qualification
 
-The SDK source in this branch passed local and real-cluster qualification on
-2026-10-17/18 (America/New_York/UTC). These are fresh Zetra measurements with
-synthetic inputs, recorded as unsigned local evidence. They qualify the supported
-serial profile on this environment; they are not production certification.
+This report records fresh, unsigned local evidence for the ordinary-worker SDK on
+2026-10-18. It qualifies the admitted serial profile in this environment, not a
+production service deployment.
 
 ## Identity and environment
 
 [Runtime identities](../benchmarks/results/runtime.json) bind the SDK source,
-lockfile, seven built images and five agent releases. Every image was inspected
-in a network-disabled container and matched the SDK source SHA-256
-`68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd`.
-All agent release digests matched their built image identities.
+unchanged lockfile, seven rebuilt images and five agent releases. All seven
+installed image packages matched source SHA-256
+`275a46c210aef656d410e528a3205acf787b22d45816d7c4c085b87680cccff8`.
+Docker Hub repository names were normalized before comparing exact image digests.
 
 The run used `kind-zetra-validation` on Linux arm64 in a local Docker VM with
-8 GiB memory. Temporal and OpenShell ran in kind; the worker and artifact store
-ran on the host. Other local workloads shared the VM. Images were preloaded;
-these measurements exclude registry pull time. See [deployment](deployment.md)
-for pinned versions and reproduction commands.
+8 GiB memory. Temporal and OpenShell ran in kind; ordinary workers and shared
+FileStore backing ran on the host. Other local workloads shared the VM. Images
+were preloaded; registry pull time is excluded. The SDK accepts caller-configured
+connections and storage; the kind installation is a qualification harness.
 
 Live inference used `https://llm.almckay.io/v1`, model
 `openai/Qwen3.6-35B-A3B-NVFP4`, temperature 0, 512 output tokens, no thinking,
-serial tool calls and disabled provider retries. That endpoint runs separately
-from kind. This is a functional provider/recovery check, not a model-quality study.
+serial tool calls and disabled provider retries. Inference is hosted outside kind.
+This is a functional/recovery check, not a model-quality evaluation.
 
 ## Verification
 
 | Gate | Result |
 | --- | --- |
-| `nix develop --command just check` | 139 tests passed, 29 cluster tests deselected; lint, format, lock and docs checks passed; both example tests and fixture evaluations passed |
-| Full suite through OpenShell/Temporal in kind, live vLLM enabled | **168 passed, zero failures/errors/skips**, 616.05 s |
-| Bridge and public SDK latency benchmarks | 2 passed, 229.67 s |
-| Interleaved fresh-sandbox provisioning benchmark | 1 passed, 137.37 s; 10 distinct sandboxes |
+| Locked local `just check` | 172 passed; 33 cluster tests deselected; lint, format, lock, docs, both example tests and fixture evaluations passed |
+| Full suite through Temporal/OpenShell in kind with live vLLM | 205 passed, zero failures/errors/skips, 838.70 s |
+| Bridge and SDK latency benchmarks | 2 passed, zero failures/errors/skips, 277.13 s |
+| Fresh provisioning benchmark | 1 passed, zero failures/errors/skips, 131.78 s |
 | Installed wheel outside checkout | Scaffold, generated-agent test, fixture evaluation and embedded build assets passed |
-| Contributor configuration | ShellCheck, actionlint and Nix formatting passed |
 
-[Test evidence](../benchmarks/results/tests.json) lists all 168 test cases. The
-suite exercised accepted-prefix reconstruction, changed-request rejection,
-worker restart/SIGKILL, replacement sandbox recovery, lost effect completion,
-heartbeat timeout, cancellation, termination reconciliation, receipt/workspace
-validation, actual filesystem/network policy denials, agent-specific allowlists
-and concurrent fresh workspaces. Unknown effect outcomes remain unknown; the
-bridge does not redispatch them automatically.
+[Test evidence](../benchmarks/results/tests.json) lists the full run. The new SDK
+coverage exercises independent client/worker lifetimes, repeated submission,
+concurrent session workspace separation, exact-run inspection and raw Temporal
+reset/foreign-runtime rejection before sandbox access. At cursor 2, a worker is
+stopped during a safe advance; a newly constructed Worker/router/FileStore resumes
+and completes with exactly three model and two tool execution Activities. This is
+fresh worker-object/cache recovery on one host, not a multi-host availability test.
 
-Public SDK cases covered both example packages and a newly scaffolded third
-package, repeated submission, live inference, cancellation/termination, sandbox
-evaluation and reading accepted output after confirmed sandbox deletion. Sol
-reviews covered correctness, lifecycle ownership, developer workflow, packaging
-and benchmark interpretation; their actionable findings received fixes and
-regression coverage before this final run.
+Existing cases additionally exercise subprocess loss/SIGKILL, sandbox replacement,
+lost effect completion, heartbeat expiry, cancellation, hard termination, history
+replay, policy denials and malformed receipts/workspaces. Cleanup and effect
+certainty remain separate. Unit tests cover wrong-key control-plane rejection,
+concurrent cache initialization, canceled initialization, cleanup queue/target
+validation and asynchronous store/receipt-validation heartbeat coverage.
+
+The full 64-boundary runtime test executes 32 model/tool pairs, reconstructs using
+a fresh Runtime halfway through, and rejects boundary 65 both warm and cold without
+repeating recorded effects. It is local runtime conformance, not a 64-boundary live
+model performance result. Replay microbenchmarks remain a separate measurement.
 
 ## Latency
 
-All times below are seconds. A full session includes a newly provisioned sandbox,
-execution and confirmed deletion. Component medians need not sum to the median
-wall time. Small sample counts and shared-machine load limit interpretation.
+Times are seconds. Full session wall time includes a fresh sandbox, execution and
+confirmed deletion. Component medians need not sum to median wall time. Small
+samples and shared-machine load limit interpretation.
 
-[Bridge samples](../benchmarks/results/latency.json):
-
-| Boundary | Scripted median (n=3) | Live sample (n=1) |
-| --- | ---: | ---: |
-| Full session wall | 17.366 | 22.602 |
-| Provision Activity | 9.796 | 10.588 |
-| Active history interval | 3.965 | 8.706 |
-| Cleanup Activity | 3.010 | 2.990 |
-| Native ADK body | 0.667 | 5.168 |
-| Native process | 1.415 | 5.812 |
-| Native OpenShell exec | 1.760 | 6.824 |
-
-The active interval exceeded the native OpenShell exec by 2.205 s for the scripted
-medians and 1.882 s for the live samples. These are observed path differences,
-**not isolated Temporal overhead**: the native path includes a fresh process,
-the durable active interval excludes provisioning, and inference/load vary.
-Each durable bridge sample used 13 Activities and 12 OpenShell exec exchanges.
-
-The 18 fresh-process reconstruction probes used prefixes 0, 1, 8, 32, 63 and 64
-(three samples each). Body-time medians were 0.395, 0.353, 0.297, 0.433, 0.601 and
-0.790 s respectively. These are reconstruction probes, not a full 64-boundary
-end-to-end performance result.
-
-[Public SDK samples](../benchmarks/results/sdk-latency.json):
+[Bridge samples](../benchmarks/results/latency.json)
 
 | Boundary | Fixture median (n=3) | Live sample (n=1) |
 | --- | ---: | ---: |
-| `SessionClient.run` wall | 20.435 | 32.487 |
-| Provision Activity | 10.809 | 10.451 |
-| Active history interval | 5.336 | 18.200 |
-| Cleanup Activity | 2.858 | 3.502 |
+| Full session wall | 17.194 | 25.929 |
+| Provision Activity | 10.145 | 11.727 |
+| Active history interval | 3.994 | 10.816 |
+| Cleanup Activity | 3.003 | 3.159 |
 
-All four SDK samples used 13 Activities and ended with `DELETED`. SDK wall time
-excludes release loading, client construction and subsequent history retrieval.
-Active time spans first advance scheduling through final advance completion.
-SDK-versus-bridge differences do not isolate wrapper cost: images, packaging,
-execution order and live inference differ. The SDK timing test inspects histories;
-replay/recovery correctness is established by the separate conformance suite.
+Native comparison
 
-## Provisioning comparison
+| Boundary | Fixture median (n=3) | Live sample (n=1) |
+| --- | ---: | ---: |
+| Native ADK body | 1.014 | 8.835 |
+| Native process | 6.122 | 9.324 |
+| Native OpenShell exec | 6.497 | 10.428 |
 
-[Interleaved samples](../benchmarks/results/provisioning.json) compare the same
-SDK source/dependencies with and without precompiled trusted Python bytecode.
-Both images were preloaded. Every trial created a distinct sandbox with empty
-workspace/object directories, used the same policy within its provider group,
-and confirmed deletion before continuing. There is no reuse of session state.
+[Public SDK samples](../benchmarks/results/sdk-latency.json)
 
-| Median, seconds | Uncompiled | Precompiled | Observed change |
-| --- | ---: | ---: | ---: |
-| Scripted provisioning (n=3 per image) | 10.784 | 8.834 | −18.1% |
-| vLLM-policy provisioning (n=2 per image) | 9.491 | 9.016 | −5.0% |
-| Scripted fresh import probe | 1.579 | 0.565 | −64.2% |
-| vLLM-policy fresh import probe | 1.704 | 0.614 | −64.0% |
+| Boundary | Fixture median (n=3) | Live sample (n=1) |
+| --- | ---: | ---: |
+| Full session wall | 15.929 | 19.051 |
+| Provision Activity | 10.029 | 8.867 |
+| Active history interval | 3.590 | 6.641 |
+| Cleanup Activity | 2.829 | 3.405 |
 
-The vLLM-policy provisioning trials do not perform model inference. The import
-probe runs separately after provisioning and is not an extra component to add to
-provisioning time. These small samples support retaining precompilation, but do
-not establish a stable percentage improvement under other loads. Docker-reported
-image size increased from 144,427,495 to 180,202,670 bytes (about 35.8 MB/24.8%);
-registry transfer and cold-pull costs were not measured.
+All four SDK samples completed with confirmed deletion. Each used 13 Activities. Reconstruction body medians for prefixes 0, 1, 8, 32, 63 and 64 (n=3 each) were 0.384, 0.295, 0.598, 0.461, 0.642, 0.606 s.
 
-After all tests and benchmarks, cluster inspection found zero Sandbox resources,
-zero session pods and zero session PVCs/PVs. Only the shared OpenShell and
-PostgreSQL data volumes remained; all shared service pods were Running/Ready.
+The bridge active/native differences are observed path differences, not isolated
+Temporal overhead. Native OpenShell execution includes a fresh process; durable
+active time excludes provisioning. SDK wall time includes submit and wait, but
+excludes shared Worker startup, release loading and subsequent benchmark history
+retrieval. SDK and bridge images/packages and inference timings differ, so their
+difference does not isolate SDK wrapper overhead.
 
-## Development findings and final rerun
+[Interleaved provisioning samples](../benchmarks/results/provisioning.json)
 
-Earlier failures were not counted as final passes:
+| Median, seconds | Uncompiled | Precompiled |
+| --- | ---: | ---: |
+| Fixture (n=3 per image) provision | 10.618 | 7.935 |
+| Fixture (n=3 per image) import probe | 1.474 | 0.500 |
+| vLLM policy (n=2 per image) provision | 9.831 | 9.191 |
+| vLLM policy (n=2 per image) import probe | 1.776 | 0.792 |
 
-- A wrong Temporal exception import and querying completed workflows without a
-  worker were corrected. Closed results now come directly from Temporal.
-- Reviews found gaps in ownership/gateway binding, callback admission, terminal
-  reconciliation, fixture subprocess isolation, package dependency constraints,
-  unambiguous source hashing, unsuccessful CLI exit status and preserving the
-  canonical build recipe. Fixes have regression coverage.
-- Running builds alongside tests exposed two process-test startup failures with
-  2/3-second cold-import budgets. The harness now allows 10 seconds and always
-  cancels/reaps children; production timeout semantics did not change.
-- A superseded full run stopped at 119 passed/1 failed when source-fingerprint
-  changes correctly rejected a generated agent's mismatched release. All images
-  were rebuilt and their source verified before the final 168-test run.
+Each provisioning trial uses a distinct fresh sandbox, empty writable workspace
+and confirmed deletion. Both images are preloaded. The vLLM-policy provisioning
+trials do not call the model. Import probes run separately after provisioning;
+they are not an additional component to add to provision time. There is no reused
+agent state or workspace pool.
 
-The final local gate, cluster suite and benchmarks ran sequentially, without
-concurrent image builds. The dependency emitted one upstream warning in the
-local and full suites; it did not skip tests or change results.
+## Reviews, failures and limits
 
-## Scope and remaining gates
+Sol reviews found and prompted fixes for failed normal-cleanup reconciliation,
+retained canceled initializer tasks, and cleanup-result task-queue binding. Cache
+initialization now uses a cancellable lock; accepted progress remains in Temporal.
+Review findings have focused regression tests. A final scope audit removed an
+unused transport cleanup helper that looked up the latest Workflow by ID. Cleanup
+reconciliation now has one production path, through the exact-run cleanup Workflow;
+the images, full suite and benchmarks were refreshed after that removal.
 
-The supported profile is static, serial and nonstreaming, with at most 64
-model/tool boundaries and a 30-minute session limit. Agent code, tools and runtime
-share a sandbox trust domain and must cooperate with the execution protocol.
-OpenShell enforces the outer filesystem/network boundary. Two reviewed policy
-profiles are provided; profiling never automatically grants access.
+The first local full run had four failures and 154 passes: three receipt tests
+mocked a transport seam no longer used after validation moved under the heartbeat,
+and one expected-label assertion omitted the authority fingerprint. The receipt
+tests now call the real validator with forged chains and missing/corrupt snapshots;
+the expectations retain the same integrity requirements. The corrected local gate
+and real suite were rerun. Those initial failures are not counted as final passes.
 
-This runner owns sessions from one host with private persisted state and a stable
-Temporal/OpenShell backend. Production still needs distributed ownership/fencing,
-a continuous reconciler, replicated artifact storage, platform identity and
-release authorization, remote authentication and operational qualification.
-Endpoint/certificate pinning cannot detect an administrator replacing a backend
-behind the same identity. Confirmed deletion means observed sandbox/resource
-removal, not physical storage erasure; accepted output and private recovery state
-remain outside the sandbox. No p95, throughput, cold-pull, hostile in-sandbox code
-or production availability claim follows from these results.
+Final cluster inspection found zero Sandbox resources, session pods, session PVCs
+and session PVs. The 7 shared OpenShell/Temporal pods were Ready; shared
+service volumes remain. The dedicated test cluster was retained.
+
+The supported profile remains static, serial and nonstreaming, with 64 boundaries
+and a 30-minute session limit. Agent code and tools share a sandbox trust domain
+and cooperate with the protocol; OpenShell enforces the outer policy. No external
+business writes, MCP actions, parallel agents or automatic ambiguous-effect retry
+are admitted. AgentGateway is a future integration boundary, not an implemented
+transport or additional durability engine.
+
+Callers own Temporal/OpenShell identity, TLS/authentication/codecs, durable shared
+artifact backing, secret availability and retention. Workers on a queue must use
+the same runtime/gateway/store/key configuration. Key rotation is not versioned;
+reset/retry/continue-as-new and cron lineages are rejected. Worker rollouts require
+replay-compatible code or qualified native Temporal deployment versioning. Temporal's Workflow-ID
+deduplication lasts only within retained history.
+
+Normal cleanup and explicit cleanup Workflows use Temporal retries. There is no
+continuous janitor. A retired or unacknowledged provisioning attempt can create a
+sandbox late; its history remains `NOT_CONFIRMED` even after observed instances
+are removed. Independent reconciliation/fencing is a remaining platform requirement,
+not a custom SDK scheduler. Resource removal does not prove physical erasure.
+No p95, throughput, cold-pull, hostile-code or production availability claim follows
+from these measurements.

@@ -1,17 +1,24 @@
-# Local deployment
+# Local deployment harness
 
-`scripts/kind-up.sh` targets only `kind-zetra-validation` with `.state/kubeconfig`.
-It installs pinned Cilium, Agent Sandbox, OpenShell mTLS, PostgreSQL and Temporal.
-The application worker and immutable artifact directory run on the host. The
-vLLM endpoint runs separately. No script changes the global Kubernetes context.
+The disposable lab uses `scripts/kind-up.sh`, targeting only
+`kind-zetra-validation` with `.state/kubeconfig`. It installs Cilium, Agent Sandbox,
+OpenShell mTLS, PostgreSQL and Temporal. The worker process and example artifact
+backing run on the host; inference runs separately. No script changes the global
+Kubernetes context. Production service deployment is outside this SDK.
 
-The tested starting tuple is Python 3.12.14, ADK 2.12.0, Gen AI 2.31.0,
-Temporal Python SDK 1.34.0/server 1.32.0, OpenShell 0.1.4, LiteLLM 1.95.0,
-kind node Kubernetes 1.35.0, Cilium 1.20.3 and Agent Sandbox 1.0.7.
-The uv lockfile supplies the exact Python graph. Image builds are immutable after
-creation; upstream base image tags are not a complete signed supply-chain policy.
+Use the repository's locked Python environment and pinned infrastructure files.
+Image publication and production provenance require separate qualification; a
+local immutable image is not a signed supply-chain policy.
 
-For interactive sessions, create explicit loopback forwards:
+```bash
+nix develop
+just bootstrap
+just cluster-up
+uv run zetra build examples/workspace_reporter --tag zetra-reporter:local --kind \
+  --output .state/reporter-release.json
+```
+
+Create explicit forwards in separate terminals:
 
 ```bash
 kubectl --kubeconfig .state/kubeconfig --context kind-zetra-validation \
@@ -20,27 +27,75 @@ kubectl --kubeconfig .state/kubeconfig --context kind-zetra-validation \
   -n openshell port-forward service/openshell 8080:8080
 ```
 
-In another terminal export `TEMPORAL_ADDRESS=127.0.0.1:7233`,
-`OPENSHELL_ADDRESS=127.0.0.1:8080`, and `OPENSHELL_TLS_DIR=$PWD/.state/tls`.
-Keep both forward addresses and the OpenShell CA/client identity stable. Keep
-session state private and retain it for recovery. The standard runner is a
-single-host local platform integration. Production remote TLS/identity, durable
-artifact storage, release signatures, leases and a continuous reconciler need
-separate qualification.
-
-Session tests require confirmed sandbox deletion. Shared cluster services remain
-available. To remove this disposable installation explicitly:
+Export connection settings in the worker terminal:
 
 ```bash
-kind delete cluster --name zetra-validation
+export TEMPORAL_ADDRESS=127.0.0.1:7233
+export OPENSHELL_ADDRESS=127.0.0.1:8080
+export OPENSHELL_TLS_DIR="$PWD/.state/tls"
 ```
 
-This also removes the cluster's Temporal/PostgreSQL volumes. Delete local `.state`
-only when its retained session/artifact data and certificates are no longer needed.
-
-## Reproduce complete qualification
+Create the worker secret once, with restrictive file permissions. Retain it across
+worker replacements; rerunning this creation command refuses to overwrite it.
 
 ```bash
+uv run python - <<'PY'
+import os
+import secrets
+from pathlib import Path
+
+path = Path('.state/worker.key')
+path.parent.mkdir(parents=True, exist_ok=True)
+fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, 'wb') as stream:
+    stream.write(secrets.token_bytes(32))
+PY
+uv run zetra --artifacts .state/objects --task-queue zetra --runtime-id local \
+  worker --key-file .state/worker.key
+```
+
+In another terminal with the same Temporal settings, submit work:
+
+```bash
+uv run zetra --artifacts .state/objects --task-queue zetra --runtime-id local \
+  run .state/reporter-release.json --session report-001 \
+  --input 'Inspect the workspace and write a summary.' > .state/report-result.json
+uv run python - <<'PY'
+import json
+from pathlib import Path
+
+result = json.loads(Path('.state/report-result.json').read_text())
+Path('.state/report-handle.json').write_text(json.dumps(result['handle']))
+PY
+uv run zetra --artifacts .state/objects --task-queue zetra --runtime-id local \
+  status .state/report-handle.json
+```
+
+`run` emits the handle to stderr before waiting; preserve that JSON handle if the
+submitting process is interrupted. The stdout example extracts it from a completed
+run. `cancel` also accepts the handle file. The submitting CLI is not a worker and
+owns no recovery state. Stopping it does not stop the independently running worker.
+
+For embedded use, pass a caller-configured Temporal connection to `SessionClient`
+and `create_worker`; configure TLS, authentication and codecs there. The CLI
+connection example is for this loopback lab. Callers also own gateway identity,
+secret management, artifact durability and resource lifetime. Workers polling one
+queue must share a stable `runtime_id`, gateway, artifact backing and key; assign
+different configurations separate queues. `FileStore` requires a shared durable
+filesystem when used across workers. Custom `ArtifactStore` implementations expose
+blocking thread-safe methods and verify immutable bytes against `Ref`.
+
+Retain history, artifacts and the original worker key/configuration for execution
+recovery and cleanup. Key rotation is not versioned. Hard-terminal cleanup is an
+explicit durable reconciliation operation; wait for its result. Failed normal
+cleanup can also be reconciled. Status does not perform cleanup. Provisioning
+uncertainty can leave `NOT_CONFIRMED` even after observed deletion, pending a future
+independent reconciler that can fence late creates. No janitor is implemented.
+
+## Qualification
+
+```bash
+just check
 uv run python scripts/build_qualification.py
 BRIDGE_LIVE_VLLM=1 uv run zetra qualify
 BRIDGE_LATENCY=1 uv run zetra qualify --suite latency
@@ -48,8 +103,16 @@ BRIDGE_PROVISIONING=1 BRIDGE_PROVISION_BASELINE_IMAGE=zetra-validation:source \
   uv run zetra qualify --suite provisioning
 ```
 
-The image script builds two example packages, a freshly scaffolded package, a live-model
-variant and a blocked tool fixture for deterministic cancellation tests. It also builds the same runtime
-with and without trusted bytecode compilation for interleaved provisioning samples.
-Only synthetic prompts and workspace files are used. Benchmark JSON remains in
-`.state`; the checked-in qualification report records the scoped results.
+These opt-in commands exercise the local harness. Synthetic prompts and workspace
+files are used. Benchmark JSON remains in `.state`; see
+[qualification](qualification.md) for recorded scope, failures and results. No
+command listing is evidence that it has passed in the current revision.
+
+To remove this disposable installation explicitly:
+
+```bash
+kind delete cluster --name zetra-validation
+```
+
+This also removes Temporal/PostgreSQL volumes. Remove local `.state` only when its
+retained artifacts, keys and certificates are no longer needed.

@@ -39,13 +39,94 @@ def parser():
     run.add_argument("--workspace")
     for name in ("status", "cancel"):
         cmd = sub.add_parser(name)
-        cmd.add_argument("session")
+        cmd.add_argument("handle", help="path to a SessionHandle JSON file")
     profile = sub.add_parser("profile")
     profile.add_argument("events")
     qualify = sub.add_parser("qualify")
     qualify.add_argument("--suite", choices=["tests", "latency", "provisioning"], default="tests")
-    p.add_argument("--state", default=".zetra/sessions")
+    worker = sub.add_parser("worker")
+    worker.add_argument("--key-file", required=True)
+    p.add_argument("--artifacts", default=".zetra/objects")
+    p.add_argument("--task-queue", default="zetra")
+    p.add_argument("--runtime-id", default="local")
     return p
+
+
+def open_gateway():
+    from openshell import SandboxClient, TlsConfig
+
+    tls = Path(os.environ["OPENSHELL_TLS_DIR"])
+    return SandboxClient(
+        os.environ["OPENSHELL_ADDRESS"],
+        tls=TlsConfig(ca_path=tls / "ca.crt", cert_path=tls / "tls.crt", key_path=tls / "tls.key"),
+    )
+
+
+async def execute(args, load_release):
+    if args.command == "eval" and args.mode == "fixture":
+        from .evaluation import evaluate
+
+        return await evaluate(args.path, mode="fixture")
+
+    from temporalio.client import Client
+
+    from ._runtime.artifacts import FileStore
+    from .client import SessionClient
+
+    temporal = await Client.connect(
+        os.environ.get("TEMPORAL_ADDRESS", "127.0.0.1:7233"),
+        namespace=os.environ.get("TEMPORAL_NAMESPACE", "default"),
+    )
+    artifacts = FileStore(args.artifacts)
+    if args.command == "worker":
+        from .worker import create_worker
+
+        gateway = open_gateway()
+        try:
+            worker = create_worker(
+                temporal,
+                task_queue=args.task_queue,
+                runtime_id=args.runtime_id,
+                sandbox_client=gateway,
+                artifacts=artifacts,
+                key=Path(args.key_file).read_bytes(),
+            )
+            await worker.run()
+        finally:
+            gateway.close()
+        return {"status": "STOPPED"}
+
+    client = SessionClient(
+        temporal,
+        task_queue=args.task_queue,
+        runtime_id=args.runtime_id,
+        artifacts=artifacts,
+    )
+    if args.command == "eval":
+        from .evaluation import evaluate
+
+        return await evaluate(
+            args.path,
+            mode=args.mode,
+            release=load_release(args.release) if args.release else None,
+            client=client,
+        )
+    if args.command == "run":
+        handle = await client.submit(
+            load_release(args.release),
+            session=args.session,
+            message=args.input,
+            workspace=args.workspace,
+        )
+        # Emit the handle before waiting so an interrupted CLI can resume inspection.
+        print(json.dumps({"handle": handle.model_dump()}), file=sys.stderr, flush=True)
+        return {"handle": handle.model_dump(), "result": await client.wait(handle)}
+    from .session import SessionHandle
+
+    handle = SessionHandle.model_validate_json(Path(args.handle).read_text())
+    if args.command == "status":
+        return await client.status(handle)
+    return await client.cancel(handle)
 
 
 def main(argv=None):
@@ -107,42 +188,14 @@ def main(argv=None):
             )
             return subprocess.call([sys.executable, str(script), *targets, "-x"])
         else:
-            from .client import SessionClient
-
-            client = SessionClient(
-                state=Path(args.state), address=os.environ.get("TEMPORAL_ADDRESS", "127.0.0.1:7233")
-            )
-            if args.command == "eval":
-                from .evaluation import evaluate
-
-                result = asyncio.run(
-                    evaluate(
-                        args.path,
-                        mode=args.mode,
-                        release=load_release(args.release) if args.release else None,
-                        client=client,
-                    )
-                )
-            elif args.command == "run":
-                result = asyncio.run(
-                    client.run(
-                        load_release(args.release),
-                        session=args.session,
-                        message=args.input,
-                        workspace=args.workspace,
-                    )
-                )
-            elif args.command == "status":
-                result = asyncio.run(client.status(args.session))
-            else:
-                result = asyncio.run(client.cancel(args.session))
+            result = asyncio.run(execute(args, load_release))
         encoded = json.dumps(result, indent=2) + "\n"
         if getattr(args, "output", None):
             Path(args.output).write_text(encoded)
         else:
             print(encoded, end="")
         if args.command == "run":
-            return 0 if result.get("status") == "SUCCEEDED" else 1
+            return 0 if result["result"].get("status") == "SUCCEEDED" else 1
         return (
             1
             if result.get("status") in ("FAILED", "OUTCOME_UNKNOWN", "REMEDIATION_REQUIRED")

@@ -94,6 +94,7 @@ class OpenShellSession:
         self.policy = sandbox_policy or (vllm_policy() if provider == "vllm" else policy())
         self.release_labels = (
             {
+                "zetra-authority": hashlib.sha256(key).hexdigest()[:63],
                 "zetra-release": hashlib.sha256(manifest.encode()).hexdigest()[:63],
                 "zetra-image": hashlib.sha256(image.encode()).hexdigest()[:63],
                 "zetra-policy": hashlib.sha256(
@@ -111,7 +112,7 @@ class OpenShellSession:
 
     def verify_release(self, ref):
         if any(ref.labels.get(k) != v for k, v in self.release_labels.items()):
-            raise ProtocolError("sandbox release/image/policy mismatch")
+            raise ProtocolError("sandbox authority/release/image/policy mismatch")
 
     def configure_generation(self, generation):
         if type(generation) is not int or not 1 <= generation <= 64:
@@ -295,15 +296,15 @@ class OpenShellSession:
                     ref = Ref.model_validate(node[key]["ref"])
                     refs[ref.sha256] = ref
             current = Ref.model_validate(node["previous"]) if node["previous"] else None
-        return refs.values()
+        return list(refs.values())
 
     async def call(self, action, command):
         binding = command["binding"]
         self.select_binding(binding)
         if action == "advance":
-            for ref in self.references(command["position"]):
+            for ref in await asyncio.to_thread(self.references, command["position"]):
                 if (binding["sandbox_id"], ref.sha256) not in self.uploaded:
-                    data = self.store.get(ref)
+                    data = await asyncio.to_thread(self.store.get, ref)
                     for offset in range(0, max(1, len(data)), CHUNK_BYTES):
                         response = await self.checked_exec(
                             binding,
@@ -339,7 +340,7 @@ class OpenShellSession:
                     data = await self.checked_exec(
                         binding, "get", canonical_bytes(ref.model_dump())
                     )
-                if self.store.put(data) != ref:
+                if await asyncio.to_thread(self.store.put, data) != ref:
                     raise ProtocolError("artifact download mismatch")
                 self.uploaded.add((binding["sandbox_id"], ref.sha256))
             return result["receipt"]
@@ -417,17 +418,6 @@ class OpenShellSession:
             timeout_seconds=60,
         )
         return {"cleanup": "DELETED"}
-
-    async def reconcile_closed(self, temporal):
-        """External cleanup reconciler; hard Workflow termination runs no finally block."""
-        from temporalio.client import WorkflowExecutionStatus
-
-        description = await temporal.get_workflow_handle(self.session).describe()
-        if description.status == WorkflowExecutionStatus.RUNNING:
-            return {"cleanup": "ACTIVE"}
-        # Temporal unavailability raises before deletion. Only observed terminal
-        # state permits cleanup; this routine never advances an invocation.
-        return await self.close_all()
 
     async def close_all(self):
         self.closing = True

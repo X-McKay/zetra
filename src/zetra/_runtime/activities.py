@@ -62,7 +62,13 @@ class Activities:
         return enforce_payload_size(result, activity.payload_converter())
 
     async def execute(self, command):
-        result = await self.remote("execute", command)
+        async def operation():
+            result = await self.transport.call("execute", command)
+            return await asyncio.to_thread(self.validate_receipt, command, result)
+
+        return await self.heartbeating(operation())
+
+    def validate_receipt(self, command, result):
         receipt = Receipt.model_validate(result)
         self.tape.load(receipt.position)
         previous = Position.model_validate(command["position"])
