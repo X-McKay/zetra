@@ -50,6 +50,7 @@ artifacts = FileStore("/durable/zetra/objects")
 worker = create_worker(
     temporal, task_queue="agents", runtime_id="agents-v1",
     sandbox_client=gateway, artifacts=artifacts, key=worker_key,
+    approved_releases={release.identity},
 )
 client = SessionClient(
     temporal, task_queue="agents", runtime_id="agents-v1", artifacts=artifacts,

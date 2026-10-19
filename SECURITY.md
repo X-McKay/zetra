@@ -17,6 +17,22 @@ thread-safe and hash/size verifying; SDK asynchronous paths offload their I/O to
 threads. Protect retained artifacts and history according to their contents.
 Neither hashes nor locally built image labels are production provenance signatures.
 
+Pass `approved_releases={release.identity, ...}` to `create_worker` to restrict
+allocation and agent execution to reviewed immutable releases. An empty collection
+denies all execution; omission trusts submitters authorized by the Temporal
+namespace. Workers snapshot this collection at construction. Replace workers with
+the revised collection to withdraw approval; keep workers on a queue consistent.
+Every active boundary checks it, including cached contexts, while close and
+reconciliation remain available after withdrawal. This does not interrupt an
+already running external effect, authorize individual users, verify signatures,
+or replace Temporal authorization. No approval database is maintained by the SDK.
+
+`lock_sha256` and `sdk_revision` bind recorded build inputs into release identity.
+Build-time checks verify the declared dependency against the captured lock; workers
+do not independently attest image contents or negotiate protocol compatibility.
+Only deploy worker/image combinations you have qualified. The scaffold provenance
+check verifies bundle consistency, not worker/image compatibility.
+
 Workers on one queue must share a stable runtime identity, gateway identity,
 artifact backing and persistent secret of at least 32 random bytes. Use separate
 queues for different configurations. Per-execution capabilities derive from that
@@ -54,3 +70,9 @@ metadata without importing factories. Evaluation, enforcement and recovery evide
 are separate. Do not commit keys, confidential traces, artifacts or kubeconfigs.
 Report security issues privately to the repository owner. Resource deletion does
 not prove secure physical storage erasure.
+
+The per-execution `BRIDGE_KEY` is delivered in the OpenShell sandbox specification.
+Treat OpenShell spec-read access and underlying control-plane access as privileged:
+they can expose that session's key and prompt. The key is scoped to the exact
+execution/release and does not expose the worker master secret. Moving transport
+alone would not isolate a key from code running inside the same sandbox.

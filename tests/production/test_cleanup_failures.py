@@ -67,3 +67,20 @@ async def test_identity_conflict_is_terminal_without_claiming_deletion():
     assert await ActivityEnvironment().run(activities.close_session, {}) == {
         "cleanup": "REMEDIATION_REQUIRED"
     }
+
+
+async def test_cleanup_workflow_only_completes_when_deletion_is_confirmed(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from zetra._runtime import temporal
+
+    outcome = {"cleanup": "NOT_CONFIRMED", "reason": "unsettled provisioning"}
+    execute = AsyncMock(return_value=outcome)
+    monkeypatch.setattr(temporal.workflow, "execute_activity", execute)
+    with pytest.raises(ApplicationError) as failure:
+        await temporal.CleanupWorkflow().run({})
+    assert failure.value.non_retryable
+    assert failure.value.type == "CleanupNotConfirmed"
+    assert failure.value.details == (outcome,)
+    execute.return_value = {"cleanup": "DELETED"}
+    assert await temporal.CleanupWorkflow().run({}) == {"cleanup": "DELETED"}

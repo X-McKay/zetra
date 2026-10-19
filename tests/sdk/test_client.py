@@ -87,7 +87,7 @@ async def test_reconcile_only_closed_execution_and_preserves_uncertainty(client)
     }
     call = client.temporal.start_workflow.call_args
     assert call.args == ("CleanupWorkflow", handle().model_dump())
-    assert call.kwargs["id_reuse_policy"] == WorkflowIDReusePolicy.ALLOW_DUPLICATE
+    assert call.kwargs["id_reuse_policy"] == WorkflowIDReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY
     cleanup.result.assert_awaited_once_with(follow_runs=False)
 
 
@@ -201,7 +201,7 @@ async def test_unconfirmed_cleanup_workflow_can_be_attempted_again(client):
     assert (await client.reconcile(handle()))["cleanup"] == "DELETED"
     assert client.temporal.start_workflow.await_count == 2
     for call in client.temporal.start_workflow.call_args_list:
-        assert call.kwargs["id_reuse_policy"] == WorkflowIDReusePolicy.ALLOW_DUPLICATE
+        assert call.kwargs["id_reuse_policy"] == WorkflowIDReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY
         assert call.kwargs["execution_timeout"].total_seconds() == 900
 
 
@@ -239,3 +239,14 @@ async def test_wait_observes_completed_cleanup_recovery_without_mutating(client,
     monkeypatch.setattr(client, "_cleanup_result", AsyncMock(return_value={"cleanup": "DELETED"}))
     assert await client.wait(handle()) == {"status": "SUCCEEDED", "cleanup": "DELETED"}
     client.temporal.start_workflow.assert_not_awaited()
+
+
+async def test_cleanup_reuses_success_with_server_enforced_failed_only_policy(client):
+    client.temporal.execution.describe.return_value.status.name = "TERMINATED"
+    client.temporal.start_workflow.return_value = SimpleNamespace(
+        result=AsyncMock(return_value={"cleanup": "DELETED"})
+    )
+    assert (await client.reconcile(handle()))["cleanup"] == "DELETED"
+    assert client.temporal.start_workflow.call_args.kwargs["id_reuse_policy"] == (
+        WorkflowIDReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY
+    )

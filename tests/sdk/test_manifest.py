@@ -96,7 +96,7 @@ def test_build_rejects_unbound_sdk_lock(tmp_path, change):
         import re
 
         p = root / "pyproject.toml"
-        p.write_text(re.sub(r'rev = "[a-f0-9]{40}"', 'rev = "main"', p.read_text()))
+        p.write_text(re.sub(r"@[a-f0-9]{40}", "@main", p.read_text()))
     elif change == "mismatch":
         import re
 
@@ -124,3 +124,23 @@ def test_snapshot_excludes_local_secrets_and_generated_evidence(tmp_path):
     assert not (tmp_path / "snapshot/.env").exists()
     assert not (tmp_path / "snapshot/artifacts").exists()
     assert not (tmp_path / "snapshot/tests").exists()
+
+
+def test_standard_wheel_dependency_is_the_only_declared_sdk_pin(tmp_path):
+    from zetra.build import lock_identity
+
+    revision = "a" * 40
+    url = "https://github.com/X-McKay/zetra.git"
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\ndependencies=["zetra @ git+' + url + "@" + revision + '"]\n'
+    )
+    (tmp_path / "uv.lock").write_text(
+        '[[package]]\nname="zetra"\nsource={git="'
+        + url
+        + "?rev="
+        + revision
+        + "#"
+        + revision
+        + '"}\n'
+    )
+    assert lock_identity(tmp_path)["sdk_revision"] == revision

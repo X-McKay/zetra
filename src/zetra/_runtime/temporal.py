@@ -147,7 +147,7 @@ class CleanupWorkflow:
 
     @workflow.run
     async def run(self, target: dict) -> dict:
-        return await workflow.execute_activity(
+        result = await workflow.execute_activity(
             "reconcile_session",
             target,
             start_to_close_timeout=timedelta(seconds=120),
@@ -155,3 +155,13 @@ class CleanupWorkflow:
             heartbeat_timeout=timedelta(seconds=10),
             retry_policy=CLEANUP_RETRY,
         )
+        # A completed run is permanent deletion proof. Failed runs remain
+        # explicitly retryable under Temporal's FAILED_ONLY ID reuse policy.
+        if result.get("cleanup") != "DELETED":
+            raise ApplicationError(
+                "cleanup did not confirm deletion",
+                result,
+                type="CleanupNotConfirmed",
+                non_retryable=True,
+            )
+        return result

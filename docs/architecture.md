@@ -95,7 +95,16 @@ ten-minute schedule-to-close window. Each attempt has a two-minute limit and
 heartbeat coverage. No attempt-count cap cuts that window short. Explicit gateway
 permission, authentication, invalid-request, failed-precondition and unsupported
 operation errors stop retries at the cleanup boundary; identity conflicts remain
-terminal. A successful cleanup result of `NOT_CONFIRMED` is not a retryable error.
+terminal. A cleanup Activity result of `NOT_CONFIRMED` does not trigger Activity retry.
+The explicit cleanup Workflow fails non-retryably for any result other than
+`DELETED`. Its ID reuse policy permits only failed runs to be replaced; Temporal
+therefore preserves successful deletion proof atomically across concurrent callers.
+Clients validate the exact cleanup run's input and lineage before reusing it.
+This proof is available only while Temporal retains its history.
+A provisioning or rebind Activity with a recorded attempt above one permanently
+prevents deletion proof for that session, even if the later native replay succeeds.
+An otherwise successful agent run then reports `REMEDIATION_REQUIRED`. This is
+conservative late-admission uncertainty, not evidence that a sandbox remains.
 Model/tool execution still has exactly one Activity attempt. Callers can explicitly
 reconcile a terminal execution after correcting a failure or restoring access.
 

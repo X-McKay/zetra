@@ -1,13 +1,18 @@
 name: Qualify sandbox
 on: workflow_dispatch
+permissions:
+  contents: read
 jobs:
   qualify:
     runs-on: [self-hosted, zetra-kind]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          python-version: '3.12'
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: '0.13.1'
+          python-version: '3.12.14'
       - name: Require configured infrastructure
         env:
           ENABLED: ${{ vars.ZETRA_QUALIFICATION_ENABLED }}
@@ -22,7 +27,7 @@ jobs:
       - run: uv sync --locked
       - run: uv run --locked zetra build . --tag agent-package:qualification --kind --output release.json
       - run: uv run --locked zetra eval . --mode sandbox --release release.json --output qualification.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sandbox-evaluation
           path: |

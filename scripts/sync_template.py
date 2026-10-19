@@ -8,6 +8,8 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+from zetra.build import sdk_dependency
+
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("checkout", type=Path)
 parser.add_argument("--check", action="store_true")
@@ -35,7 +37,9 @@ revision = subprocess.check_output(
     ["git", "rev-parse", "HEAD"], cwd=args.checkout, text=True
 ).strip()
 if subprocess.check_output(
-    ["git", "status", "--porcelain", "--", "template"], cwd=args.checkout, text=True
+    ["git", "status", "--porcelain", "--", "template", "scripts/render.py"],
+    cwd=args.checkout,
+    text=True,
 ).strip():
     raise SystemExit("commit canonical template changes before bundling")
 identity = hashlib.sha256(
@@ -47,16 +51,22 @@ provenance = {
     "repository": "https://github.com/X-McKay/zetra-template",
     "revision": revision,
     "tree_sha256": identity,
-    "qualified_sdk_revision": tomllib.loads(expected["pyproject.toml"].decode())["tool"]["uv"][
-        "sources"
-    ]["zetra"]["rev"],
+    "qualified_sdk_revision": sdk_dependency(tomllib.loads(expected["pyproject.toml"].decode()))[1],
+    "renderer_sha256": hashlib.sha256(
+        (args.checkout / "scripts/render.py").read_bytes()
+    ).hexdigest(),
 }
+renderer = args.checkout / "scripts/render.py"
+bundled_renderer = target.parent / "render.py"
 if args.check:
+    if bundled_renderer.read_bytes() != renderer.read_bytes():
+        raise SystemExit("bundled renderer differs from canonical implementation")
     if content(target) != expected:
         raise SystemExit("bundled template differs from canonical tree")
     if json.loads((target.parent / "provenance.json").read_text()) != provenance:
         raise SystemExit("bundled template provenance differs from canonical checkout")
 else:
+    bundled_renderer.write_bytes(renderer.read_bytes())
     shutil.rmtree(target)
     for name, value in expected.items():
         output = target / name

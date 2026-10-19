@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/X-McKay/zetra-template",
-  "revision": "45b65fd68f12620d32ee0c41acfa961bdb2f2321",
-  "tree_sha256": "4855429f0e16c123655f0fee9d9cd3fe502c1cf26e7cdecab41258c896f29ab2",
-  "qualified_sdk_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+  "revision": "966a7aa4709c0bb98c66f4b7d2d90d192e0bbf98",
+  "tree_sha256": "8532281e26f1ef4ff2bdb127d99c7cfff3cf9ff7011833f52002efb97399b3be",
+  "renderer_sha256": "2c84c50eefab67ebfc0bc9095aca7af6cf96dc9ddaad2276b1df51c0fdf2bd40"
 }

@@ -5,12 +5,13 @@ build-backend = "hatchling.build"
 name = "document_reader"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["zetra==0.1.0"]
+dependencies = ["zetra @ git+https://github.com/X-McKay/zetra.git@4830a5f5eb7cf8400b4665b2706434c52aaa17cf"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/document_reader"]
 
 [tool.zetra.agents]
 document_reader = "src/document_reader/agents/document_reader/agent.yaml"
 
-[tool.uv.sources]
-zetra = { git = "https://github.com/X-McKay/zetra.git", rev = "4830a5f5eb7cf8400b4665b2706434c52aaa17cf" }
+
+[tool.hatch.metadata]
+allow-direct-references = true

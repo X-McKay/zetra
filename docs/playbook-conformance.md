@@ -30,3 +30,12 @@ than adding an execution engine. It must enforce receiver-scoped capabilities an
 cannot resolve ambiguous remote commits alone or replace Temporal's accepted
 progress authority. Production deployment, signed provenance and continuous
 lifecycle operations require independent design and qualification.
+
+## Review hardening
+
+Worker release allowlists restrict active operations while preserving revoked-release
+cleanup. Temporal's failed-only cleanup ID reuse preserves successful deletion
+proof across concurrent callers. Standard wheel metadata preserves SDK Git pins;
+canonical rendering rejects reserved names and rolls back failed output. Ordinary
+agent images exclude build-only Git and qualification canaries. Current test and
+benchmark evidence is recorded in [qualification](qualification.md).

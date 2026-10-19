@@ -172,12 +172,20 @@ async def test_permanent_close_then_fresh_worker_reconciles_four_transient_failu
             transient = CleanupFault(native_list, grpc.StatusCode.UNAVAILABLE, 4)
             with monkeypatch.context() as patch:
                 patch.setattr(gateway, "list", transient)
-                async with sdk_worker(temporal, gateway, key, replacement_options):
+                async with sdk_worker(
+                    temporal, gateway, key, replacement_options, approved_releases=set()
+                ):
                     recovered = await asyncio.wait_for(replacement.reconcile(handle), timeout=300)
             assert recovered["status"] == "SUCCEEDED", recovered
             assert recovered["cleanup"] == "DELETED", recovered
             assert recovered["result"] == original_result["result"]
             assert recovered["position"] == original_result["position"]
+            # Successful cleanup is retained even after worker shutdown/revocation.
+            repeated = await asyncio.wait_for(
+                asyncio.gather(*(replacement.reconcile(handle) for _ in range(4))), timeout=10
+            )
+            assert all(item == recovered for item in repeated)
+            assert (await replacement.read_files(handle))["summary.md"]
             assert transient.calls == 5
             cleanup = temporal.get_workflow_handle(_cleanup_id(handle))
             description = await cleanup.describe()

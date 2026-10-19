@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import hmac
 from collections import OrderedDict
+from collections.abc import Collection
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
@@ -81,11 +82,30 @@ async def settled_provisioning(client, handle):
 
 
 class ActivityRouter:
-    def __init__(self, temporal, *, task_queue, runtime_id, sandbox_client, artifacts, key):
+    def __init__(
+        self,
+        temporal,
+        *,
+        task_queue,
+        runtime_id,
+        sandbox_client,
+        artifacts,
+        key,
+        approved_releases: Collection[str] | None = None,
+    ):
         if not isinstance(key, bytes) or len(key) < 32:
             raise ValueError("worker key must contain at least 32 bytes")
         if not runtime_id or not task_queue:
             raise ValueError("runtime_id and task_queue are required")
+        if approved_releases is not None and (
+            isinstance(approved_releases, (str, bytes))
+            or not isinstance(approved_releases, Collection)
+            or any(not isinstance(item, str) or not item.strip() for item in approved_releases)
+        ):
+            raise ValueError(
+                "approved_releases must be a collection of nonempty release identities"
+            )
+        self.approved_releases = None if approved_releases is None else frozenset(approved_releases)
         self.temporal = temporal
         self.task_queue, self.runtime_id = task_queue, runtime_id
         self.sandbox_client, self.artifacts, self.key = sandbox_client, artifacts, key
@@ -153,6 +173,13 @@ class ActivityRouter:
     async def invoke(self, name, command):
         handle = self.current_handle()
         async with self.context(handle) as context:
+            # Context construction is shared with cleanup, which must remain
+            # possible after release approval is withdrawn. Recheck cached
+            # contexts at every operation that can run agent code or allocate.
+            if name != "close_session" and self.approved_releases is not None:
+                release_id = Release.model_validate(context.start["release"]).identity
+                if release_id not in self.approved_releases:
+                    raise ApplicationError("release is not approved", non_retryable=True)
             if name == "provision_session":
                 if command != context.start:
                     raise ApplicationError("start mismatch", non_retryable=True)
@@ -230,13 +257,27 @@ class ActivityRouter:
 
 
 def create_worker(
-    temporal, *, task_queue, runtime_id, sandbox_client, artifacts, key, **worker_options
+    temporal,
+    *,
+    task_queue,
+    runtime_id,
+    sandbox_client,
+    artifacts,
+    key,
+    approved_releases: Collection[str] | None = None,
+    **worker_options,
 ):
     """Return an ordinary Worker; the caller owns connections, secrets and storage.
 
     All workers polling this queue must share runtime identity, gateway, artifact
     backing and derivation key. Give different runtime configurations different
     queues. Neither construction nor shutdown closes caller-supplied resources.
+
+    approved_releases snapshots caller-approved Release.identity values. An empty
+    collection denies execution; None trusts authorized Temporal namespace
+    submitters. Revocation prevents new execution but never blocks cleanup.
+    Release approval does not establish runtime compatibility: callers must keep
+    the worker, bridge and release compatible across upgrades.
     """
     router = ActivityRouter(
         temporal,
@@ -245,6 +286,7 @@ def create_worker(
         sandbox_client=sandbox_client,
         artifacts=artifacts,
         key=key,
+        approved_releases=approved_releases,
     )
     return Worker(
         temporal,

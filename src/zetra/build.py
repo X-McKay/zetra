@@ -26,16 +26,28 @@ def snapshot_package(root, target):
     return before
 
 
+def sdk_dependency(config):
+    """Read the portable package dependency, also retained in wheel metadata."""
+    dependencies = config.get("project", {}).get("dependencies", [])
+    refs = [
+        re.fullmatch(r"zetra\s*@\s*git\+(https://[^@\s?#]+)@([a-f0-9]{40})", item)
+        for item in dependencies
+        if isinstance(item, str)
+    ]
+    refs = [match for match in refs if match is not None]
+    if len(refs) != 1 or config.get("tool", {}).get("uv", {}).get("sources", {}).get("zetra"):
+        raise ValueError(
+            "zetra must be a single standard HTTPS Git dependency pinned to a full commit"
+        )
+    return refs[0].groups()
+
+
 def lock_identity(root):
     """Require the SDK's exact Git revision and reject local dependency overlays."""
     raw = project_file(root, "uv.lock").read_bytes()
     lock = tomllib.loads(raw.decode())
     config = tomllib.loads(project_file(root, "pyproject.toml").read_text())
-    declared = config.get("tool", {}).get("uv", {}).get("sources", {}).get("zetra", {})
-    revision = declared.get("rev", "")
-    url = declared.get("git", "")
-    if not re.fullmatch(r"[a-f0-9]{40}", revision) or not url.startswith("https://"):
-        raise ValueError("zetra must use an HTTPS Git source pinned to a full commit")
+    url, revision = sdk_dependency(config)
     packages = lock.get("package", [])
     sdk = [item for item in packages if item.get("name") == "zetra"]
     expected = url + "?rev=" + revision + "#" + revision

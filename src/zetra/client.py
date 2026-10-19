@@ -7,7 +7,7 @@ from pathlib import Path
 
 from temporalio.client import WorkflowFailureError, WorkflowQueryFailedError
 from temporalio.common import WorkflowIDReusePolicy
-from temporalio.exceptions import WorkflowAlreadyStartedError
+from temporalio.exceptions import ApplicationError, WorkflowAlreadyStartedError
 from temporalio.service import RPCError
 
 from ._runtime.artifacts import Position, Ref
@@ -168,7 +168,9 @@ class SessionClient:
                     handle.model_dump(),
                     id=cleanup_id,
                     task_queue=self.task_queue,
-                    id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+                    # Only DELETED completes this Workflow. Temporal atomically rejects
+                    # replacement of successful proof, including racing clients.
+                    id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY,
                     execution_timeout=timedelta(minutes=15),
                 )
             except WorkflowAlreadyStartedError as exc:
@@ -179,6 +181,11 @@ class SessionClient:
             cleanup_result = await cleanup.result(follow_runs=False)
             # A cleanup Workflow can report deletion, never certainty about effects.
             result.update({k: v for k, v in cleanup_result.items() if k.startswith("cleanup")})
+        except WorkflowFailureError as exc:
+            cause = exc.cause
+            if isinstance(cause, ApplicationError) and cause.type == "CleanupNotConfirmed":
+                result["cleanup"] = "NOT_CONFIRMED"
+            result["cleanup_error_type"] = type(exc).__name__
         except Exception as exc:  # noqa: BLE001 - retain visible cleanup uncertainty
             result["cleanup_error_type"] = type(exc).__name__
         if state != "COMPLETED" and result["cleanup"] != "DELETED":

@@ -46,8 +46,10 @@ async def sdk_runtime(tmp_path):
         gateway.close()
 
 
-def sdk_worker(temporal, gateway, key, options):
-    worker = create_worker(temporal, sandbox_client=gateway, key=key, **options)
+def sdk_worker(temporal, gateway, key, options, *, approved_releases=None):
+    worker = create_worker(
+        temporal, sandbox_client=gateway, key=key, approved_releases=approved_releases, **options
+    )
     assert isinstance(worker, Worker)
     return worker
 
@@ -62,7 +64,9 @@ async def test_public_sdk_release_session_and_repeated_submission(tmp_path, name
         workspace = tmp_path / "initial"
         workspace.mkdir()
         message = "Complete your task."
-        async with sdk_worker(temporal, gateway, key, options):
+        async with sdk_worker(
+            temporal, gateway, key, options, approved_releases={release.identity}
+        ):
             handle = await client.submit(
                 release, session=session, message=message, workspace=workspace
             )

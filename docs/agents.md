@@ -9,7 +9,15 @@ qualification. Initialization performs no network lookup or dependency rewriting
 Scaffolding requires a qualified bundle. Execution-only SDK revisions reject
 `init` before writing files; use the final SDK CLI or canonical template renderer
 to create repositories. This keeps image execution pins independent of template
-release packaging.
+release packaging. The guard checks the bundled metadata against its pinned
+project dependency; it is not a runtime compatibility or signature check. A newer
+CLI intentionally creates the last qualified template instead of rebinding it to
+its own Git revision. Standard wheel dependency metadata retains the exact SDK
+Git reference, so installing a built agent outside its checkout uses that pin too.
+
+Project names cannot be Python keywords, standard-library modules, or reserved
+locked dependency distribution/import names. Rendering validates names before
+writing, uses UTF-8, and removes a newly created partial destination on failure.
 
 ```text
 agent-project/

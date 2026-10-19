@@ -10,7 +10,7 @@ from zetra.scaffold import scaffold
 def test_generated_agent_runs_tests_and_eval_without_infrastructure(tmp_path):
     root = tmp_path / "created"
     scaffold(root, "generated_reader")
-    with pytest.raises(ValueError, match="empty"):
+    with pytest.raises(ValueError, match="exists"):
         scaffold(root, "generated_reader")
     tested = subprocess.run(
         [sys.executable, "-m", "zetra", "test", str(root)],
@@ -156,3 +156,22 @@ def test_unqualified_execution_revision_cannot_generate_incompatible_project(
     with pytest.raises(ValueError, match="qualified template"):
         scaffold(tmp_path / "new-project", "reader")
     assert not (tmp_path / "new-project").exists()
+
+
+@pytest.mark.parametrize("name", ["zetra", "google", "class", "pytest", "yaml", "json"])
+def test_sdk_renderer_rejects_reserved_names_without_writing(tmp_path, name):
+    with pytest.raises(ValueError, match="reserved"):
+        scaffold(tmp_path / name, name)
+    assert not (tmp_path / name).exists()
+
+
+def test_bundled_renderer_matches_recorded_canonical_implementation():
+    import hashlib
+    from importlib.resources import files
+
+    root = files("zetra").joinpath("templates")
+    expected = json.loads(root.joinpath("provenance.json").read_text())
+    assert (
+        hashlib.sha256(root.joinpath("render.py").read_bytes()).hexdigest()
+        == expected["renderer_sha256"]
+    )

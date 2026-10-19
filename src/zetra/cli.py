@@ -122,7 +122,7 @@ async def execute(args, load_release):
             workspace=args.workspace,
         )
         # Emit the handle before waiting so an interrupted CLI can resume inspection.
-        print(json.dumps({"handle": handle.model_dump()}), file=sys.stderr, flush=True)
+        print(handle.model_dump_json(), file=sys.stderr, flush=True)
         return {"handle": handle.model_dump(), "result": await client.wait(handle)}
     from .session import SessionHandle
 
