@@ -1,0 +1,10 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+[project]
+name = "agent_package"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["zetra==0.1.0"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_package"]

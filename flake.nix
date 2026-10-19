@@ -27,7 +27,6 @@
               uv
               just
               git
-              mise
               nixfmt
               shellcheck
               actionlint

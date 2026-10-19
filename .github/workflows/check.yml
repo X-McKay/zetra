@@ -1,0 +1,17 @@
+name: SDK checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: '0.13.1'
+      - run: uv sync --frozen --python 3.12.14
+      - run: uv run ruff check src tests scripts benchmarks examples
+      - run: uv run ruff format --check src tests scripts benchmarks examples
+      - run: uv run pytest -m 'not cluster' -q
+      - run: uv run python scripts/check_docs.py

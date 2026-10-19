@@ -1,15 +1,7 @@
-# Allow only the declared worker build inputs into the container context.
-**
+*
+!Dockerfile
 !pyproject.toml
 !uv.lock
 !src/
 !src/**
-!examples/
-!examples/knowledge/
-!examples/knowledge/**
-!deploy/
-!deploy/Dockerfile
-**/__pycache__/**
-**/*.pyc
-**/*.egg-info/**
-**/.zetra/**
+**/__pycache__

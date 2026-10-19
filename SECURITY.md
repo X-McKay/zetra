@@ -1,16 +1,38 @@
 # Security boundaries
 
-Zetra v0.1 is a development foundation, not a certified production security platform. The playbooks define the target controls; implementation and live test status are recorded explicitly.
+Each session runs in its own OpenShell sandbox and writable volume. Landlock,
+seccomp and agent-specific reviewed network policy constrain the workload. The
+agent, bridge and tools share the sandbox's security domain. Python admission
+checks are for cooperative registered code, not hostile arbitrary Python.
 
-- `check` scans source without importing it. Static hints are incomplete. `eval`, `run` and Temporal activities execute trusted agent/project code; run untrusted code only in a separately qualified sandbox.
-- Runtime capability, budget and STOP-file checks are cooperative. Python code can bypass them. OS/network/backend controls must independently enforce production authority.
-- Local evidence JSON and catalog candidates are unsigned and editable. Production admission must validate trusted signer identities, source/image/policy/evidence binding, freshness, approvals and revocation.
-- Rendered Deployments start at zero replicas. Complete environment binding, actual worker image entrypoint, schema validation and negative enforcement tests are required before activation. No renderer command installs or approves platform services.
-- The SQLite receiver demonstrates atomic approval consumption, effect and receipt within one local database transaction. Shared-process actor strings are not authenticated identity. A production receiver must enforce tenant/resource/action/release/policy scope, authentication, revocation and remote idempotency.
-- Recorded profiles propose behavior for review. They never grant permissions automatically or prove evaluation completeness. Raw vendor telemetry needs a version-qualified parser.
-- Actual Gateway, OpenShell, Tetragon, CNI and Temporal features vary by release, kernel and deployment. Read integration results before relying on a capability. OpenShell Kubernetes deployment is experimental upstream.
-- The local lab uses disposable fixtures and test identities; it does not qualify production TLS, vault credentials, distributed kill switches or arbitrary framework durability unless those exact tests are recorded.
+Temporal credentials and Activity completion authority remain external. The
+single-host runner keeps a private session key and immutable artifacts in its
+state directory. Preserve that directory to resume. A local advisory lock rejects
+concurrent owners using the same state directory; it is not a distributed lease.
+Stable session IDs and Workflow-start validation prevent a different local owner
+from adopting the same Workflow. No execute Activity is automatically retried.
+An effect with a lost completion is OUTCOME_UNKNOWN.
 
-Do not commit kubeconfigs, private keys, raw prompts, sensitive traces, database files or local tooling. `.tools/`, `.zetra/`, `build/` and private integration artifacts are ignored.
+Terminal success requires confirmed immutable-instance deletion. Hard Workflow
+termination bypasses Workflow cleanup. The active SDK runner (or an explicit
+resumption using the same private session record) reconciles observed terminal
+Workflows and persists cleanup separately from effect uncertainty. If that runner
+is unavailable, cleanup still requires external reconciliation.
+Continuous reconciliation, independent expiry/leases and multi-host fencing are
+production gates. The standard runner uses an explicit loopback Temporal endpoint;
+remote service identity, authentication and TLS need separate qualification.
 
-Security fixes require a regression case for the violated invariant and clear evidence of the affected trust boundary. Until a reporting channel is established, report issues privately to the repository owner; do not publish credentials or sensitive evidence in an issue.
+The qualified profile is serial, nonstreaming and bounded to 64 model/tool
+boundaries and one invocation. External business writes, arbitrary callbacks,
+parallel tools and unmanaged background processes are not admitted. A tool effect
+declaration cannot replace independent backend authorization.
+
+Local fixture tests execute trusted project code on the host. Static check reads
+metadata without importing code. Model evaluation, sandbox enforcement and
+recovery evidence are different categories. Hashes bind data but are not trusted
+signatures. Source labels in a locally trusted image builder are not production
+provenance attestations.
+
+Do not commit keys, session state, raw confidential traces or kubeconfigs. Report
+security issues privately to the repository owner. Qualification proves resource
+removal; it does not prove secure physical storage erasure.

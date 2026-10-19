@@ -1,13 +1,11 @@
 .venv/
 .tools/
+.state/
 __pycache__/
 *.py[cod]
 *.egg-info/
 build/
 dist/
-.zetra/
 .pytest_cache/
 .ruff_cache/
-.ty_cache/
 .DS_Store
-integrations/results/private/

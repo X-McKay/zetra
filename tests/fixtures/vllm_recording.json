@@ -1,0 +1,2396 @@
+{
+  "manifest": "vllm-v1-d5246299bb47d2f4415467c241801ddd2a7dc9976a11cda825038013513e4c2c",
+  "invocation": "live-64267f73bc574bd1aa688dea934a4693",
+  "message": "Inspect this repository and write report.md.",
+  "entries": [
+    {
+      "operation": {
+        "executor": "openai/Qwen3.6-35B-A3B-NVFP4",
+        "executor_version": "1",
+        "index": 0,
+        "kind": "model",
+        "manifest_digest": "vllm-v1-d5246299bb47d2f4415467c241801ddd2a7dc9976a11cda825038013513e4c2c",
+        "operation_id": "live-64267f73bc574bd1aa688dea934a4693:00000000",
+        "request": {
+          "data": {
+            "cache_config": null,
+            "cache_metadata": null,
+            "cacheable_contents_token_count": null,
+            "config": {
+              "audio_timestamp": null,
+              "audio_transcription_config": null,
+              "automatic_continuation": null,
+              "automatic_function_calling": null,
+              "cached_content": null,
+              "candidate_count": null,
+              "continuation_token": null,
+              "enable_enhanced_civic_answers": null,
+              "frequency_penalty": null,
+              "http_options": null,
+              "image_config": null,
+              "labels": {
+                "adk_agent_name": "reporter"
+              },
+              "logprobs": null,
+              "max_output_tokens": null,
+              "media_resolution": null,
+              "model_armor_config": null,
+              "model_selection_config": null,
+              "presence_penalty": null,
+              "response_json_schema": null,
+              "response_logprobs": null,
+              "response_mime_type": null,
+              "response_modalities": null,
+              "response_schema": null,
+              "routing_config": null,
+              "safety_settings": null,
+              "seed": null,
+              "service_tier": null,
+              "should_return_http_response": null,
+              "speech_config": null,
+              "stop_sequences": null,
+              "system_instruction": "Inspect the workspace with inspect_repository using path '.'. Then call write_report once with a brief report listing the filenames. Finally give a short confirmation. Use exactly these two tools in order, one tool call per turn. Do not repeat completed tools.\n\nYou are an agent. Your internal name is \"reporter\".",
+              "temperature": null,
+              "thinking_config": null,
+              "tool_config": null,
+              "tools": [
+                {
+                  "code_execution": null,
+                  "computer_use": null,
+                  "enterprise_web_search": null,
+                  "exa_ai_search": null,
+                  "file_search": null,
+                  "function_declarations": [
+                    {
+                      "behavior": null,
+                      "description": "List files in the session workspace.",
+                      "name": "inspect_repository",
+                      "parameters": null,
+                      "parameters_json_schema": {
+                        "properties": {
+                          "path": {
+                            "title": "Path",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "title": "inspect_repositoryParams",
+                        "type": "object"
+                      },
+                      "response": null,
+                      "response_json_schema": null
+                    },
+                    {
+                      "behavior": null,
+                      "description": "Write a plain text report in the session workspace.",
+                      "name": "write_report",
+                      "parameters": null,
+                      "parameters_json_schema": {
+                        "properties": {
+                          "content": {
+                            "title": "Content",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content"
+                        ],
+                        "title": "write_reportParams",
+                        "type": "object"
+                      },
+                      "response": null,
+                      "response_json_schema": null
+                    }
+                  ],
+                  "google_maps": null,
+                  "google_search": null,
+                  "google_search_retrieval": null,
+                  "mcp_servers": null,
+                  "parallel_ai_search": null,
+                  "retrieval": null,
+                  "url_context": null
+                }
+              ],
+              "top_k": null,
+              "top_p": null
+            },
+            "contents": [
+              {
+                "parts": [
+                  {
+                    "audio_transcription": null,
+                    "code_execution_result": null,
+                    "executable_code": null,
+                    "file_data": null,
+                    "function_call": null,
+                    "function_response": null,
+                    "inline_data": null,
+                    "media_processing": null,
+                    "media_resolution": null,
+                    "part_metadata": null,
+                    "speech_metadata": null,
+                    "text": "Inspect this repository and write report.md.",
+                    "thought": null,
+                    "thought_signature": null,
+                    "tool_call": null,
+                    "tool_response": null,
+                    "video_metadata": null
+                  }
+                ],
+                "role": "user"
+              }
+            ],
+            "live_connect_config": {
+              "avatar_config": null,
+              "context_window_compression": null,
+              "enable_affective_dialog": null,
+              "explicit_vad_signal": null,
+              "generation_config": null,
+              "history_config": null,
+              "http_options": null,
+              "input_audio_transcription": {
+                "adaptation_phrases": null,
+                "custom_vocabulary": null,
+                "diarization": null,
+                "language_auto": null,
+                "language_codes": null,
+                "language_hints": null,
+                "mode": null,
+                "word_timestamp": null
+              },
+              "max_output_tokens": null,
+              "media_resolution": null,
+              "output_audio_transcription": {
+                "adaptation_phrases": null,
+                "custom_vocabulary": null,
+                "diarization": null,
+                "language_auto": null,
+                "language_codes": null,
+                "language_hints": null,
+                "mode": null,
+                "word_timestamp": null
+              },
+              "proactivity": null,
+              "realtime_input_config": null,
+              "response_modalities": null,
+              "safety_settings": null,
+              "seed": null,
+              "session_resumption": null,
+              "speech_config": null,
+              "system_instruction": null,
+              "temperature": null,
+              "thinking_config": null,
+              "tools": null,
+              "top_k": null,
+              "top_p": null,
+              "translation_config": null
+            },
+            "model": "openai/Qwen3.6-35B-A3B-NVFP4",
+            "previous_interaction_id": null,
+            "service_tier": null
+          },
+          "set_fields": {
+            "children": {
+              "cache_config": null,
+              "cache_metadata": null,
+              "cacheable_contents_token_count": null,
+              "config": {
+                "children": {
+                  "audio_timestamp": null,
+                  "audio_transcription_config": null,
+                  "automatic_continuation": null,
+                  "automatic_function_calling": null,
+                  "cached_content": null,
+                  "candidate_count": null,
+                  "continuation_token": null,
+                  "enable_enhanced_civic_answers": null,
+                  "frequency_penalty": null,
+                  "http_options": null,
+                  "image_config": null,
+                  "labels": {
+                    "adk_agent_name": null
+                  },
+                  "logprobs": null,
+                  "max_output_tokens": null,
+                  "media_resolution": null,
+                  "model_armor_config": null,
+                  "model_selection_config": null,
+                  "presence_penalty": null,
+                  "response_json_schema": null,
+                  "response_logprobs": null,
+                  "response_mime_type": null,
+                  "response_modalities": null,
+                  "response_schema": null,
+                  "routing_config": null,
+                  "safety_settings": null,
+                  "seed": null,
+                  "service_tier": null,
+                  "should_return_http_response": null,
+                  "speech_config": null,
+                  "stop_sequences": null,
+                  "system_instruction": null,
+                  "temperature": null,
+                  "thinking_config": null,
+                  "tool_config": null,
+                  "tools": [
+                    {
+                      "children": {
+                        "code_execution": null,
+                        "computer_use": null,
+                        "enterprise_web_search": null,
+                        "exa_ai_search": null,
+                        "file_search": null,
+                        "function_declarations": [
+                          {
+                            "children": {
+                              "behavior": null,
+                              "description": null,
+                              "name": null,
+                              "parameters": null,
+                              "parameters_json_schema": {
+                                "properties": {
+                                  "path": {
+                                    "title": null,
+                                    "type": null
+                                  }
+                                },
+                                "required": [
+                                  null
+                                ],
+                                "title": null,
+                                "type": null
+                              },
+                              "response": null,
+                              "response_json_schema": null
+                            },
+                            "fields": [
+                              "description",
+                              "name",
+                              "parameters_json_schema",
+                              "response_json_schema"
+                            ]
+                          },
+                          {
+                            "children": {
+                              "behavior": null,
+                              "description": null,
+                              "name": null,
+                              "parameters": null,
+                              "parameters_json_schema": {
+                                "properties": {
+                                  "content": {
+                                    "title": null,
+                                    "type": null
+                                  }
+                                },
+                                "required": [
+                                  null
+                                ],
+                                "title": null,
+                                "type": null
+                              },
+                              "response": null,
+                              "response_json_schema": null
+                            },
+                            "fields": [
+                              "description",
+                              "name",
+                              "parameters_json_schema",
+                              "response_json_schema"
+                            ]
+                          }
+                        ],
+                        "google_maps": null,
+                        "google_search": null,
+                        "google_search_retrieval": null,
+                        "mcp_servers": null,
+                        "parallel_ai_search": null,
+                        "retrieval": null,
+                        "url_context": null
+                      },
+                      "fields": [
+                        "function_declarations"
+                      ]
+                    }
+                  ],
+                  "top_k": null,
+                  "top_p": null
+                },
+                "fields": [
+                  "labels",
+                  "system_instruction",
+                  "tools"
+                ]
+              },
+              "contents": [
+                {
+                  "children": {
+                    "parts": [
+                      {
+                        "children": {
+                          "audio_transcription": null,
+                          "code_execution_result": null,
+                          "executable_code": null,
+                          "file_data": null,
+                          "function_call": null,
+                          "function_response": null,
+                          "inline_data": null,
+                          "media_processing": null,
+                          "media_resolution": null,
+                          "part_metadata": null,
+                          "speech_metadata": null,
+                          "text": null,
+                          "thought": null,
+                          "thought_signature": null,
+                          "tool_call": null,
+                          "tool_response": null,
+                          "video_metadata": null
+                        },
+                        "fields": [
+                          "text"
+                        ]
+                      }
+                    ],
+                    "role": null
+                  },
+                  "fields": [
+                    "parts",
+                    "role"
+                  ]
+                }
+              ],
+              "live_connect_config": {
+                "children": {
+                  "avatar_config": null,
+                  "context_window_compression": null,
+                  "enable_affective_dialog": null,
+                  "explicit_vad_signal": null,
+                  "generation_config": null,
+                  "history_config": null,
+                  "http_options": null,
+                  "input_audio_transcription": {
+                    "children": {
+                      "adaptation_phrases": null,
+                      "custom_vocabulary": null,
+                      "diarization": null,
+                      "language_auto": null,
+                      "language_codes": null,
+                      "language_hints": null,
+                      "mode": null,
+                      "word_timestamp": null
+                    },
+                    "fields": []
+                  },
+                  "max_output_tokens": null,
+                  "media_resolution": null,
+                  "output_audio_transcription": {
+                    "children": {
+                      "adaptation_phrases": null,
+                      "custom_vocabulary": null,
+                      "diarization": null,
+                      "language_auto": null,
+                      "language_codes": null,
+                      "language_hints": null,
+                      "mode": null,
+                      "word_timestamp": null
+                    },
+                    "fields": []
+                  },
+                  "proactivity": null,
+                  "realtime_input_config": null,
+                  "response_modalities": null,
+                  "safety_settings": null,
+                  "seed": null,
+                  "session_resumption": null,
+                  "speech_config": null,
+                  "system_instruction": null,
+                  "temperature": null,
+                  "thinking_config": null,
+                  "tools": null,
+                  "top_k": null,
+                  "top_p": null,
+                  "translation_config": null
+                },
+                "fields": [
+                  "avatar_config",
+                  "context_window_compression",
+                  "enable_affective_dialog",
+                  "explicit_vad_signal",
+                  "history_config",
+                  "input_audio_transcription",
+                  "output_audio_transcription",
+                  "proactivity",
+                  "realtime_input_config",
+                  "response_modalities",
+                  "session_resumption",
+                  "speech_config",
+                  "translation_config"
+                ]
+              },
+              "model": null,
+              "previous_interaction_id": null,
+              "service_tier": null
+            },
+            "fields": [
+              "config",
+              "contents",
+              "model"
+            ]
+          }
+        },
+        "request_digest": "70e378a984a2f8e77e4107204153f252b4e31df3cc3358e2bf68b26d85a1b405"
+      },
+      "outcome": {
+        "data": {
+          "avg_logprobs": null,
+          "cache_metadata": null,
+          "citation_metadata": null,
+          "content": {
+            "parts": [
+              {
+                "audio_transcription": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": {
+                  "args": {
+                    "path": "."
+                  },
+                  "id": "chatcmpl-tool-830ffc32c0e0f8c2",
+                  "name": "inspect_repository",
+                  "partial_args": null,
+                  "will_continue": null
+                },
+                "function_response": null,
+                "inline_data": null,
+                "media_processing": null,
+                "media_resolution": null,
+                "part_metadata": null,
+                "speech_metadata": null,
+                "text": null,
+                "thought": null,
+                "thought_signature": null,
+                "tool_call": null,
+                "tool_response": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "custom_metadata": null,
+          "environment_id": null,
+          "error_code": null,
+          "error_message": null,
+          "finish_reason": "STOP",
+          "go_away": null,
+          "grounding_metadata": null,
+          "input_transcription": null,
+          "interaction_id": null,
+          "interaction_status": null,
+          "interrupted": null,
+          "live_session_id": null,
+          "live_session_resumption_update": null,
+          "logprobs_result": null,
+          "model_version": "Qwen3.6-35B-A3B-NVFP4",
+          "output_transcription": null,
+          "partial": false,
+          "turn_complete": null,
+          "turn_complete_reason": null,
+          "usage_metadata": {
+            "cache_tokens_details": null,
+            "cached_content_token_count": 0,
+            "candidates_token_count": 26,
+            "candidates_tokens_details": null,
+            "prompt_token_count": 430,
+            "prompt_tokens_details": null,
+            "thoughts_token_count": null,
+            "tool_use_prompt_token_count": null,
+            "tool_use_prompt_tokens_details": null,
+            "total_token_count": 456,
+            "traffic_type": null
+          },
+          "voice_activity": null
+        },
+        "set_fields": {
+          "children": {
+            "avg_logprobs": null,
+            "cache_metadata": null,
+            "citation_metadata": null,
+            "content": {
+              "children": {
+                "parts": [
+                  {
+                    "children": {
+                      "audio_transcription": null,
+                      "code_execution_result": null,
+                      "executable_code": null,
+                      "file_data": null,
+                      "function_call": {
+                        "children": {
+                          "args": {
+                            "path": null
+                          },
+                          "id": null,
+                          "name": null,
+                          "partial_args": null,
+                          "will_continue": null
+                        },
+                        "fields": [
+                          "args",
+                          "id",
+                          "name"
+                        ]
+                      },
+                      "function_response": null,
+                      "inline_data": null,
+                      "media_processing": null,
+                      "media_resolution": null,
+                      "part_metadata": null,
+                      "speech_metadata": null,
+                      "text": null,
+                      "thought": null,
+                      "thought_signature": null,
+                      "tool_call": null,
+                      "tool_response": null,
+                      "video_metadata": null
+                    },
+                    "fields": [
+                      "function_call"
+                    ]
+                  }
+                ],
+                "role": null
+              },
+              "fields": [
+                "parts",
+                "role"
+              ]
+            },
+            "custom_metadata": null,
+            "environment_id": null,
+            "error_code": null,
+            "error_message": null,
+            "finish_reason": null,
+            "go_away": null,
+            "grounding_metadata": null,
+            "input_transcription": null,
+            "interaction_id": null,
+            "interaction_status": null,
+            "interrupted": null,
+            "live_session_id": null,
+            "live_session_resumption_update": null,
+            "logprobs_result": null,
+            "model_version": null,
+            "output_transcription": null,
+            "partial": null,
+            "turn_complete": null,
+            "turn_complete_reason": null,
+            "usage_metadata": {
+              "children": {
+                "cache_tokens_details": null,
+                "cached_content_token_count": null,
+                "candidates_token_count": null,
+                "candidates_tokens_details": null,
+                "prompt_token_count": null,
+                "prompt_tokens_details": null,
+                "thoughts_token_count": null,
+                "tool_use_prompt_token_count": null,
+                "tool_use_prompt_tokens_details": null,
+                "total_token_count": null,
+                "traffic_type": null
+              },
+              "fields": [
+                "cached_content_token_count",
+                "candidates_token_count",
+                "prompt_token_count",
+                "thoughts_token_count",
+                "total_token_count"
+              ]
+            },
+            "voice_activity": null
+          },
+          "fields": [
+            "content",
+            "error_code",
+            "error_message",
+            "finish_reason",
+            "model_version",
+            "partial",
+            "usage_metadata"
+          ]
+        }
+      }
+    },
+    {
+      "operation": {
+        "executor": "inspect_repository",
+        "executor_version": "1",
+        "index": 1,
+        "kind": "tool",
+        "manifest_digest": "vllm-v1-d5246299bb47d2f4415467c241801ddd2a7dc9976a11cda825038013513e4c2c",
+        "operation_id": "live-64267f73bc574bd1aa688dea934a4693:00000001",
+        "request": {
+          "arguments": {
+            "path": "."
+          },
+          "state": {}
+        },
+        "request_digest": "99e7c535f9cf30e3aceeb5c5010a9f51ef8d18b9a7dae86cd45ef28be8935000"
+      },
+      "outcome": {
+        "files": [
+          "README.md"
+        ]
+      }
+    },
+    {
+      "operation": {
+        "executor": "openai/Qwen3.6-35B-A3B-NVFP4",
+        "executor_version": "1",
+        "index": 2,
+        "kind": "model",
+        "manifest_digest": "vllm-v1-d5246299bb47d2f4415467c241801ddd2a7dc9976a11cda825038013513e4c2c",
+        "operation_id": "live-64267f73bc574bd1aa688dea934a4693:00000002",
+        "request": {
+          "data": {
+            "cache_config": null,
+            "cache_metadata": null,
+            "cacheable_contents_token_count": null,
+            "config": {
+              "audio_timestamp": null,
+              "audio_transcription_config": null,
+              "automatic_continuation": null,
+              "automatic_function_calling": null,
+              "cached_content": null,
+              "candidate_count": null,
+              "continuation_token": null,
+              "enable_enhanced_civic_answers": null,
+              "frequency_penalty": null,
+              "http_options": null,
+              "image_config": null,
+              "labels": {
+                "adk_agent_name": "reporter"
+              },
+              "logprobs": null,
+              "max_output_tokens": null,
+              "media_resolution": null,
+              "model_armor_config": null,
+              "model_selection_config": null,
+              "presence_penalty": null,
+              "response_json_schema": null,
+              "response_logprobs": null,
+              "response_mime_type": null,
+              "response_modalities": null,
+              "response_schema": null,
+              "routing_config": null,
+              "safety_settings": null,
+              "seed": null,
+              "service_tier": null,
+              "should_return_http_response": null,
+              "speech_config": null,
+              "stop_sequences": null,
+              "system_instruction": "Inspect the workspace with inspect_repository using path '.'. Then call write_report once with a brief report listing the filenames. Finally give a short confirmation. Use exactly these two tools in order, one tool call per turn. Do not repeat completed tools.\n\nYou are an agent. Your internal name is \"reporter\".",
+              "temperature": null,
+              "thinking_config": null,
+              "tool_config": null,
+              "tools": [
+                {
+                  "code_execution": null,
+                  "computer_use": null,
+                  "enterprise_web_search": null,
+                  "exa_ai_search": null,
+                  "file_search": null,
+                  "function_declarations": [
+                    {
+                      "behavior": null,
+                      "description": "List files in the session workspace.",
+                      "name": "inspect_repository",
+                      "parameters": null,
+                      "parameters_json_schema": {
+                        "properties": {
+                          "path": {
+                            "title": "Path",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "title": "inspect_repositoryParams",
+                        "type": "object"
+                      },
+                      "response": null,
+                      "response_json_schema": null
+                    },
+                    {
+                      "behavior": null,
+                      "description": "Write a plain text report in the session workspace.",
+                      "name": "write_report",
+                      "parameters": null,
+                      "parameters_json_schema": {
+                        "properties": {
+                          "content": {
+                            "title": "Content",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content"
+                        ],
+                        "title": "write_reportParams",
+                        "type": "object"
+                      },
+                      "response": null,
+                      "response_json_schema": null
+                    }
+                  ],
+                  "google_maps": null,
+                  "google_search": null,
+                  "google_search_retrieval": null,
+                  "mcp_servers": null,
+                  "parallel_ai_search": null,
+                  "retrieval": null,
+                  "url_context": null
+                }
+              ],
+              "top_k": null,
+              "top_p": null
+            },
+            "contents": [
+              {
+                "parts": [
+                  {
+                    "audio_transcription": null,
+                    "code_execution_result": null,
+                    "executable_code": null,
+                    "file_data": null,
+                    "function_call": null,
+                    "function_response": null,
+                    "inline_data": null,
+                    "media_processing": null,
+                    "media_resolution": null,
+                    "part_metadata": null,
+                    "speech_metadata": null,
+                    "text": "Inspect this repository and write report.md.",
+                    "thought": null,
+                    "thought_signature": null,
+                    "tool_call": null,
+                    "tool_response": null,
+                    "video_metadata": null
+                  }
+                ],
+                "role": "user"
+              },
+              {
+                "parts": [
+                  {
+                    "audio_transcription": null,
+                    "code_execution_result": null,
+                    "executable_code": null,
+                    "file_data": null,
+                    "function_call": {
+                      "args": {
+                        "path": "."
+                      },
+                      "id": "chatcmpl-tool-830ffc32c0e0f8c2",
+                      "name": "inspect_repository",
+                      "partial_args": null,
+                      "will_continue": null
+                    },
+                    "function_response": null,
+                    "inline_data": null,
+                    "media_processing": null,
+                    "media_resolution": null,
+                    "part_metadata": null,
+                    "speech_metadata": null,
+                    "text": null,
+                    "thought": null,
+                    "thought_signature": null,
+                    "tool_call": null,
+                    "tool_response": null,
+                    "video_metadata": null
+                  }
+                ],
+                "role": "model"
+              },
+              {
+                "parts": [
+                  {
+                    "audio_transcription": null,
+                    "code_execution_result": null,
+                    "executable_code": null,
+                    "file_data": null,
+                    "function_call": null,
+                    "function_response": {
+                      "id": "chatcmpl-tool-830ffc32c0e0f8c2",
+                      "name": "inspect_repository",
+                      "parts": null,
+                      "response": {
+                        "files": [
+                          "README.md"
+                        ]
+                      },
+                      "scheduling": null,
+                      "will_continue": null
+                    },
+                    "inline_data": null,
+                    "media_processing": null,
+                    "media_resolution": null,
+                    "part_metadata": null,
+                    "speech_metadata": null,
+                    "text": null,
+                    "thought": null,
+                    "thought_signature": null,
+                    "tool_call": null,
+                    "tool_response": null,
+                    "video_metadata": null
+                  }
+                ],
+                "role": "user"
+              }
+            ],
+            "live_connect_config": {
+              "avatar_config": null,
+              "context_window_compression": null,
+              "enable_affective_dialog": null,
+              "explicit_vad_signal": null,
+              "generation_config": null,
+              "history_config": null,
+              "http_options": null,
+              "input_audio_transcription": {
+                "adaptation_phrases": null,
+                "custom_vocabulary": null,
+                "diarization": null,
+                "language_auto": null,
+                "language_codes": null,
+                "language_hints": null,
+                "mode": null,
+                "word_timestamp": null
+              },
+              "max_output_tokens": null,
+              "media_resolution": null,
+              "output_audio_transcription": {
+                "adaptation_phrases": null,
+                "custom_vocabulary": null,
+                "diarization": null,
+                "language_auto": null,
+                "language_codes": null,
+                "language_hints": null,
+                "mode": null,
+                "word_timestamp": null
+              },
+              "proactivity": null,
+              "realtime_input_config": null,
+              "response_modalities": null,
+              "safety_settings": null,
+              "seed": null,
+              "session_resumption": null,
+              "speech_config": null,
+              "system_instruction": null,
+              "temperature": null,
+              "thinking_config": null,
+              "tools": null,
+              "top_k": null,
+              "top_p": null,
+              "translation_config": null
+            },
+            "model": "openai/Qwen3.6-35B-A3B-NVFP4",
+            "previous_interaction_id": null,
+            "service_tier": null
+          },
+          "set_fields": {
+            "children": {
+              "cache_config": null,
+              "cache_metadata": null,
+              "cacheable_contents_token_count": null,
+              "config": {
+                "children": {
+                  "audio_timestamp": null,
+                  "audio_transcription_config": null,
+                  "automatic_continuation": null,
+                  "automatic_function_calling": null,
+                  "cached_content": null,
+                  "candidate_count": null,
+                  "continuation_token": null,
+                  "enable_enhanced_civic_answers": null,
+                  "frequency_penalty": null,
+                  "http_options": null,
+                  "image_config": null,
+                  "labels": {
+                    "adk_agent_name": null
+                  },
+                  "logprobs": null,
+                  "max_output_tokens": null,
+                  "media_resolution": null,
+                  "model_armor_config": null,
+                  "model_selection_config": null,
+                  "presence_penalty": null,
+                  "response_json_schema": null,
+                  "response_logprobs": null,
+                  "response_mime_type": null,
+                  "response_modalities": null,
+                  "response_schema": null,
+                  "routing_config": null,
+                  "safety_settings": null,
+                  "seed": null,
+                  "service_tier": null,
+                  "should_return_http_response": null,
+                  "speech_config": null,
+                  "stop_sequences": null,
+                  "system_instruction": null,
+                  "temperature": null,
+                  "thinking_config": null,
+                  "tool_config": null,
+                  "tools": [
+                    {
+                      "children": {
+                        "code_execution": null,
+                        "computer_use": null,
+                        "enterprise_web_search": null,
+                        "exa_ai_search": null,
+                        "file_search": null,
+                        "function_declarations": [
+                          {
+                            "children": {
+                              "behavior": null,
+                              "description": null,
+                              "name": null,
+                              "parameters": null,
+                              "parameters_json_schema": {
+                                "properties": {
+                                  "path": {
+                                    "title": null,
+                                    "type": null
+                                  }
+                                },
+                                "required": [
+                                  null
+                                ],
+                                "title": null,
+                                "type": null
+                              },
+                              "response": null,
+                              "response_json_schema": null
+                            },
+                            "fields": [
+                              "description",
+                              "name",
+                              "parameters_json_schema",
+                              "response_json_schema"
+                            ]
+                          },
+                          {
+                            "children": {
+                              "behavior": null,
+                              "description": null,
+                              "name": null,
+                              "parameters": null,
+                              "parameters_json_schema": {
+                                "properties": {
+                                  "content": {
+                                    "title": null,
+                                    "type": null
+                                  }
+                                },
+                                "required": [
+                                  null
+                                ],
+                                "title": null,
+                                "type": null
+                              },
+                              "response": null,
+                              "response_json_schema": null
+                            },
+                            "fields": [
+                              "description",
+                              "name",
+                              "parameters_json_schema",
+                              "response_json_schema"
+                            ]
+                          }
+                        ],
+                        "google_maps": null,
+                        "google_search": null,
+                        "google_search_retrieval": null,
+                        "mcp_servers": null,
+                        "parallel_ai_search": null,
+                        "retrieval": null,
+                        "url_context": null
+                      },
+                      "fields": [
+                        "function_declarations"
+                      ]
+                    }
+                  ],
+                  "top_k": null,
+                  "top_p": null
+                },
+                "fields": [
+                  "labels",
+                  "system_instruction",
+                  "tools"
+                ]
+              },
+              "contents": [
+                {
+                  "children": {
+                    "parts": [
+                      {
+                        "children": {
+                          "audio_transcription": null,
+                          "code_execution_result": null,
+                          "executable_code": null,
+                          "file_data": null,
+                          "function_call": null,
+                          "function_response": null,
+                          "inline_data": null,
+                          "media_processing": null,
+                          "media_resolution": null,
+                          "part_metadata": null,
+                          "speech_metadata": null,
+                          "text": null,
+                          "thought": null,
+                          "thought_signature": null,
+                          "tool_call": null,
+                          "tool_response": null,
+                          "video_metadata": null
+                        },
+                        "fields": [
+                          "text"
+                        ]
+                      }
+                    ],
+                    "role": null
+                  },
+                  "fields": [
+                    "parts",
+                    "role"
+                  ]
+                },
+                {
+                  "children": {
+                    "parts": [
+                      {
+                        "children": {
+                          "audio_transcription": null,
+                          "code_execution_result": null,
+                          "executable_code": null,
+                          "file_data": null,
+                          "function_call": {
+                            "children": {
+                              "args": {
+                                "path": null
+                              },
+                              "id": null,
+                              "name": null,
+                              "partial_args": null,
+                              "will_continue": null
+                            },
+                            "fields": [
+                              "args",
+                              "id",
+                              "name"
+                            ]
+                          },
+                          "function_response": null,
+                          "inline_data": null,
+                          "media_processing": null,
+                          "media_resolution": null,
+                          "part_metadata": null,
+                          "speech_metadata": null,
+                          "text": null,
+                          "thought": null,
+                          "thought_signature": null,
+                          "tool_call": null,
+                          "tool_response": null,
+                          "video_metadata": null
+                        },
+                        "fields": [
+                          "function_call"
+                        ]
+                      }
+                    ],
+                    "role": null
+                  },
+                  "fields": [
+                    "parts",
+                    "role"
+                  ]
+                },
+                {
+                  "children": {
+                    "parts": [
+                      {
+                        "children": {
+                          "audio_transcription": null,
+                          "code_execution_result": null,
+                          "executable_code": null,
+                          "file_data": null,
+                          "function_call": null,
+                          "function_response": {
+                            "children": {
+                              "id": null,
+                              "name": null,
+                              "parts": null,
+                              "response": {
+                                "files": [
+                                  null
+                                ]
+                              },
+                              "scheduling": null,
+                              "will_continue": null
+                            },
+                            "fields": [
+                              "id",
+                              "name",
+                              "parts",
+                              "response"
+                            ]
+                          },
+                          "inline_data": null,
+                          "media_processing": null,
+                          "media_resolution": null,
+                          "part_metadata": null,
+                          "speech_metadata": null,
+                          "text": null,
+                          "thought": null,
+                          "thought_signature": null,
+                          "tool_call": null,
+                          "tool_response": null,
+                          "video_metadata": null
+                        },
+                        "fields": [
+                          "function_response"
+                        ]
+                      }
+                    ],
+                    "role": null
+                  },
+                  "fields": [
+                    "parts",
+                    "role"
+                  ]
+                }
+              ],
+              "live_connect_config": {
+                "children": {
+                  "avatar_config": null,
+                  "context_window_compression": null,
+                  "enable_affective_dialog": null,
+                  "explicit_vad_signal": null,
+                  "generation_config": null,
+                  "history_config": null,
+                  "http_options": null,
+                  "input_audio_transcription": {
+                    "children": {
+                      "adaptation_phrases": null,
+                      "custom_vocabulary": null,
+                      "diarization": null,
+                      "language_auto": null,
+                      "language_codes": null,
+                      "language_hints": null,
+                      "mode": null,
+                      "word_timestamp": null
+                    },
+                    "fields": []
+                  },
+                  "max_output_tokens": null,
+                  "media_resolution": null,
+                  "output_audio_transcription": {
+                    "children": {
+                      "adaptation_phrases": null,
+                      "custom_vocabulary": null,
+                      "diarization": null,
+                      "language_auto": null,
+                      "language_codes": null,
+                      "language_hints": null,
+                      "mode": null,
+                      "word_timestamp": null
+                    },
+                    "fields": []
+                  },
+                  "proactivity": null,
+                  "realtime_input_config": null,
+                  "response_modalities": null,
+                  "safety_settings": null,
+                  "seed": null,
+                  "session_resumption": null,
+                  "speech_config": null,
+                  "system_instruction": null,
+                  "temperature": null,
+                  "thinking_config": null,
+                  "tools": null,
+                  "top_k": null,
+                  "top_p": null,
+                  "translation_config": null
+                },
+                "fields": [
+                  "avatar_config",
+                  "context_window_compression",
+                  "enable_affective_dialog",
+                  "explicit_vad_signal",
+                  "history_config",
+                  "input_audio_transcription",
+                  "output_audio_transcription",
+                  "proactivity",
+                  "realtime_input_config",
+                  "response_modalities",
+                  "session_resumption",
+                  "speech_config",
+                  "translation_config"
+                ]
+              },
+              "model": null,
+              "previous_interaction_id": null,
+              "service_tier": null
+            },
+            "fields": [
+              "config",
+              "contents",
+              "model"
+            ]
+          }
+        },
+        "request_digest": "05a184dc27dd481bec5c8b8308d6da9d396ec2c3dc2b8af294a90545fb43e6ae"
+      },
+      "outcome": {
+        "data": {
+          "avg_logprobs": null,
+          "cache_metadata": null,
+          "citation_metadata": null,
+          "content": {
+            "parts": [
+              {
+                "audio_transcription": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": {
+                  "args": {
+                    "content": "Files in repository:\n- README.md"
+                  },
+                  "id": "chatcmpl-tool-bc8fbf366e7889e6",
+                  "name": "write_report",
+                  "partial_args": null,
+                  "will_continue": null
+                },
+                "function_response": null,
+                "inline_data": null,
+                "media_processing": null,
+                "media_resolution": null,
+                "part_metadata": null,
+                "speech_metadata": null,
+                "text": null,
+                "thought": null,
+                "thought_signature": null,
+                "tool_call": null,
+                "tool_response": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "custom_metadata": null,
+          "environment_id": null,
+          "error_code": null,
+          "error_message": null,
+          "finish_reason": "STOP",
+          "go_away": null,
+          "grounding_metadata": null,
+          "input_transcription": null,
+          "interaction_id": null,
+          "interaction_status": null,
+          "interrupted": null,
+          "live_session_id": null,
+          "live_session_resumption_update": null,
+          "logprobs_result": null,
+          "model_version": "Qwen3.6-35B-A3B-NVFP4",
+          "output_transcription": null,
+          "partial": false,
+          "turn_complete": null,
+          "turn_complete_reason": null,
+          "usage_metadata": {
+            "cache_tokens_details": null,
+            "cached_content_token_count": 0,
+            "candidates_token_count": 34,
+            "candidates_tokens_details": null,
+            "prompt_token_count": 480,
+            "prompt_tokens_details": null,
+            "thoughts_token_count": null,
+            "tool_use_prompt_token_count": null,
+            "tool_use_prompt_tokens_details": null,
+            "total_token_count": 514,
+            "traffic_type": null
+          },
+          "voice_activity": null
+        },
+        "set_fields": {
+          "children": {
+            "avg_logprobs": null,
+            "cache_metadata": null,
+            "citation_metadata": null,
+            "content": {
+              "children": {
+                "parts": [
+                  {
+                    "children": {
+                      "audio_transcription": null,
+                      "code_execution_result": null,
+                      "executable_code": null,
+                      "file_data": null,
+                      "function_call": {
+                        "children": {
+                          "args": {
+                            "content": null
+                          },
+                          "id": null,
+                          "name": null,
+                          "partial_args": null,
+                          "will_continue": null
+                        },
+                        "fields": [
+                          "args",
+                          "id",
+                          "name"
+                        ]
+                      },
+                      "function_response": null,
+                      "inline_data": null,
+                      "media_processing": null,
+                      "media_resolution": null,
+                      "part_metadata": null,
+                      "speech_metadata": null,
+                      "text": null,
+                      "thought": null,
+                      "thought_signature": null,
+                      "tool_call": null,
+                      "tool_response": null,
+                      "video_metadata": null
+                    },
+                    "fields": [
+                      "function_call"
+                    ]
+                  }
+                ],
+                "role": null
+              },
+              "fields": [
+                "parts",
+                "role"
+              ]
+            },
+            "custom_metadata": null,
+            "environment_id": null,
+            "error_code": null,
+            "error_message": null,
+            "finish_reason": null,
+            "go_away": null,
+            "grounding_metadata": null,
+            "input_transcription": null,
+            "interaction_id": null,
+            "interaction_status": null,
+            "interrupted": null,
+            "live_session_id": null,
+            "live_session_resumption_update": null,
+            "logprobs_result": null,
+            "model_version": null,
+            "output_transcription": null,
+            "partial": null,
+            "turn_complete": null,
+            "turn_complete_reason": null,
+            "usage_metadata": {
+              "children": {
+                "cache_tokens_details": null,
+                "cached_content_token_count": null,
+                "candidates_token_count": null,
+                "candidates_tokens_details": null,
+                "prompt_token_count": null,
+                "prompt_tokens_details": null,
+                "thoughts_token_count": null,
+                "tool_use_prompt_token_count": null,
+                "tool_use_prompt_tokens_details": null,
+                "total_token_count": null,
+                "traffic_type": null
+              },
+              "fields": [
+                "cached_content_token_count",
+                "candidates_token_count",
+                "prompt_token_count",
+                "thoughts_token_count",
+                "total_token_count"
+              ]
+            },
+            "voice_activity": null
+          },
+          "fields": [
+            "content",
+            "error_code",
+            "error_message",
+            "finish_reason",
+            "model_version",
+            "partial",
+            "usage_metadata"
+          ]
+        }
+      }
+    },
+    {
+      "operation": {
+        "executor": "write_report",
+        "executor_version": "1",
+        "index": 3,
+        "kind": "tool",
+        "manifest_digest": "vllm-v1-d5246299bb47d2f4415467c241801ddd2a7dc9976a11cda825038013513e4c2c",
+        "operation_id": "live-64267f73bc574bd1aa688dea934a4693:00000003",
+        "request": {
+          "arguments": {
+            "content": "Files in repository:\n- README.md"
+          },
+          "state": {}
+        },
+        "request_digest": "37d2a75089e57dd9232637d375076b3c0135bd7e3e7df65727dc27aa48922d1c"
+      },
+      "outcome": {
+        "path": "report.md"
+      }
+    },
+    {
+      "operation": {
+        "executor": "openai/Qwen3.6-35B-A3B-NVFP4",
+        "executor_version": "1",
+        "index": 4,
+        "kind": "model",
+        "manifest_digest": "vllm-v1-d5246299bb47d2f4415467c241801ddd2a7dc9976a11cda825038013513e4c2c",
+        "operation_id": "live-64267f73bc574bd1aa688dea934a4693:00000004",
+        "request": {
+          "data": {
+            "cache_config": null,
+            "cache_metadata": null,
+            "cacheable_contents_token_count": null,
+            "config": {
+              "audio_timestamp": null,
+              "audio_transcription_config": null,
+              "automatic_continuation": null,
+              "automatic_function_calling": null,
+              "cached_content": null,
+              "candidate_count": null,
+              "continuation_token": null,
+              "enable_enhanced_civic_answers": null,
+              "frequency_penalty": null,
+              "http_options": null,
+              "image_config": null,
+              "labels": {
+                "adk_agent_name": "reporter"
+              },
+              "logprobs": null,
+              "max_output_tokens": null,
+              "media_resolution": null,
+              "model_armor_config": null,
+              "model_selection_config": null,
+              "presence_penalty": null,
+              "response_json_schema": null,
+              "response_logprobs": null,
+              "response_mime_type": null,
+              "response_modalities": null,
+              "response_schema": null,
+              "routing_config": null,
+              "safety_settings": null,
+              "seed": null,
+              "service_tier": null,
+              "should_return_http_response": null,
+              "speech_config": null,
+              "stop_sequences": null,
+              "system_instruction": "Inspect the workspace with inspect_repository using path '.'. Then call write_report once with a brief report listing the filenames. Finally give a short confirmation. Use exactly these two tools in order, one tool call per turn. Do not repeat completed tools.\n\nYou are an agent. Your internal name is \"reporter\".",
+              "temperature": null,
+              "thinking_config": null,
+              "tool_config": null,
+              "tools": [
+                {
+                  "code_execution": null,
+                  "computer_use": null,
+                  "enterprise_web_search": null,
+                  "exa_ai_search": null,
+                  "file_search": null,
+                  "function_declarations": [
+                    {
+                      "behavior": null,
+                      "description": "List files in the session workspace.",
+                      "name": "inspect_repository",
+                      "parameters": null,
+                      "parameters_json_schema": {
+                        "properties": {
+                          "path": {
+                            "title": "Path",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "title": "inspect_repositoryParams",
+                        "type": "object"
+                      },
+                      "response": null,
+                      "response_json_schema": null
+                    },
+                    {
+                      "behavior": null,
+                      "description": "Write a plain text report in the session workspace.",
+                      "name": "write_report",
+                      "parameters": null,
+                      "parameters_json_schema": {
+                        "properties": {
+                          "content": {
+                            "title": "Content",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content"
+                        ],
+                        "title": "write_reportParams",
+                        "type": "object"
+                      },
+                      "response": null,
+                      "response_json_schema": null
+                    }
+                  ],
+                  "google_maps": null,
+                  "google_search": null,
+                  "google_search_retrieval": null,
+                  "mcp_servers": null,
+                  "parallel_ai_search": null,
+                  "retrieval": null,
+                  "url_context": null
+                }
+              ],
+              "top_k": null,
+              "top_p": null
+            },
+            "contents": [
+              {
+                "parts": [
+                  {
+                    "audio_transcription": null,
+                    "code_execution_result": null,
+                    "executable_code": null,
+                    "file_data": null,
+                    "function_call": null,
+                    "function_response": null,
+                    "inline_data": null,
+                    "media_processing": null,
+                    "media_resolution": null,
+                    "part_metadata": null,
+                    "speech_metadata": null,
+                    "text": "Inspect this repository and write report.md.",
+                    "thought": null,
+                    "thought_signature": null,
+                    "tool_call": null,
+                    "tool_response": null,
+                    "video_metadata": null
+                  }
+                ],
+                "role": "user"
+              },
+              {
+                "parts": [
+                  {
+                    "audio_transcription": null,
+                    "code_execution_result": null,
+                    "executable_code": null,
+                    "file_data": null,
+                    "function_call": {
+                      "args": {
+                        "path": "."
+                      },
+                      "id": "chatcmpl-tool-830ffc32c0e0f8c2",
+                      "name": "inspect_repository",
+                      "partial_args": null,
+                      "will_continue": null
+                    },
+                    "function_response": null,
+                    "inline_data": null,
+                    "media_processing": null,
+                    "media_resolution": null,
+                    "part_metadata": null,
+                    "speech_metadata": null,
+                    "text": null,
+                    "thought": null,
+                    "thought_signature": null,
+                    "tool_call": null,
+                    "tool_response": null,
+                    "video_metadata": null
+                  }
+                ],
+                "role": "model"
+              },
+              {
+                "parts": [
+                  {
+                    "audio_transcription": null,
+                    "code_execution_result": null,
+                    "executable_code": null,
+                    "file_data": null,
+                    "function_call": null,
+                    "function_response": {
+                      "id": "chatcmpl-tool-830ffc32c0e0f8c2",
+                      "name": "inspect_repository",
+                      "parts": null,
+                      "response": {
+                        "files": [
+                          "README.md"
+                        ]
+                      },
+                      "scheduling": null,
+                      "will_continue": null
+                    },
+                    "inline_data": null,
+                    "media_processing": null,
+                    "media_resolution": null,
+                    "part_metadata": null,
+                    "speech_metadata": null,
+                    "text": null,
+                    "thought": null,
+                    "thought_signature": null,
+                    "tool_call": null,
+                    "tool_response": null,
+                    "video_metadata": null
+                  }
+                ],
+                "role": "user"
+              },
+              {
+                "parts": [
+                  {
+                    "audio_transcription": null,
+                    "code_execution_result": null,
+                    "executable_code": null,
+                    "file_data": null,
+                    "function_call": {
+                      "args": {
+                        "content": "Files in repository:\n- README.md"
+                      },
+                      "id": "chatcmpl-tool-bc8fbf366e7889e6",
+                      "name": "write_report",
+                      "partial_args": null,
+                      "will_continue": null
+                    },
+                    "function_response": null,
+                    "inline_data": null,
+                    "media_processing": null,
+                    "media_resolution": null,
+                    "part_metadata": null,
+                    "speech_metadata": null,
+                    "text": null,
+                    "thought": null,
+                    "thought_signature": null,
+                    "tool_call": null,
+                    "tool_response": null,
+                    "video_metadata": null
+                  }
+                ],
+                "role": "model"
+              },
+              {
+                "parts": [
+                  {
+                    "audio_transcription": null,
+                    "code_execution_result": null,
+                    "executable_code": null,
+                    "file_data": null,
+                    "function_call": null,
+                    "function_response": {
+                      "id": "chatcmpl-tool-bc8fbf366e7889e6",
+                      "name": "write_report",
+                      "parts": null,
+                      "response": {
+                        "path": "report.md"
+                      },
+                      "scheduling": null,
+                      "will_continue": null
+                    },
+                    "inline_data": null,
+                    "media_processing": null,
+                    "media_resolution": null,
+                    "part_metadata": null,
+                    "speech_metadata": null,
+                    "text": null,
+                    "thought": null,
+                    "thought_signature": null,
+                    "tool_call": null,
+                    "tool_response": null,
+                    "video_metadata": null
+                  }
+                ],
+                "role": "user"
+              }
+            ],
+            "live_connect_config": {
+              "avatar_config": null,
+              "context_window_compression": null,
+              "enable_affective_dialog": null,
+              "explicit_vad_signal": null,
+              "generation_config": null,
+              "history_config": null,
+              "http_options": null,
+              "input_audio_transcription": {
+                "adaptation_phrases": null,
+                "custom_vocabulary": null,
+                "diarization": null,
+                "language_auto": null,
+                "language_codes": null,
+                "language_hints": null,
+                "mode": null,
+                "word_timestamp": null
+              },
+              "max_output_tokens": null,
+              "media_resolution": null,
+              "output_audio_transcription": {
+                "adaptation_phrases": null,
+                "custom_vocabulary": null,
+                "diarization": null,
+                "language_auto": null,
+                "language_codes": null,
+                "language_hints": null,
+                "mode": null,
+                "word_timestamp": null
+              },
+              "proactivity": null,
+              "realtime_input_config": null,
+              "response_modalities": null,
+              "safety_settings": null,
+              "seed": null,
+              "session_resumption": null,
+              "speech_config": null,
+              "system_instruction": null,
+              "temperature": null,
+              "thinking_config": null,
+              "tools": null,
+              "top_k": null,
+              "top_p": null,
+              "translation_config": null
+            },
+            "model": "openai/Qwen3.6-35B-A3B-NVFP4",
+            "previous_interaction_id": null,
+            "service_tier": null
+          },
+          "set_fields": {
+            "children": {
+              "cache_config": null,
+              "cache_metadata": null,
+              "cacheable_contents_token_count": null,
+              "config": {
+                "children": {
+                  "audio_timestamp": null,
+                  "audio_transcription_config": null,
+                  "automatic_continuation": null,
+                  "automatic_function_calling": null,
+                  "cached_content": null,
+                  "candidate_count": null,
+                  "continuation_token": null,
+                  "enable_enhanced_civic_answers": null,
+                  "frequency_penalty": null,
+                  "http_options": null,
+                  "image_config": null,
+                  "labels": {
+                    "adk_agent_name": null
+                  },
+                  "logprobs": null,
+                  "max_output_tokens": null,
+                  "media_resolution": null,
+                  "model_armor_config": null,
+                  "model_selection_config": null,
+                  "presence_penalty": null,
+                  "response_json_schema": null,
+                  "response_logprobs": null,
+                  "response_mime_type": null,
+                  "response_modalities": null,
+                  "response_schema": null,
+                  "routing_config": null,
+                  "safety_settings": null,
+                  "seed": null,
+                  "service_tier": null,
+                  "should_return_http_response": null,
+                  "speech_config": null,
+                  "stop_sequences": null,
+                  "system_instruction": null,
+                  "temperature": null,
+                  "thinking_config": null,
+                  "tool_config": null,
+                  "tools": [
+                    {
+                      "children": {
+                        "code_execution": null,
+                        "computer_use": null,
+                        "enterprise_web_search": null,
+                        "exa_ai_search": null,
+                        "file_search": null,
+                        "function_declarations": [
+                          {
+                            "children": {
+                              "behavior": null,
+                              "description": null,
+                              "name": null,
+                              "parameters": null,
+                              "parameters_json_schema": {
+                                "properties": {
+                                  "path": {
+                                    "title": null,
+                                    "type": null
+                                  }
+                                },
+                                "required": [
+                                  null
+                                ],
+                                "title": null,
+                                "type": null
+                              },
+                              "response": null,
+                              "response_json_schema": null
+                            },
+                            "fields": [
+                              "description",
+                              "name",
+                              "parameters_json_schema",
+                              "response_json_schema"
+                            ]
+                          },
+                          {
+                            "children": {
+                              "behavior": null,
+                              "description": null,
+                              "name": null,
+                              "parameters": null,
+                              "parameters_json_schema": {
+                                "properties": {
+                                  "content": {
+                                    "title": null,
+                                    "type": null
+                                  }
+                                },
+                                "required": [
+                                  null
+                                ],
+                                "title": null,
+                                "type": null
+                              },
+                              "response": null,
+                              "response_json_schema": null
+                            },
+                            "fields": [
+                              "description",
+                              "name",
+                              "parameters_json_schema",
+                              "response_json_schema"
+                            ]
+                          }
+                        ],
+                        "google_maps": null,
+                        "google_search": null,
+                        "google_search_retrieval": null,
+                        "mcp_servers": null,
+                        "parallel_ai_search": null,
+                        "retrieval": null,
+                        "url_context": null
+                      },
+                      "fields": [
+                        "function_declarations"
+                      ]
+                    }
+                  ],
+                  "top_k": null,
+                  "top_p": null
+                },
+                "fields": [
+                  "labels",
+                  "system_instruction",
+                  "tools"
+                ]
+              },
+              "contents": [
+                {
+                  "children": {
+                    "parts": [
+                      {
+                        "children": {
+                          "audio_transcription": null,
+                          "code_execution_result": null,
+                          "executable_code": null,
+                          "file_data": null,
+                          "function_call": null,
+                          "function_response": null,
+                          "inline_data": null,
+                          "media_processing": null,
+                          "media_resolution": null,
+                          "part_metadata": null,
+                          "speech_metadata": null,
+                          "text": null,
+                          "thought": null,
+                          "thought_signature": null,
+                          "tool_call": null,
+                          "tool_response": null,
+                          "video_metadata": null
+                        },
+                        "fields": [
+                          "text"
+                        ]
+                      }
+                    ],
+                    "role": null
+                  },
+                  "fields": [
+                    "parts",
+                    "role"
+                  ]
+                },
+                {
+                  "children": {
+                    "parts": [
+                      {
+                        "children": {
+                          "audio_transcription": null,
+                          "code_execution_result": null,
+                          "executable_code": null,
+                          "file_data": null,
+                          "function_call": {
+                            "children": {
+                              "args": {
+                                "path": null
+                              },
+                              "id": null,
+                              "name": null,
+                              "partial_args": null,
+                              "will_continue": null
+                            },
+                            "fields": [
+                              "args",
+                              "id",
+                              "name"
+                            ]
+                          },
+                          "function_response": null,
+                          "inline_data": null,
+                          "media_processing": null,
+                          "media_resolution": null,
+                          "part_metadata": null,
+                          "speech_metadata": null,
+                          "text": null,
+                          "thought": null,
+                          "thought_signature": null,
+                          "tool_call": null,
+                          "tool_response": null,
+                          "video_metadata": null
+                        },
+                        "fields": [
+                          "function_call"
+                        ]
+                      }
+                    ],
+                    "role": null
+                  },
+                  "fields": [
+                    "parts",
+                    "role"
+                  ]
+                },
+                {
+                  "children": {
+                    "parts": [
+                      {
+                        "children": {
+                          "audio_transcription": null,
+                          "code_execution_result": null,
+                          "executable_code": null,
+                          "file_data": null,
+                          "function_call": null,
+                          "function_response": {
+                            "children": {
+                              "id": null,
+                              "name": null,
+                              "parts": null,
+                              "response": {
+                                "files": [
+                                  null
+                                ]
+                              },
+                              "scheduling": null,
+                              "will_continue": null
+                            },
+                            "fields": [
+                              "id",
+                              "name",
+                              "parts",
+                              "response"
+                            ]
+                          },
+                          "inline_data": null,
+                          "media_processing": null,
+                          "media_resolution": null,
+                          "part_metadata": null,
+                          "speech_metadata": null,
+                          "text": null,
+                          "thought": null,
+                          "thought_signature": null,
+                          "tool_call": null,
+                          "tool_response": null,
+                          "video_metadata": null
+                        },
+                        "fields": [
+                          "function_response"
+                        ]
+                      }
+                    ],
+                    "role": null
+                  },
+                  "fields": [
+                    "parts",
+                    "role"
+                  ]
+                },
+                {
+                  "children": {
+                    "parts": [
+                      {
+                        "children": {
+                          "audio_transcription": null,
+                          "code_execution_result": null,
+                          "executable_code": null,
+                          "file_data": null,
+                          "function_call": {
+                            "children": {
+                              "args": {
+                                "content": null
+                              },
+                              "id": null,
+                              "name": null,
+                              "partial_args": null,
+                              "will_continue": null
+                            },
+                            "fields": [
+                              "args",
+                              "id",
+                              "name"
+                            ]
+                          },
+                          "function_response": null,
+                          "inline_data": null,
+                          "media_processing": null,
+                          "media_resolution": null,
+                          "part_metadata": null,
+                          "speech_metadata": null,
+                          "text": null,
+                          "thought": null,
+                          "thought_signature": null,
+                          "tool_call": null,
+                          "tool_response": null,
+                          "video_metadata": null
+                        },
+                        "fields": [
+                          "function_call"
+                        ]
+                      }
+                    ],
+                    "role": null
+                  },
+                  "fields": [
+                    "parts",
+                    "role"
+                  ]
+                },
+                {
+                  "children": {
+                    "parts": [
+                      {
+                        "children": {
+                          "audio_transcription": null,
+                          "code_execution_result": null,
+                          "executable_code": null,
+                          "file_data": null,
+                          "function_call": null,
+                          "function_response": {
+                            "children": {
+                              "id": null,
+                              "name": null,
+                              "parts": null,
+                              "response": {
+                                "path": null
+                              },
+                              "scheduling": null,
+                              "will_continue": null
+                            },
+                            "fields": [
+                              "id",
+                              "name",
+                              "parts",
+                              "response"
+                            ]
+                          },
+                          "inline_data": null,
+                          "media_processing": null,
+                          "media_resolution": null,
+                          "part_metadata": null,
+                          "speech_metadata": null,
+                          "text": null,
+                          "thought": null,
+                          "thought_signature": null,
+                          "tool_call": null,
+                          "tool_response": null,
+                          "video_metadata": null
+                        },
+                        "fields": [
+                          "function_response"
+                        ]
+                      }
+                    ],
+                    "role": null
+                  },
+                  "fields": [
+                    "parts",
+                    "role"
+                  ]
+                }
+              ],
+              "live_connect_config": {
+                "children": {
+                  "avatar_config": null,
+                  "context_window_compression": null,
+                  "enable_affective_dialog": null,
+                  "explicit_vad_signal": null,
+                  "generation_config": null,
+                  "history_config": null,
+                  "http_options": null,
+                  "input_audio_transcription": {
+                    "children": {
+                      "adaptation_phrases": null,
+                      "custom_vocabulary": null,
+                      "diarization": null,
+                      "language_auto": null,
+                      "language_codes": null,
+                      "language_hints": null,
+                      "mode": null,
+                      "word_timestamp": null
+                    },
+                    "fields": []
+                  },
+                  "max_output_tokens": null,
+                  "media_resolution": null,
+                  "output_audio_transcription": {
+                    "children": {
+                      "adaptation_phrases": null,
+                      "custom_vocabulary": null,
+                      "diarization": null,
+                      "language_auto": null,
+                      "language_codes": null,
+                      "language_hints": null,
+                      "mode": null,
+                      "word_timestamp": null
+                    },
+                    "fields": []
+                  },
+                  "proactivity": null,
+                  "realtime_input_config": null,
+                  "response_modalities": null,
+                  "safety_settings": null,
+                  "seed": null,
+                  "session_resumption": null,
+                  "speech_config": null,
+                  "system_instruction": null,
+                  "temperature": null,
+                  "thinking_config": null,
+                  "tools": null,
+                  "top_k": null,
+                  "top_p": null,
+                  "translation_config": null
+                },
+                "fields": [
+                  "avatar_config",
+                  "context_window_compression",
+                  "enable_affective_dialog",
+                  "explicit_vad_signal",
+                  "history_config",
+                  "input_audio_transcription",
+                  "output_audio_transcription",
+                  "proactivity",
+                  "realtime_input_config",
+                  "response_modalities",
+                  "session_resumption",
+                  "speech_config",
+                  "translation_config"
+                ]
+              },
+              "model": null,
+              "previous_interaction_id": null,
+              "service_tier": null
+            },
+            "fields": [
+              "config",
+              "contents",
+              "model"
+            ]
+          }
+        },
+        "request_digest": "b496daef6161834ed73fb762727a4073aee30585099bc19ef12a14f0877de0a1"
+      },
+      "outcome": {
+        "data": {
+          "avg_logprobs": null,
+          "cache_metadata": null,
+          "citation_metadata": null,
+          "content": {
+            "parts": [
+              {
+                "audio_transcription": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "media_processing": null,
+                "media_resolution": null,
+                "part_metadata": null,
+                "speech_metadata": null,
+                "text": "The report has been written to report.md, listing the single file found in the repository: README.md.",
+                "thought": null,
+                "thought_signature": null,
+                "tool_call": null,
+                "tool_response": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "custom_metadata": null,
+          "environment_id": null,
+          "error_code": null,
+          "error_message": null,
+          "finish_reason": "STOP",
+          "go_away": null,
+          "grounding_metadata": null,
+          "input_transcription": null,
+          "interaction_id": null,
+          "interaction_status": null,
+          "interrupted": null,
+          "live_session_id": null,
+          "live_session_resumption_update": null,
+          "logprobs_result": null,
+          "model_version": "Qwen3.6-35B-A3B-NVFP4",
+          "output_transcription": null,
+          "partial": false,
+          "turn_complete": null,
+          "turn_complete_reason": null,
+          "usage_metadata": {
+            "cache_tokens_details": null,
+            "cached_content_token_count": 0,
+            "candidates_token_count": 22,
+            "candidates_tokens_details": null,
+            "prompt_token_count": 538,
+            "prompt_tokens_details": null,
+            "thoughts_token_count": null,
+            "tool_use_prompt_token_count": null,
+            "tool_use_prompt_tokens_details": null,
+            "total_token_count": 560,
+            "traffic_type": null
+          },
+          "voice_activity": null
+        },
+        "set_fields": {
+          "children": {
+            "avg_logprobs": null,
+            "cache_metadata": null,
+            "citation_metadata": null,
+            "content": {
+              "children": {
+                "parts": [
+                  {
+                    "children": {
+                      "audio_transcription": null,
+                      "code_execution_result": null,
+                      "executable_code": null,
+                      "file_data": null,
+                      "function_call": null,
+                      "function_response": null,
+                      "inline_data": null,
+                      "media_processing": null,
+                      "media_resolution": null,
+                      "part_metadata": null,
+                      "speech_metadata": null,
+                      "text": null,
+                      "thought": null,
+                      "thought_signature": null,
+                      "tool_call": null,
+                      "tool_response": null,
+                      "video_metadata": null
+                    },
+                    "fields": [
+                      "text"
+                    ]
+                  }
+                ],
+                "role": null
+              },
+              "fields": [
+                "parts",
+                "role"
+              ]
+            },
+            "custom_metadata": null,
+            "environment_id": null,
+            "error_code": null,
+            "error_message": null,
+            "finish_reason": null,
+            "go_away": null,
+            "grounding_metadata": null,
+            "input_transcription": null,
+            "interaction_id": null,
+            "interaction_status": null,
+            "interrupted": null,
+            "live_session_id": null,
+            "live_session_resumption_update": null,
+            "logprobs_result": null,
+            "model_version": null,
+            "output_transcription": null,
+            "partial": null,
+            "turn_complete": null,
+            "turn_complete_reason": null,
+            "usage_metadata": {
+              "children": {
+                "cache_tokens_details": null,
+                "cached_content_token_count": null,
+                "candidates_token_count": null,
+                "candidates_tokens_details": null,
+                "prompt_token_count": null,
+                "prompt_tokens_details": null,
+                "thoughts_token_count": null,
+                "tool_use_prompt_token_count": null,
+                "tool_use_prompt_tokens_details": null,
+                "total_token_count": null,
+                "traffic_type": null
+              },
+              "fields": [
+                "cached_content_token_count",
+                "candidates_token_count",
+                "prompt_token_count",
+                "thoughts_token_count",
+                "total_token_count"
+              ]
+            },
+            "voice_activity": null
+          },
+          "fields": [
+            "content",
+            "error_code",
+            "error_message",
+            "finish_reason",
+            "model_version",
+            "partial",
+            "usage_metadata"
+          ]
+        }
+      }
+    }
+  ],
+  "final_text": "The report has been written to report.md, listing the single file found in the repository: README.md."
+}

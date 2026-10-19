@@ -1,0 +1,63 @@
+# Disposable local-cluster credential; never reuse outside this prototype.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: temporal
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: temporal-db
+  namespace: temporal
+type: Opaque
+stringData:
+  password: local-kind-prototype-only
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: temporal
+spec:
+  selector: {app: postgres}
+  ports: [{port: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: temporal
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: postgres:17.6
+          env:
+            - {name: POSTGRES_USER, value: temporal}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: temporal-db, key: password}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{containerPort: 5432}]
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, temporal]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 2Gi}
