@@ -81,7 +81,8 @@ def activity_timings(history):
                     "seconds": timestamp - started[key],
                 }
             )
-    assert len(rows) == len(scheduled) == 13
+    assert len(rows) == len(scheduled) == 14
+    assert [row["name"] for row in rows[:2]] == ["create_session", "wait_session_ready"]
     return rows
 
 
@@ -184,7 +185,7 @@ async def test_latency_profile(tmp_path):
         # Provision/deletion excluded from native exec measurements, as from active_seconds.
         remote, _, start = session("vllm", "baseline")
         try:
-            await remote.provision(start)
+            await remote.wait_ready(await remote.provision(start))
 
             async def probe(*args):
                 begin = time.perf_counter()

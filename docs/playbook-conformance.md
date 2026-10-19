@@ -85,3 +85,14 @@ their recorded pins; the updated external worker runs this SDK revision. Kubani
 uses a newly built agent image pinned to the CLI implementation and supplies
 separate real MCP qualification. Test-only model/tool completion gates kill the
 exact worker child before Activity acceptance; no production fault hook is added.
+
+
+### Two-phase provisioning
+
+Creation acknowledgement and sandbox readiness are separate Temporal boundaries.
+The Workflow records the immutable binding before waiting for readiness; cold
+workers use that binding without creating another sandbox. Existing histories use
+native Temporal patching and thin combined Activity wrappers. Readiness failures
+and cancellations retain normal confirmed-deletion checks. Unacknowledged or retired
+create attempts still yield `NOT_CONFIRMED`; the original Kubani supervisor-start
+failure remains a failed observation. No gateway-side admission closure is claimed.

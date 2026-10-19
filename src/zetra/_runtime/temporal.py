@@ -49,14 +49,22 @@ class SessionWorkflow:
             arg,
             start_to_close_timeout=timedelta(
                 seconds=240
-                if name in ("provision_session", "rebind_session")
+                if name
+                in ("provision_session", "rebind_session", "create_session", "wait_session_ready")
                 else 120
                 if name == "close_session"
                 else 45
             ),
             schedule_to_close_timeout=timedelta(
                 seconds=600
-                if name in ("provision_session", "rebind_session", "close_session")
+                if name
+                in (
+                    "provision_session",
+                    "rebind_session",
+                    "create_session",
+                    "wait_session_ready",
+                    "close_session",
+                )
                 else 100
             ),
             heartbeat_timeout=timedelta(seconds=10),
@@ -72,9 +80,17 @@ class SessionWorkflow:
     async def run(self, start: dict) -> dict:
         result = {"status": "FAILED", "cleanup": "REMEDIATION_REQUIRED"}
         binding = None
+        two_phase = workflow.patched("two-phase-provisioning-v1")
         try:
-            binding = await self.call("provision_session", start)
+            binding = await self.call(
+                "create_session" if two_phase else "provision_session",
+                {"start": start, "binding": None, "position": start.get("position")}
+                if two_phase
+                else start,
+            )
             self.position = binding["position"]
+            if two_phase:
+                await self.call("wait_session_ready", binding)
             for _ in range(65):
                 self.check_cancelled()
                 if start.get("pause_at") == self.position["cursor"] and not self.resumed:
@@ -90,9 +106,11 @@ class SessionWorkflow:
                     ):
                         raise
                     binding = await self.call(
-                        "rebind_session",
+                        "create_session" if two_phase else "rebind_session",
                         {"start": start, "binding": binding, "position": self.position},
                     )
+                    if two_phase:
+                        await self.call("wait_session_ready", binding)
                     advanced = await self.call("advance_runner", {**command, "binding": binding})
                 if advanced["status"] == "done":
                     if self.pending is not None:

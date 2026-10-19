@@ -41,11 +41,27 @@ class Activities:
 
     @activity.defn
     async def provision_session(self, start: dict) -> dict:
-        return await self.heartbeating(self.lifecycle.provision(start))
+        # Compatibility for histories that scheduled the original combined Activity.
+        binding = await self.heartbeating(self.lifecycle.provision(start))
+        return await self.heartbeating(self.lifecycle.wait_ready(binding))
 
     @activity.defn
     async def rebind_session(self, command: dict) -> dict:
-        return await self.heartbeating(self.lifecycle.replace(command))
+        binding = await self.heartbeating(self.lifecycle.replace(command))
+        return await self.heartbeating(self.lifecycle.wait_ready(binding))
+
+    @activity.defn
+    async def create_session(self, command: dict) -> dict:
+        operation = (
+            self.lifecycle.replace(command)
+            if command["binding"] is not None
+            else self.lifecycle.provision(command["start"])
+        )
+        return await self.heartbeating(operation)
+
+    @activity.defn
+    async def wait_session_ready(self, binding: dict) -> dict:
+        return await self.heartbeating(self.lifecycle.wait_ready(binding))
 
     @activity.defn
     async def advance_runner(self, command: dict) -> dict:
@@ -121,6 +137,8 @@ class Activities:
         return [
             self.provision_session,
             self.rebind_session,
+            self.create_session,
+            self.wait_session_ready,
             self.advance_runner,
             self.execute_model,
             self.execute_tool,

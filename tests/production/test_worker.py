@@ -78,17 +78,18 @@ async def test_cancelled_cache_initialization_retains_no_task(handle):
     assert not worker.cache and not worker.cache_lock.locked()
 
 
+@pytest.mark.parametrize("name", ["provision_session", "rebind_session", "create_session"])
 @pytest.mark.parametrize(
     "completed,attempt,settled", [(True, 1, True), (False, 1, False), (True, 2, False)]
 )
 async def test_unacknowledged_provision_or_retry_cannot_prove_cleanup(
-    handle, completed, attempt, settled
+    handle, name, completed, attempt, settled
 ):
     events = [
         HistoryEvent(
             event_id=5,
             activity_task_scheduled_event_attributes=ActivityTaskScheduledEventAttributes(
-                activity_type=ActivityType(name="provision_session")
+                activity_type=ActivityType(name=name)
             ),
         ),
         HistoryEvent(
@@ -147,6 +148,8 @@ def approval_router(approved_releases):
     [
         "provision_session",
         "rebind_session",
+        "create_session",
+        "wait_session_ready",
         "advance_runner",
         "execute_model",
         "execute_tool",
@@ -247,3 +250,43 @@ def test_create_worker_consumes_release_approval_and_keeps_native_options(monkey
     assert options["max_concurrent_activities"] == 3
     assert "approved_releases" not in options
     assert options["activities"][0].__self__.approved_releases == frozenset({"approved"})
+
+
+async def test_readiness_retry_does_not_reopen_create_admission(handle):
+    events = [
+        HistoryEvent(
+            event_id=5,
+            activity_task_scheduled_event_attributes=ActivityTaskScheduledEventAttributes(
+                activity_type=ActivityType(name="create_session")
+            ),
+        ),
+        HistoryEvent(
+            event_id=6,
+            activity_task_started_event_attributes=ActivityTaskStartedEventAttributes(
+                scheduled_event_id=5, attempt=1
+            ),
+        ),
+        HistoryEvent(
+            event_id=7,
+            activity_task_completed_event_attributes=ActivityTaskCompletedEventAttributes(
+                scheduled_event_id=5
+            ),
+        ),
+        HistoryEvent(
+            event_id=10,
+            activity_task_scheduled_event_attributes=ActivityTaskScheduledEventAttributes(
+                activity_type=ActivityType(name="wait_session_ready")
+            ),
+        ),
+        HistoryEvent(
+            event_id=11,
+            activity_task_started_event_attributes=ActivityTaskStartedEventAttributes(
+                scheduled_event_id=10, attempt=3
+            ),
+        ),
+    ]
+    temporal = Mock()
+    temporal.get_workflow_handle.return_value.fetch_history = AsyncMock(
+        return_value=SimpleNamespace(events=events)
+    )
+    assert await settled_provisioning(temporal, handle)

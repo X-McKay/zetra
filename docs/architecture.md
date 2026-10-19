@@ -51,6 +51,27 @@ configured converter's representation. Workspace snapshots reject links, special
 files and unsafe paths before acceptance or restoration. Each provision creates a
 fresh volume/runtime; writable agent state is not shared between sessions.
 
+## Creation and readiness
+
+New sessions record two Temporal Activities for each sandbox generation.
+`create_session` validates native OpenShell create acknowledgement and returns the
+immutable binding immediately. Only after Temporal records that result does
+`wait_session_ready` wait for the same supervisor and bridge socket. The Workflow
+retains the binding before entering readiness, including for replacement generations.
+Readiness can retry on a fresh worker without allocating another instance.
+
+Both phases have heartbeat coverage, a four-minute attempt limit and a ten-minute
+schedule-to-close window. Native readiness waits at most three minutes per attempt.
+Failure or cancellation during readiness triggers the existing stop/delete and
+immutable-instance confirmation path. A readiness retry does not make an acknowledged
+create uncertain. A retired or unacknowledged **creation** still prevents deletion
+proof; this split does not close native create admission.
+
+A native Temporal patch marker preserves replay of earlier histories. The old
+`provision_session` and `rebind_session` Activity names remain thin compositions of
+the same create/readiness implementation for commands already scheduled by those
+histories. There is no new public SDK option, persistence layer or controller.
+
 ## Native create admission
 
 Each sandbox generation uses a deterministic nonzero UUID request ID derived from
