@@ -96,3 +96,13 @@ native Temporal patching and thin combined Activity wrappers. Readiness failures
 and cancellations retain normal confirmed-deletion checks. Unacknowledged or retired
 create attempts still yield `NOT_CONFIRMED`; the original Kubani supervisor-start
 failure remains a failed observation. No gateway-side admission closure is claimed.
+
+
+Qualification of this split: 285 local tests passed; 46 native cases passed across
+42 passes in the initial full run and four cases on a focused rerun. Five focused
+creation/readiness recovery cases and five Temporal cancellation cases passed.
+The original failed history replays unchanged. All three benchmark cases and
+eight fresh Kubani qualifications passed, with final native/Kubernetes session
+resource absence and the exact new-image native credential/isolation control.
+See [the qualification report](qualification.md) for retained initial failures,
+compatibility tuples and measurement limits.
