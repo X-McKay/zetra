@@ -121,7 +121,10 @@ backend settlement/fencing. It is not an implemented capability or a cleanup cla
 
 ## Future external actions
 
-MCP and external business actions remain outside the admitted profile. A future
+Reviewed MCP reads can use statically registered `remote_read` wrappers and native
+OpenShell provider attachments. Provider profiles, credentials and renewal remain
+deployment-owned configuration. MCP writes and external business writes remain
+outside the admitted profile. A future
 AgentGateway integration must provide receiver-scoped identity and authorization,
 with operation idempotency and reconciliation bound to the accepted descriptor. The minimal
 integration seam is the existing tool dispatcher: a registered executor delegates

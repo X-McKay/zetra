@@ -59,8 +59,11 @@ admission. Stronger closure requires a gateway-side lifecycle fence or platform
 reconciliation; the SDK implements no continuous janitor.
 
 The admitted profile is serial, nonstreaming and bounded to 64 model/tool
-boundaries in one invocation. External business writes, MCP actions, arbitrary
-callbacks, parallel tools and unmanaged background processes are not admitted.
+boundaries in one invocation. Reviewed remote-read wrappers, including MCP reads,
+use the same single-attempt tool boundary. External business writes, MCP writes,
+arbitrary callbacks, parallel tools and unmanaged background processes are not admitted.
+Native provider profiles and credential lifecycle remain deployment-owned trust
+boundaries; they are not frozen into the Release.
 Future AgentGateway integration requires scoped receiver identity, authorization,
 idempotency and reconciliation bound to each operation. A gateway cannot resolve
 commit ambiguity by itself or replace Temporal's acceptance authority.
