@@ -71,3 +71,9 @@ Four real-server regressions cover successful provision, advance, execute and
 cleanup completion after cancellation, including an empty cancellation reason.
 They require CANCELED, no subsequent business boundaries, cleanup and replay.
 The original failed live cancellation observation is retained in the POC report.
+
+The shared CLI forwards native provider names, release approvals and Temporal
+graceful shutdown. Run exports save the exact handle before waiting, publish
+verified workspace files separately from metadata, and use a static local export
+ownership marker plus path-overlap guards. These receipts do not select progress
+or implement recovery; Temporal and immutable artifacts remain authoritative.

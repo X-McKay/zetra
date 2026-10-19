@@ -51,7 +51,7 @@ with os.fdopen(fd, 'wb') as stream:
     stream.write(secrets.token_bytes(32))
 PY
 uv run zetra --artifacts .state/objects --task-queue zetra --runtime-id local \
-  worker --key-file .state/worker.key
+  worker --key-file .state/worker.key --release .state/reporter-release.json
 ```
 
 In another terminal with the same Temporal settings, submit work:
@@ -59,22 +59,31 @@ In another terminal with the same Temporal settings, submit work:
 ```bash
 uv run zetra --artifacts .state/objects --task-queue zetra --runtime-id local \
   run .state/reporter-release.json --session report-001 \
-  --input 'Inspect the workspace and write a summary.' > .state/report-result.json
-uv run python - <<'PY'
-import json
-from pathlib import Path
-
-result = json.loads(Path('.state/report-result.json').read_text())
-Path('.state/report-handle.json').write_text(json.dumps(result['handle']))
-PY
+  --input 'Inspect the workspace and write a summary.' --output .state/report-export
 uv run zetra --artifacts .state/objects --task-queue zetra --runtime-id local \
-  status .state/report-handle.json
+  status .state/report-export/handle.json
 ```
 
-`run` emits the handle to stderr before waiting; preserve that JSON handle if the
-submitting process is interrupted. The stdout example extracts it from a completed
-run. `cancel` also accepts the handle file. The submitting CLI is not a worker and
-owns no recovery state. Stopping it does not stop the independently running worker.
+`run` emits the exact handle to stderr and saves it before waiting. An interrupted
+client can repeat the same release, session ID, input and workspace; native
+submission checks the original request. Temporal and artifacts remain the
+recovery authority. Output directories must be empty or existing Zetra exports,
+with no overlap with input workspaces or artifact backing. A static ownership
+marker only authorizes replacing local exports; it carries no progress state.
+Use a caller-controlled local directory (the CLI does not defend against hostile
+concurrent filesystem mutation). Each accepted submission replaces stale export
+files. `workspace/` contains verified agent files; `result.json` is published last
+after successful export. Failed or uncertain runs publish their result without a
+workspace export and return nonzero. Stdout contains only a compact summary.
+`cancel` accepts the same handle file. The submitting CLI is not a worker;
+stopping it does not stop the independently running worker.
+
+The worker supports repeatable `--release` allowlist files and `--provider` native
+OpenShell provider names. Omit releases only for an intentionally unrestricted
+trusted queue. SIGTERM/SIGINT request native Temporal shutdown; the default
+`--graceful-shutdown-seconds 20` bounds Activity drain time before cancellation.
+Allow additional process termination time for shutdown. These flags forward
+existing Python SDK settings; credential administration remains deployment-owned.
 
 For embedded use, pass a caller-configured Temporal connection to `SessionClient`
 and `create_worker`; configure TLS, authentication and codecs there. The CLI

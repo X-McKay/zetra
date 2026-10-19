@@ -79,8 +79,12 @@ with the original worker key/configuration, support worker replacement.
 The disposable kind lab and CLI connection settings are described in
 [deployment](docs/deployment.md). Run a separate `zetra worker --key-file ...`
 process before submitting CLI work. `zetra run` emits its handle to stderr before
-waiting and returns handle/result JSON on stdout; status and cancel take a handle
-JSON file. The local harness is separate from production deployment.
+waiting and returns a compact summary on stdout. `run --output DIR` saves the
+exact handle, full result and verified workspace in an SDK-owned export directory.
+Status and cancel take the handle JSON file. Worker flags `--release` (repeatable)
+and `--provider` (repeatable) forward release approval and native provider names;
+SIGTERM/SIGINT drain through Temporal with configurable graceful shutdown. The
+local harness is separate from production deployment.
 
 See [architecture](docs/architecture.md), [agent authoring](docs/agents.md),
 [security boundaries](SECURITY.md), [qualification](docs/qualification.md) and
