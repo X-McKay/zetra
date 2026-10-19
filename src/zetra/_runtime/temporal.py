@@ -4,7 +4,12 @@ from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ActivityError, ApplicationError, is_cancelled_exception
+from temporalio.exceptions import (
+    ActivityError,
+    ApplicationError,
+    CancelledError,
+    is_cancelled_exception,
+)
 
 SAFE_RETRY = RetryPolicy(maximum_attempts=3)
 CLEANUP_RETRY = RetryPolicy(maximum_interval=timedelta(seconds=30))
@@ -26,7 +31,17 @@ class SessionWorkflow:
     def resume(self):
         self.resumed = True
 
+    def check_cancelled(self):
+        # WAIT_CANCELLATION_COMPLETED can return a successful Activity after a
+        # cancel request. The native Workflow cancellation remains authoritative.
+        if workflow.cancellation_reason() is not None and workflow.patched(
+            "honor-native-cancellation-v1"
+        ):
+            raise CancelledError("session cancellation requested")
+
     async def call(self, name, arg, *, effect=False):
+        if name != "close_session":
+            self.check_cancelled()
         if sum(p.ByteSize() for p in workflow.payload_converter().to_payloads([arg])) > 262144:
             raise ApplicationError("converted command exceeds payload limit", non_retryable=True)
         return await workflow.execute_activity(
@@ -61,6 +76,7 @@ class SessionWorkflow:
             binding = await self.call("provision_session", start)
             self.position = binding["position"]
             for _ in range(65):
+                self.check_cancelled()
                 if start.get("pause_at") == self.position["cursor"] and not self.resumed:
                     await workflow.wait_condition(
                         lambda: self.resumed, timeout=timedelta(minutes=2)
@@ -138,6 +154,7 @@ class SessionWorkflow:
                 result["cleanup"] = closed["cleanup"]
             except ActivityError:
                 result["cleanup"] = "REMEDIATION_REQUIRED"
+        self.check_cancelled()
         return result
 
 

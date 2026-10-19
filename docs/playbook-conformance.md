@@ -22,7 +22,7 @@ and the limitations that remain before production deployment.
 | Evaluation | Fixture and sandbox modes; release-bound evidence | Evidence is unsigned and observations remain scoped |
 | Developer workflow | Canonical nested template; data-only agent index; packaged instructions; one project lock used by image build | Optional application layers are not generated; local kind harness is separate from production deployment |
 | Build/evidence identity | Image/source/manifest/lock/SDK revision binding; eval agent and dataset identity | Unsigned consistency checks; OS and build-system inputs are not bit reproducible |
-| External actions and MCP | Not admitted | Future AgentGateway integration requires scoped identity, authorization, operation idempotency and reconciliation |
+| External actions and MCP | Reviewed `remote_read` tools admitted; writes excluded | Native provider policy and backend authorization are deployment-owned; writes require idempotency and reconciliation |
 | Multi-agent execution | Not admitted | Requires a separately admitted execution design |
 
 A future AgentGateway should attach through the existing tool dispatcher rather
@@ -55,3 +55,19 @@ including the live model, with all three earlier failed attempts disclosed.
 Provisioning retries correctly preserve `NOT_CONFIRMED` despite later execution
 success. Latency and fresh-provisioning benchmarks passed; the report makes no
 single-clean-full-run or statistically significant performance claim.
+
+Kubani live qualification exercised the real MCP provider, encrypted native
+credential refresh, whole-agent sandbox execution and Temporal worker/checkpoint
+recovery. The POC report is maintained in X-McKay/kubani PR219. Remote reads are
+admitted; external writes remain excluded. Endpoint policy does not enforce MCP
+JSON-RPC arguments: the reviewed tool wrappers and backend authorization remain
+separate trust boundaries.
+
+The live POC exposed a native cancellation/completion race: Temporal's
+WAIT_CANCELLATION_COMPLETED can return a successful Activity after cancellation.
+SessionWorkflow now checks native cancellation before further work and after
+cleanup. A native Temporal patch marker preserves replay of recorded histories.
+Four real-server regressions cover successful provision, advance, execute and
+cleanup completion after cancellation, including an empty cancellation reason.
+They require CANCELED, no subsequent business boundaries, cleanup and replay.
+The original failed live cancellation observation is retained in the POC report.
