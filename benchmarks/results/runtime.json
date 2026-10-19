@@ -1,9 +1,18 @@
 {
-  "captured_at": "2026-10-18T02:50:31.145915+00:00",
+  "captured_at": "2026-10-19T01:15:33.021234+00:00",
   "trust": "local-unsigned",
   "cluster": "kind-zetra-validation",
   "architecture": "linux/arm64",
-  "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+  "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
+  "hash_scope": "src/zetra excluding templates, _build and Python caches; includes agent.Dockerfile",
+  "template_provenance": {
+    "repository": "https://github.com/X-McKay/zetra-template",
+    "revision": "b0f1fb509f31b330c8a8b04abafdc9872433dc39",
+    "tree_sha256": "41e78086d57768f6331d059f1ae2f549c21b49c92d7651b8e62988ded5310528",
+    "qualified_sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+    "renderer_sha256": "2c84c50eefab67ebfc0bc9095aca7af6cf96dc9ddaad2276b1df51c0fdf2bd40"
+  },
+  "agent_recipe_sha256": "08dd25ece1b33a4f39f0e4c6b2ded4e966b21cf63ea66125de6aa4571c8d873c",
   "lockfile_sha256": "996dbe557a097a1914913e25f679b19f964b417bdbe0e57d4c0ce50675948347",
   "model_settings": {
     "api_base": "https://llm.almckay.io/v1",
@@ -18,125 +27,1969 @@
   "images": [
     {
       "tag": "zetra-validation:local",
-      "image_digest": "sha256:03ebb26b5854b19d2acf57cc56ec70c44417adba80eb9639312459d78ace53c9",
-      "docker_reported_bytes": 180202670,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd"
+      "image_id": "sha256:d05b3749cb366fea93bb30e742c4d0977610d36caeb2ebcb26137c817fe6511d",
+      "repo_digests": [
+        "zetra-validation@sha256:d05b3749cb366fea93bb30e742c4d0977610d36caeb2ebcb26137c817fe6511d"
+      ],
+      "docker_reported_bytes": 180302226,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c"
     },
     {
       "tag": "zetra-validation:source",
-      "image_digest": "sha256:0388672a26b13464f26b6f79fbec2389a1c85f258ae1ed530a0fa6922a722275",
-      "docker_reported_bytes": 144427495,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd"
+      "image_id": "sha256:0a0b32a456004cd83d56c63754c03e7ce94b02d7ed0f49a556c9128367f4eb03",
+      "repo_digests": [
+        "zetra-validation@sha256:0a0b32a456004cd83d56c63754c03e7ce94b02d7ed0f49a556c9128367f4eb03"
+      ],
+      "docker_reported_bytes": 145529628,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c"
     },
     {
       "tag": "zetra-reporter:local",
-      "image_digest": "sha256:d33fad9b7165e6d3ec5a67c1bb4ed081df45f7767a21908fecf0de45567156ed",
-      "docker_reported_bytes": 191675271,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:094f66a7b723294b539f5f639ee582096f5e0d6ca4f6869a5290f429f2c1f889",
+      "repo_digests": [
+        "zetra-reporter@sha256:094f66a7b723294b539f5f639ee582096f5e0d6ca4f6869a5290f429f2c1f889"
+      ],
+      "docker_reported_bytes": 162666304,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
-        "schema_version": 1,
+        "schema_version": 2,
         "agent": {
           "schema_version": 1,
           "name": "workspace_reporter",
           "owner": "local-development",
-          "entrypoint": "workspace_reporter.agent:create_agent",
+          "entrypoint": "workspace_reporter.agents.workspace_reporter.factory:create_agent",
           "model": "fixture",
           "profile": "serial-v1",
-          "policy": "workspace"
+          "policy": "workspace",
+          "instructions": "workspace_reporter.agents.workspace_reporter:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-reporter@sha256:d33fad9b7165e6d3ec5a67c1bb4ed081df45f7767a21908fecf0de45567156ed",
-        "source_sha256": "dc2b952be80904791b6ae3604455be20721bb0f790b6766cdd41a8c3b9a25f62",
+        "image": "docker.io/library/zetra-reporter@sha256:094f66a7b723294b539f5f639ee582096f5e0d6ca4f6869a5290f429f2c1f889",
+        "source_sha256": "5e262d0a17fda0cf9f12e0f7ff0938ccfeadd0c23b0a6fd7406d500fd98cff2b",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
-        "sdk": "0.1.0"
+        "sdk": "0.1.0",
+        "lock_sha256": "ccb9f4cefbaa79fc19d2d11b01817925c9d64b226c72586b33d654230d201f77",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+      },
+      "installed_environment": {
+        "direct_url": {
+          "url": "https://github.com/X-McKay/zetra.git",
+          "vcs_info": {
+            "vcs": "git",
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+          }
+        },
+        "packages": [
+          [
+            "Authlib",
+            "1.9.1"
+          ],
+          [
+            "Jinja2",
+            "3.1.6"
+          ],
+          [
+            "MarkupSafe",
+            "3.0.4"
+          ],
+          [
+            "PyYAML",
+            "6.0.3"
+          ],
+          [
+            "aiohappyeyeballs",
+            "2.7.1"
+          ],
+          [
+            "aiohttp",
+            "3.14.5"
+          ],
+          [
+            "aiosignal",
+            "1.4.0"
+          ],
+          [
+            "aiosqlite",
+            "0.22.1"
+          ],
+          [
+            "annotated-doc",
+            "0.0.5"
+          ],
+          [
+            "annotated-types",
+            "0.8.0"
+          ],
+          [
+            "anyio",
+            "4.15.1"
+          ],
+          [
+            "attrs",
+            "26.1.0"
+          ],
+          [
+            "certifi",
+            "2026.10.18"
+          ],
+          [
+            "cffi",
+            "2.1.1"
+          ],
+          [
+            "charset-normalizer",
+            "3.5.2"
+          ],
+          [
+            "click",
+            "8.5.0"
+          ],
+          [
+            "cloudpickle",
+            "3.1.2"
+          ],
+          [
+            "cryptography",
+            "50.0.2"
+          ],
+          [
+            "distro",
+            "1.9.0"
+          ],
+          [
+            "fastapi",
+            "0.141.1"
+          ],
+          [
+            "fastuuid",
+            "0.14.0"
+          ],
+          [
+            "filelock",
+            "4.2.2"
+          ],
+          [
+            "frozenlist",
+            "1.8.0"
+          ],
+          [
+            "fsspec",
+            "2026.9.0"
+          ],
+          [
+            "google-adk",
+            "2.12.0"
+          ],
+          [
+            "google-auth",
+            "2.62.0"
+          ],
+          [
+            "google-genai",
+            "2.31.0"
+          ],
+          [
+            "googleapis-common-protos",
+            "1.75.5"
+          ],
+          [
+            "graphviz",
+            "0.21"
+          ],
+          [
+            "grpcio",
+            "1.84.0"
+          ],
+          [
+            "h11",
+            "0.16.0"
+          ],
+          [
+            "hf-xet",
+            "1.7.0"
+          ],
+          [
+            "httpcore",
+            "1.0.9"
+          ],
+          [
+            "httpcore2",
+            "2.14.0"
+          ],
+          [
+            "httpx",
+            "0.28.1"
+          ],
+          [
+            "httpx2",
+            "2.14.0"
+          ],
+          [
+            "huggingface_hub",
+            "2.2.0"
+          ],
+          [
+            "idna",
+            "3.20"
+          ],
+          [
+            "importlib_metadata",
+            "8.9.0"
+          ],
+          [
+            "jiter",
+            "0.17.0"
+          ],
+          [
+            "joserfc",
+            "1.7.5"
+          ],
+          [
+            "jsonschema",
+            "4.26.0"
+          ],
+          [
+            "jsonschema-specifications",
+            "2025.9.1"
+          ],
+          [
+            "litellm",
+            "1.95.0"
+          ],
+          [
+            "multidict",
+            "7.1.0"
+          ],
+          [
+            "nexus-rpc",
+            "1.4.0"
+          ],
+          [
+            "openai",
+            "2.54.0"
+          ],
+          [
+            "openshell",
+            "0.1.4"
+          ],
+          [
+            "opentelemetry-api",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-sdk",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-semantic-conventions",
+            "0.63b1"
+          ],
+          [
+            "packaging",
+            "26.3"
+          ],
+          [
+            "propcache",
+            "0.5.4"
+          ],
+          [
+            "protobuf",
+            "7.36.2"
+          ],
+          [
+            "pyasn1",
+            "0.6.4"
+          ],
+          [
+            "pyasn1_modules",
+            "0.4.2"
+          ],
+          [
+            "pycparser",
+            "3.11"
+          ],
+          [
+            "pydantic",
+            "2.14.1"
+          ],
+          [
+            "pydantic_core",
+            "2.50.1"
+          ],
+          [
+            "python-dotenv",
+            "1.2.4"
+          ],
+          [
+            "python-multipart",
+            "0.0.32"
+          ],
+          [
+            "referencing",
+            "0.37.0"
+          ],
+          [
+            "regex",
+            "2026.9.29"
+          ],
+          [
+            "requests",
+            "2.34.2"
+          ],
+          [
+            "rpds-py",
+            "2026.9.1"
+          ],
+          [
+            "sniffio",
+            "1.3.1"
+          ],
+          [
+            "starlette",
+            "1.9.0"
+          ],
+          [
+            "temporalio",
+            "1.34.0"
+          ],
+          [
+            "tenacity",
+            "9.1.4"
+          ],
+          [
+            "tiktoken",
+            "0.14.0"
+          ],
+          [
+            "tokenizers",
+            "0.23.3"
+          ],
+          [
+            "tqdm",
+            "4.70.1"
+          ],
+          [
+            "truststore",
+            "0.10.5"
+          ],
+          [
+            "types-protobuf",
+            "7.35.1.20260906"
+          ],
+          [
+            "typing-inspection",
+            "0.4.4"
+          ],
+          [
+            "typing_extensions",
+            "4.16.0"
+          ],
+          [
+            "urllib3",
+            "2.8.0"
+          ],
+          [
+            "uvicorn",
+            "0.54.0"
+          ],
+          [
+            "watchdog",
+            "6.0.0"
+          ],
+          [
+            "websockets",
+            "15.0.1"
+          ],
+          [
+            "workspace_reporter",
+            "0.1.0"
+          ],
+          [
+            "yarl",
+            "1.25.1"
+          ],
+          [
+            "zetra",
+            "0.1.0"
+          ],
+          [
+            "zipp",
+            "4.1.1"
+          ]
+        ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     },
     {
       "tag": "zetra-reader:local",
-      "image_digest": "sha256:a37ce7b80faeb4186bdd3653942d964541753e114a990b3f9a4bf7e9ee547aa4",
-      "docker_reported_bytes": 191674588,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:075c475f413b1319cc1bda2675d6cf7b8b379dc7c12d5c0b1b79d04089a20cf8",
+      "repo_digests": [
+        "zetra-reader@sha256:075c475f413b1319cc1bda2675d6cf7b8b379dc7c12d5c0b1b79d04089a20cf8"
+      ],
+      "docker_reported_bytes": 162671646,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
-        "schema_version": 1,
+        "schema_version": 2,
         "agent": {
           "schema_version": 1,
           "name": "document_reader",
           "owner": "local-development",
-          "entrypoint": "document_reader.agent:create_agent",
+          "entrypoint": "document_reader.agents.document_reader.factory:create_agent",
           "model": "fixture",
           "profile": "serial-v1",
-          "policy": "workspace"
+          "policy": "workspace",
+          "instructions": "document_reader.agents.document_reader:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-reader@sha256:a37ce7b80faeb4186bdd3653942d964541753e114a990b3f9a4bf7e9ee547aa4",
-        "source_sha256": "21e52fe1a825d2df142a44a1a244cb513dd81700f0954c92b8d4f8911e74c67d",
+        "image": "docker.io/library/zetra-reader@sha256:075c475f413b1319cc1bda2675d6cf7b8b379dc7c12d5c0b1b79d04089a20cf8",
+        "source_sha256": "767843cd36090f37250a7cd160ff15c6500bbb39b495d2a40c8635960932dedb",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
-        "sdk": "0.1.0"
+        "sdk": "0.1.0",
+        "lock_sha256": "68bc01f29c58161195804f73109cc02162985665deed2ea68345d356aefd25fa",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+      },
+      "installed_environment": {
+        "direct_url": {
+          "url": "https://github.com/X-McKay/zetra.git",
+          "vcs_info": {
+            "vcs": "git",
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+          }
+        },
+        "packages": [
+          [
+            "Authlib",
+            "1.9.1"
+          ],
+          [
+            "Jinja2",
+            "3.1.6"
+          ],
+          [
+            "MarkupSafe",
+            "3.0.4"
+          ],
+          [
+            "PyYAML",
+            "6.0.3"
+          ],
+          [
+            "aiohappyeyeballs",
+            "2.7.1"
+          ],
+          [
+            "aiohttp",
+            "3.14.5"
+          ],
+          [
+            "aiosignal",
+            "1.4.0"
+          ],
+          [
+            "aiosqlite",
+            "0.22.1"
+          ],
+          [
+            "annotated-doc",
+            "0.0.5"
+          ],
+          [
+            "annotated-types",
+            "0.8.0"
+          ],
+          [
+            "anyio",
+            "4.15.1"
+          ],
+          [
+            "attrs",
+            "26.1.0"
+          ],
+          [
+            "certifi",
+            "2026.10.18"
+          ],
+          [
+            "cffi",
+            "2.1.1"
+          ],
+          [
+            "charset-normalizer",
+            "3.5.2"
+          ],
+          [
+            "click",
+            "8.5.0"
+          ],
+          [
+            "cloudpickle",
+            "3.1.2"
+          ],
+          [
+            "cryptography",
+            "50.0.2"
+          ],
+          [
+            "distro",
+            "1.9.0"
+          ],
+          [
+            "document_reader",
+            "0.1.0"
+          ],
+          [
+            "fastapi",
+            "0.141.1"
+          ],
+          [
+            "fastuuid",
+            "0.14.0"
+          ],
+          [
+            "filelock",
+            "4.2.2"
+          ],
+          [
+            "frozenlist",
+            "1.8.0"
+          ],
+          [
+            "fsspec",
+            "2026.9.0"
+          ],
+          [
+            "google-adk",
+            "2.12.0"
+          ],
+          [
+            "google-auth",
+            "2.62.0"
+          ],
+          [
+            "google-genai",
+            "2.31.0"
+          ],
+          [
+            "googleapis-common-protos",
+            "1.75.5"
+          ],
+          [
+            "graphviz",
+            "0.21"
+          ],
+          [
+            "grpcio",
+            "1.84.0"
+          ],
+          [
+            "h11",
+            "0.16.0"
+          ],
+          [
+            "hf-xet",
+            "1.7.0"
+          ],
+          [
+            "httpcore",
+            "1.0.9"
+          ],
+          [
+            "httpcore2",
+            "2.14.0"
+          ],
+          [
+            "httpx",
+            "0.28.1"
+          ],
+          [
+            "httpx2",
+            "2.14.0"
+          ],
+          [
+            "huggingface_hub",
+            "2.2.0"
+          ],
+          [
+            "idna",
+            "3.20"
+          ],
+          [
+            "importlib_metadata",
+            "8.9.0"
+          ],
+          [
+            "jiter",
+            "0.17.0"
+          ],
+          [
+            "joserfc",
+            "1.7.5"
+          ],
+          [
+            "jsonschema",
+            "4.26.0"
+          ],
+          [
+            "jsonschema-specifications",
+            "2025.9.1"
+          ],
+          [
+            "litellm",
+            "1.95.0"
+          ],
+          [
+            "multidict",
+            "7.1.0"
+          ],
+          [
+            "nexus-rpc",
+            "1.4.0"
+          ],
+          [
+            "openai",
+            "2.54.0"
+          ],
+          [
+            "openshell",
+            "0.1.4"
+          ],
+          [
+            "opentelemetry-api",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-sdk",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-semantic-conventions",
+            "0.63b1"
+          ],
+          [
+            "packaging",
+            "26.3"
+          ],
+          [
+            "propcache",
+            "0.5.4"
+          ],
+          [
+            "protobuf",
+            "7.36.2"
+          ],
+          [
+            "pyasn1",
+            "0.6.4"
+          ],
+          [
+            "pyasn1_modules",
+            "0.4.2"
+          ],
+          [
+            "pycparser",
+            "3.11"
+          ],
+          [
+            "pydantic",
+            "2.14.1"
+          ],
+          [
+            "pydantic_core",
+            "2.50.1"
+          ],
+          [
+            "python-dotenv",
+            "1.2.4"
+          ],
+          [
+            "python-multipart",
+            "0.0.32"
+          ],
+          [
+            "referencing",
+            "0.37.0"
+          ],
+          [
+            "regex",
+            "2026.9.29"
+          ],
+          [
+            "requests",
+            "2.34.2"
+          ],
+          [
+            "rpds-py",
+            "2026.9.1"
+          ],
+          [
+            "sniffio",
+            "1.3.1"
+          ],
+          [
+            "starlette",
+            "1.9.0"
+          ],
+          [
+            "temporalio",
+            "1.34.0"
+          ],
+          [
+            "tenacity",
+            "9.1.4"
+          ],
+          [
+            "tiktoken",
+            "0.14.0"
+          ],
+          [
+            "tokenizers",
+            "0.23.3"
+          ],
+          [
+            "tqdm",
+            "4.70.1"
+          ],
+          [
+            "truststore",
+            "0.10.5"
+          ],
+          [
+            "types-protobuf",
+            "7.35.1.20260906"
+          ],
+          [
+            "typing-inspection",
+            "0.4.4"
+          ],
+          [
+            "typing_extensions",
+            "4.16.0"
+          ],
+          [
+            "urllib3",
+            "2.8.0"
+          ],
+          [
+            "uvicorn",
+            "0.54.0"
+          ],
+          [
+            "watchdog",
+            "6.0.0"
+          ],
+          [
+            "websockets",
+            "15.0.1"
+          ],
+          [
+            "yarl",
+            "1.25.1"
+          ],
+          [
+            "zetra",
+            "0.1.0"
+          ],
+          [
+            "zipp",
+            "4.1.1"
+          ]
+        ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     },
     {
       "tag": "zetra-live:local",
-      "image_digest": "sha256:5307496dd4cc141bc0529327f363165dc4b163aa3b19f267521b945d810372a7",
-      "docker_reported_bytes": 191675108,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:ffa4303c713357c47e43fe2cecbfee4dd568dbf2760b185f2039ce655167a104",
+      "repo_digests": [
+        "zetra-live@sha256:ffa4303c713357c47e43fe2cecbfee4dd568dbf2760b185f2039ce655167a104"
+      ],
+      "docker_reported_bytes": 162667331,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
-        "schema_version": 1,
+        "schema_version": 2,
         "agent": {
           "schema_version": 1,
           "name": "workspace_reporter",
           "owner": "local-development",
-          "entrypoint": "workspace_reporter.agent:create_agent",
+          "entrypoint": "workspace_reporter.agents.workspace_reporter.factory:create_agent",
           "model": "vllm",
           "profile": "serial-v1",
-          "policy": "vllm-chat"
+          "policy": "vllm-chat",
+          "instructions": "workspace_reporter.agents.workspace_reporter:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-live@sha256:5307496dd4cc141bc0529327f363165dc4b163aa3b19f267521b945d810372a7",
-        "source_sha256": "8e309b16654bdaaeb0f96c592d567463f02b811cc283bd61943ba59023c45015",
+        "image": "docker.io/library/zetra-live@sha256:ffa4303c713357c47e43fe2cecbfee4dd568dbf2760b185f2039ce655167a104",
+        "source_sha256": "a79f92d6de4b0b21feb24dbf6669cd94d2d021c17e8b89424d673ff1e18b24ed",
         "policy_sha256": "fe6f7b41ff223ef430fe11d10bfdac1010c2437545b8e6756c2e1a8af1eb3f03",
-        "sdk": "0.1.0"
+        "sdk": "0.1.0",
+        "lock_sha256": "ccb9f4cefbaa79fc19d2d11b01817925c9d64b226c72586b33d654230d201f77",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+      },
+      "installed_environment": {
+        "direct_url": {
+          "url": "https://github.com/X-McKay/zetra.git",
+          "vcs_info": {
+            "vcs": "git",
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+          }
+        },
+        "packages": [
+          [
+            "Authlib",
+            "1.9.1"
+          ],
+          [
+            "Jinja2",
+            "3.1.6"
+          ],
+          [
+            "MarkupSafe",
+            "3.0.4"
+          ],
+          [
+            "PyYAML",
+            "6.0.3"
+          ],
+          [
+            "aiohappyeyeballs",
+            "2.7.1"
+          ],
+          [
+            "aiohttp",
+            "3.14.5"
+          ],
+          [
+            "aiosignal",
+            "1.4.0"
+          ],
+          [
+            "aiosqlite",
+            "0.22.1"
+          ],
+          [
+            "annotated-doc",
+            "0.0.5"
+          ],
+          [
+            "annotated-types",
+            "0.8.0"
+          ],
+          [
+            "anyio",
+            "4.15.1"
+          ],
+          [
+            "attrs",
+            "26.1.0"
+          ],
+          [
+            "certifi",
+            "2026.10.18"
+          ],
+          [
+            "cffi",
+            "2.1.1"
+          ],
+          [
+            "charset-normalizer",
+            "3.5.2"
+          ],
+          [
+            "click",
+            "8.5.0"
+          ],
+          [
+            "cloudpickle",
+            "3.1.2"
+          ],
+          [
+            "cryptography",
+            "50.0.2"
+          ],
+          [
+            "distro",
+            "1.9.0"
+          ],
+          [
+            "fastapi",
+            "0.141.1"
+          ],
+          [
+            "fastuuid",
+            "0.14.0"
+          ],
+          [
+            "filelock",
+            "4.2.2"
+          ],
+          [
+            "frozenlist",
+            "1.8.0"
+          ],
+          [
+            "fsspec",
+            "2026.9.0"
+          ],
+          [
+            "google-adk",
+            "2.12.0"
+          ],
+          [
+            "google-auth",
+            "2.62.0"
+          ],
+          [
+            "google-genai",
+            "2.31.0"
+          ],
+          [
+            "googleapis-common-protos",
+            "1.75.5"
+          ],
+          [
+            "graphviz",
+            "0.21"
+          ],
+          [
+            "grpcio",
+            "1.84.0"
+          ],
+          [
+            "h11",
+            "0.16.0"
+          ],
+          [
+            "hf-xet",
+            "1.7.0"
+          ],
+          [
+            "httpcore",
+            "1.0.9"
+          ],
+          [
+            "httpcore2",
+            "2.14.0"
+          ],
+          [
+            "httpx",
+            "0.28.1"
+          ],
+          [
+            "httpx2",
+            "2.14.0"
+          ],
+          [
+            "huggingface_hub",
+            "2.2.0"
+          ],
+          [
+            "idna",
+            "3.20"
+          ],
+          [
+            "importlib_metadata",
+            "8.9.0"
+          ],
+          [
+            "jiter",
+            "0.17.0"
+          ],
+          [
+            "joserfc",
+            "1.7.5"
+          ],
+          [
+            "jsonschema",
+            "4.26.0"
+          ],
+          [
+            "jsonschema-specifications",
+            "2025.9.1"
+          ],
+          [
+            "litellm",
+            "1.95.0"
+          ],
+          [
+            "multidict",
+            "7.1.0"
+          ],
+          [
+            "nexus-rpc",
+            "1.4.0"
+          ],
+          [
+            "openai",
+            "2.54.0"
+          ],
+          [
+            "openshell",
+            "0.1.4"
+          ],
+          [
+            "opentelemetry-api",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-sdk",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-semantic-conventions",
+            "0.63b1"
+          ],
+          [
+            "packaging",
+            "26.3"
+          ],
+          [
+            "propcache",
+            "0.5.4"
+          ],
+          [
+            "protobuf",
+            "7.36.2"
+          ],
+          [
+            "pyasn1",
+            "0.6.4"
+          ],
+          [
+            "pyasn1_modules",
+            "0.4.2"
+          ],
+          [
+            "pycparser",
+            "3.11"
+          ],
+          [
+            "pydantic",
+            "2.14.1"
+          ],
+          [
+            "pydantic_core",
+            "2.50.1"
+          ],
+          [
+            "python-dotenv",
+            "1.2.4"
+          ],
+          [
+            "python-multipart",
+            "0.0.32"
+          ],
+          [
+            "referencing",
+            "0.37.0"
+          ],
+          [
+            "regex",
+            "2026.9.29"
+          ],
+          [
+            "requests",
+            "2.34.2"
+          ],
+          [
+            "rpds-py",
+            "2026.9.1"
+          ],
+          [
+            "sniffio",
+            "1.3.1"
+          ],
+          [
+            "starlette",
+            "1.9.0"
+          ],
+          [
+            "temporalio",
+            "1.34.0"
+          ],
+          [
+            "tenacity",
+            "9.1.4"
+          ],
+          [
+            "tiktoken",
+            "0.14.0"
+          ],
+          [
+            "tokenizers",
+            "0.23.3"
+          ],
+          [
+            "tqdm",
+            "4.70.1"
+          ],
+          [
+            "truststore",
+            "0.10.5"
+          ],
+          [
+            "types-protobuf",
+            "7.35.1.20260906"
+          ],
+          [
+            "typing-inspection",
+            "0.4.4"
+          ],
+          [
+            "typing_extensions",
+            "4.16.0"
+          ],
+          [
+            "urllib3",
+            "2.8.0"
+          ],
+          [
+            "uvicorn",
+            "0.54.0"
+          ],
+          [
+            "watchdog",
+            "6.0.0"
+          ],
+          [
+            "websockets",
+            "15.0.1"
+          ],
+          [
+            "workspace_reporter",
+            "0.1.0"
+          ],
+          [
+            "yarl",
+            "1.25.1"
+          ],
+          [
+            "zetra",
+            "0.1.0"
+          ],
+          [
+            "zipp",
+            "4.1.1"
+          ]
+        ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     },
     {
       "tag": "zetra-blocked:local",
-      "image_digest": "sha256:ae03d80688aa8e3649f7e781e754119acb77bf23dc1d6464c608fe1285adbaf6",
-      "docker_reported_bytes": 191675362,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:be45f7b4d97530de21875d5e14d4b97ec432a6b38ab36a519007ee6c91a04244",
+      "repo_digests": [
+        "zetra-blocked@sha256:be45f7b4d97530de21875d5e14d4b97ec432a6b38ab36a519007ee6c91a04244"
+      ],
+      "docker_reported_bytes": 162665959,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
-        "schema_version": 1,
+        "schema_version": 2,
         "agent": {
           "schema_version": 1,
           "name": "workspace_reporter",
           "owner": "local-development",
-          "entrypoint": "workspace_reporter.agent:create_agent",
+          "entrypoint": "workspace_reporter.agents.workspace_reporter.factory:create_agent",
           "model": "fixture",
           "profile": "serial-v1",
-          "policy": "workspace"
+          "policy": "workspace",
+          "instructions": "workspace_reporter.agents.workspace_reporter:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-blocked@sha256:ae03d80688aa8e3649f7e781e754119acb77bf23dc1d6464c608fe1285adbaf6",
-        "source_sha256": "7fc32792cf0a0bd5142e9ddfe75b76cf41584bff1a9c2a9dd0c2847e38fe1e24",
+        "image": "docker.io/library/zetra-blocked@sha256:be45f7b4d97530de21875d5e14d4b97ec432a6b38ab36a519007ee6c91a04244",
+        "source_sha256": "0f503c7df14d6ca578cc55fefc052aadc83fbfc635dabc7b18edb2c1b6fbdaec",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
-        "sdk": "0.1.0"
+        "sdk": "0.1.0",
+        "lock_sha256": "ccb9f4cefbaa79fc19d2d11b01817925c9d64b226c72586b33d654230d201f77",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+      },
+      "installed_environment": {
+        "direct_url": {
+          "url": "https://github.com/X-McKay/zetra.git",
+          "vcs_info": {
+            "vcs": "git",
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+          }
+        },
+        "packages": [
+          [
+            "Authlib",
+            "1.9.1"
+          ],
+          [
+            "Jinja2",
+            "3.1.6"
+          ],
+          [
+            "MarkupSafe",
+            "3.0.4"
+          ],
+          [
+            "PyYAML",
+            "6.0.3"
+          ],
+          [
+            "aiohappyeyeballs",
+            "2.7.1"
+          ],
+          [
+            "aiohttp",
+            "3.14.5"
+          ],
+          [
+            "aiosignal",
+            "1.4.0"
+          ],
+          [
+            "aiosqlite",
+            "0.22.1"
+          ],
+          [
+            "annotated-doc",
+            "0.0.5"
+          ],
+          [
+            "annotated-types",
+            "0.8.0"
+          ],
+          [
+            "anyio",
+            "4.15.1"
+          ],
+          [
+            "attrs",
+            "26.1.0"
+          ],
+          [
+            "certifi",
+            "2026.10.18"
+          ],
+          [
+            "cffi",
+            "2.1.1"
+          ],
+          [
+            "charset-normalizer",
+            "3.5.2"
+          ],
+          [
+            "click",
+            "8.5.0"
+          ],
+          [
+            "cloudpickle",
+            "3.1.2"
+          ],
+          [
+            "cryptography",
+            "50.0.2"
+          ],
+          [
+            "distro",
+            "1.9.0"
+          ],
+          [
+            "fastapi",
+            "0.141.1"
+          ],
+          [
+            "fastuuid",
+            "0.14.0"
+          ],
+          [
+            "filelock",
+            "4.2.2"
+          ],
+          [
+            "frozenlist",
+            "1.8.0"
+          ],
+          [
+            "fsspec",
+            "2026.9.0"
+          ],
+          [
+            "google-adk",
+            "2.12.0"
+          ],
+          [
+            "google-auth",
+            "2.62.0"
+          ],
+          [
+            "google-genai",
+            "2.31.0"
+          ],
+          [
+            "googleapis-common-protos",
+            "1.75.5"
+          ],
+          [
+            "graphviz",
+            "0.21"
+          ],
+          [
+            "grpcio",
+            "1.84.0"
+          ],
+          [
+            "h11",
+            "0.16.0"
+          ],
+          [
+            "hf-xet",
+            "1.7.0"
+          ],
+          [
+            "httpcore",
+            "1.0.9"
+          ],
+          [
+            "httpcore2",
+            "2.14.0"
+          ],
+          [
+            "httpx",
+            "0.28.1"
+          ],
+          [
+            "httpx2",
+            "2.14.0"
+          ],
+          [
+            "huggingface_hub",
+            "2.2.0"
+          ],
+          [
+            "idna",
+            "3.20"
+          ],
+          [
+            "importlib_metadata",
+            "8.9.0"
+          ],
+          [
+            "jiter",
+            "0.17.0"
+          ],
+          [
+            "joserfc",
+            "1.7.5"
+          ],
+          [
+            "jsonschema",
+            "4.26.0"
+          ],
+          [
+            "jsonschema-specifications",
+            "2025.9.1"
+          ],
+          [
+            "litellm",
+            "1.95.0"
+          ],
+          [
+            "multidict",
+            "7.1.0"
+          ],
+          [
+            "nexus-rpc",
+            "1.4.0"
+          ],
+          [
+            "openai",
+            "2.54.0"
+          ],
+          [
+            "openshell",
+            "0.1.4"
+          ],
+          [
+            "opentelemetry-api",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-sdk",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-semantic-conventions",
+            "0.63b1"
+          ],
+          [
+            "packaging",
+            "26.3"
+          ],
+          [
+            "propcache",
+            "0.5.4"
+          ],
+          [
+            "protobuf",
+            "7.36.2"
+          ],
+          [
+            "pyasn1",
+            "0.6.4"
+          ],
+          [
+            "pyasn1_modules",
+            "0.4.2"
+          ],
+          [
+            "pycparser",
+            "3.11"
+          ],
+          [
+            "pydantic",
+            "2.14.1"
+          ],
+          [
+            "pydantic_core",
+            "2.50.1"
+          ],
+          [
+            "python-dotenv",
+            "1.2.4"
+          ],
+          [
+            "python-multipart",
+            "0.0.32"
+          ],
+          [
+            "referencing",
+            "0.37.0"
+          ],
+          [
+            "regex",
+            "2026.9.29"
+          ],
+          [
+            "requests",
+            "2.34.2"
+          ],
+          [
+            "rpds-py",
+            "2026.9.1"
+          ],
+          [
+            "sniffio",
+            "1.3.1"
+          ],
+          [
+            "starlette",
+            "1.9.0"
+          ],
+          [
+            "temporalio",
+            "1.34.0"
+          ],
+          [
+            "tenacity",
+            "9.1.4"
+          ],
+          [
+            "tiktoken",
+            "0.14.0"
+          ],
+          [
+            "tokenizers",
+            "0.23.3"
+          ],
+          [
+            "tqdm",
+            "4.70.1"
+          ],
+          [
+            "truststore",
+            "0.10.5"
+          ],
+          [
+            "types-protobuf",
+            "7.35.1.20260906"
+          ],
+          [
+            "typing-inspection",
+            "0.4.4"
+          ],
+          [
+            "typing_extensions",
+            "4.16.0"
+          ],
+          [
+            "urllib3",
+            "2.8.0"
+          ],
+          [
+            "uvicorn",
+            "0.54.0"
+          ],
+          [
+            "watchdog",
+            "6.0.0"
+          ],
+          [
+            "websockets",
+            "15.0.1"
+          ],
+          [
+            "workspace_reporter",
+            "0.1.0"
+          ],
+          [
+            "yarl",
+            "1.25.1"
+          ],
+          [
+            "zetra",
+            "0.1.0"
+          ],
+          [
+            "zipp",
+            "4.1.1"
+          ]
+        ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     },
     {
       "tag": "zetra-generated:local",
-      "image_digest": "sha256:ecc1edbee7f7d66008acab3a630b95aae6b761154a94bfbc3c9c2a1f7d455022",
-      "docker_reported_bytes": 191674966,
-      "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
+      "image_id": "sha256:b3175345bc7bfed6ee79355d97a08fd5df83655c49db72eb90b7031a32d18d9f",
+      "repo_digests": [
+        "zetra-generated@sha256:b3175345bc7bfed6ee79355d97a08fd5df83655c49db72eb90b7031a32d18d9f"
+      ],
+      "docker_reported_bytes": 162673375,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
-        "schema_version": 1,
+        "schema_version": 2,
         "agent": {
           "schema_version": 1,
-          "name": "generated_agent",
+          "name": "document_reader",
           "owner": "local-development",
-          "entrypoint": "generated_agent.agent:create_agent",
+          "entrypoint": "generated_agent.agents.document_reader.factory:create_agent",
           "model": "fixture",
           "profile": "serial-v1",
-          "policy": "workspace"
+          "policy": "workspace",
+          "instructions": "generated_agent.agents.document_reader:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-generated@sha256:ecc1edbee7f7d66008acab3a630b95aae6b761154a94bfbc3c9c2a1f7d455022",
-        "source_sha256": "01ce29be43e636fd186260cd556ce28bf0851b239f6e9ea345e99f9b3b49e2a4",
+        "image": "docker.io/library/zetra-generated@sha256:b3175345bc7bfed6ee79355d97a08fd5df83655c49db72eb90b7031a32d18d9f",
+        "source_sha256": "cca038bb900bee0cd4ce087576cc8ea37a44abc09498bf8c0f317c9484720b6c",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
-        "sdk": "0.1.0"
+        "sdk": "0.1.0",
+        "lock_sha256": "8604629ec1daa59ebc782df74c73df9cfcb1ad44ca7617819f90753711864a2f",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+      },
+      "installed_environment": {
+        "direct_url": {
+          "url": "https://github.com/X-McKay/zetra.git",
+          "vcs_info": {
+            "vcs": "git",
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+          }
+        },
+        "packages": [
+          [
+            "Authlib",
+            "1.9.1"
+          ],
+          [
+            "Jinja2",
+            "3.1.6"
+          ],
+          [
+            "MarkupSafe",
+            "3.0.4"
+          ],
+          [
+            "PyYAML",
+            "6.0.3"
+          ],
+          [
+            "aiohappyeyeballs",
+            "2.7.1"
+          ],
+          [
+            "aiohttp",
+            "3.14.5"
+          ],
+          [
+            "aiosignal",
+            "1.4.0"
+          ],
+          [
+            "aiosqlite",
+            "0.22.1"
+          ],
+          [
+            "annotated-doc",
+            "0.0.5"
+          ],
+          [
+            "annotated-types",
+            "0.8.0"
+          ],
+          [
+            "anyio",
+            "4.15.1"
+          ],
+          [
+            "attrs",
+            "26.1.0"
+          ],
+          [
+            "certifi",
+            "2026.10.18"
+          ],
+          [
+            "cffi",
+            "2.1.1"
+          ],
+          [
+            "charset-normalizer",
+            "3.5.2"
+          ],
+          [
+            "click",
+            "8.5.0"
+          ],
+          [
+            "cloudpickle",
+            "3.1.2"
+          ],
+          [
+            "cryptography",
+            "50.0.2"
+          ],
+          [
+            "distro",
+            "1.9.0"
+          ],
+          [
+            "fastapi",
+            "0.141.1"
+          ],
+          [
+            "fastuuid",
+            "0.14.0"
+          ],
+          [
+            "filelock",
+            "4.2.2"
+          ],
+          [
+            "frozenlist",
+            "1.8.0"
+          ],
+          [
+            "fsspec",
+            "2026.9.0"
+          ],
+          [
+            "generated-agent",
+            "0.1.0"
+          ],
+          [
+            "google-adk",
+            "2.12.0"
+          ],
+          [
+            "google-auth",
+            "2.62.0"
+          ],
+          [
+            "google-genai",
+            "2.31.0"
+          ],
+          [
+            "googleapis-common-protos",
+            "1.75.5"
+          ],
+          [
+            "graphviz",
+            "0.21"
+          ],
+          [
+            "grpcio",
+            "1.84.0"
+          ],
+          [
+            "h11",
+            "0.16.0"
+          ],
+          [
+            "hf-xet",
+            "1.7.0"
+          ],
+          [
+            "httpcore",
+            "1.0.9"
+          ],
+          [
+            "httpcore2",
+            "2.14.0"
+          ],
+          [
+            "httpx",
+            "0.28.1"
+          ],
+          [
+            "httpx2",
+            "2.14.0"
+          ],
+          [
+            "huggingface_hub",
+            "2.2.0"
+          ],
+          [
+            "idna",
+            "3.20"
+          ],
+          [
+            "importlib_metadata",
+            "8.9.0"
+          ],
+          [
+            "jiter",
+            "0.17.0"
+          ],
+          [
+            "joserfc",
+            "1.7.5"
+          ],
+          [
+            "jsonschema",
+            "4.26.0"
+          ],
+          [
+            "jsonschema-specifications",
+            "2025.9.1"
+          ],
+          [
+            "litellm",
+            "1.95.0"
+          ],
+          [
+            "multidict",
+            "7.1.0"
+          ],
+          [
+            "nexus-rpc",
+            "1.4.0"
+          ],
+          [
+            "openai",
+            "2.54.0"
+          ],
+          [
+            "openshell",
+            "0.1.4"
+          ],
+          [
+            "opentelemetry-api",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-sdk",
+            "1.42.1"
+          ],
+          [
+            "opentelemetry-semantic-conventions",
+            "0.63b1"
+          ],
+          [
+            "packaging",
+            "26.3"
+          ],
+          [
+            "propcache",
+            "0.5.4"
+          ],
+          [
+            "protobuf",
+            "7.36.2"
+          ],
+          [
+            "pyasn1",
+            "0.6.4"
+          ],
+          [
+            "pyasn1_modules",
+            "0.4.2"
+          ],
+          [
+            "pycparser",
+            "3.11"
+          ],
+          [
+            "pydantic",
+            "2.14.1"
+          ],
+          [
+            "pydantic_core",
+            "2.50.1"
+          ],
+          [
+            "python-dotenv",
+            "1.2.4"
+          ],
+          [
+            "python-multipart",
+            "0.0.32"
+          ],
+          [
+            "referencing",
+            "0.37.0"
+          ],
+          [
+            "regex",
+            "2026.9.29"
+          ],
+          [
+            "requests",
+            "2.34.2"
+          ],
+          [
+            "rpds-py",
+            "2026.9.1"
+          ],
+          [
+            "sniffio",
+            "1.3.1"
+          ],
+          [
+            "starlette",
+            "1.9.0"
+          ],
+          [
+            "temporalio",
+            "1.34.0"
+          ],
+          [
+            "tenacity",
+            "9.1.4"
+          ],
+          [
+            "tiktoken",
+            "0.14.0"
+          ],
+          [
+            "tokenizers",
+            "0.23.3"
+          ],
+          [
+            "tqdm",
+            "4.70.1"
+          ],
+          [
+            "truststore",
+            "0.10.5"
+          ],
+          [
+            "types-protobuf",
+            "7.35.1.20260906"
+          ],
+          [
+            "typing-inspection",
+            "0.4.4"
+          ],
+          [
+            "typing_extensions",
+            "4.16.0"
+          ],
+          [
+            "urllib3",
+            "2.8.0"
+          ],
+          [
+            "uvicorn",
+            "0.54.0"
+          ],
+          [
+            "watchdog",
+            "6.0.0"
+          ],
+          [
+            "websockets",
+            "15.0.1"
+          ],
+          [
+            "yarl",
+            "1.25.1"
+          ],
+          [
+            "zetra",
+            "0.1.0"
+          ],
+          [
+            "zipp",
+            "4.1.1"
+          ]
+        ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     }
-  ]
+  ],
+  "qualification_commit": "522cd09f903255b9e6ada1f1ffc05a7fc35775f4",
+  "canonical_template_validation": {
+    "repository_tests": 13,
+    "generated_agent_tests": 4,
+    "isolated_wheel_dependency_install": true,
+    "installed_sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
+  },
+  "cleanup_inventory": {
+    "cluster": "kind-zetra-validation",
+    "sandboxes": 0,
+    "session_pods": 0,
+    "session_pvcs": 0,
+    "session_pvs": 0,
+    "shared_ready_pods": [
+      "openshell/openshell-0",
+      "temporal/postgres-0",
+      "temporal/temporal-admintools-656b89f7bb-qrxg9",
+      "temporal/temporal-frontend-556cd94bf-v86hk",
+      "temporal/temporal-history-594764c67-rt6gc",
+      "temporal/temporal-matching-5d779b8d6d-bjkkz",
+      "temporal/temporal-worker-7f6887f5fc-cltzd"
+    ],
+    "retained_shared_pvcs": [
+      "openshell/openshell-data-openshell-0",
+      "temporal/data-postgres-0"
+    ]
+  },
+  "qualification_environment": {
+    "docker_vm_memory_gib": 8,
+    "prototype_cluster_paused_for_final_100_case_run_and_benchmarks": true,
+    "prototype_cluster_restored_afterwards": true,
+    "other_local_workloads_present": true
+  }
 }

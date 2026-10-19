@@ -1,80 +1,118 @@
 {
   "trust": "local-unsigned",
-  "sdk_source_sha256": "68b0b5bb2c13c8188cd54e7fb30a11b3ac98b12520cdecec37c4ead1a07af9cd",
-  "tests": 168,
-  "failures": 0,
-  "errors": 0,
-  "skipped": 0,
+  "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
+  "status": "all_cases_passed_across_runs",
+  "single_clean_full_run": false,
+  "distinct_passed_cases": 279,
   "live_vllm": true,
-  "local_gate_tests": 139,
+  "local_gate_tests": 241,
+  "run_attempts": [
+    {
+      "report": "interrupted-full-kind.xml",
+      "tests": 185,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 975.374
+    },
+    {
+      "report": "full-kind.xml",
+      "tests": 180,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 932.417
+    },
+    {
+      "report": "terminate-failure-remaining.xml",
+      "tests": 2,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 85.414
+    },
+    {
+      "report": "remaining.xml",
+      "tests": 100,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 282.951
+    }
+  ],
+  "notes": [
+    "Initial full run interrupted after OpenShell restart killed port-forward; teardown failed with connection refused.",
+    "Second full run: provisioning heartbeat timeout caused expected conservative NOT_CONFIRMED; cancellation normal-path assertion failed.",
+    "A follow-up passed cancellation then failed termination after another provisioning retry. Final follow-up reruns cancellation and all remaining cases unchanged. Task-owned idle prototype cluster paused during final follow-up and benchmarks. No isolation, deletion or timeout assertion relaxed."
+  ],
   "cases": [
     {
       "id": "tests.conformance.test_admission.test_unsupported_agent_features_rejected[sub_agents-value0]",
-      "seconds": 0.002
+      "seconds": 0.029
     },
     {
       "id": "tests.conformance.test_admission.test_unsupported_agent_features_rejected[output_key-result]",
-      "seconds": 0.001
+      "seconds": 0.005
     },
     {
       "id": "tests.conformance.test_admission.test_unsupported_agent_features_rejected[instruction-<lambda>]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.conformance.test_admission.test_unsupported_agent_features_rejected[mode-task]",
-      "seconds": 0.001
+      "seconds": 0.007
     },
     {
       "id": "tests.conformance.test_admission.test_unsupported_agent_features_rejected[retry_config-value4]",
-      "seconds": 0.001
+      "seconds": 0.004
     },
     {
       "id": "tests.conformance.test_admission.test_unsupported_agent_features_rejected[code_executor-value5]",
-      "seconds": 0.001
+      "seconds": 0.003
     },
     {
       "id": "tests.conformance.test_admission.test_unsupported_agent_features_rejected[planner-value6]",
-      "seconds": 0.001
+      "seconds": 0.007
     },
     {
       "id": "tests.conformance.test_admission.test_unsupported_agent_features_rejected[on_tool_error_callback-<lambda>]",
-      "seconds": 0.001
+      "seconds": 0.004
     },
     {
       "id": "tests.conformance.test_admission.test_native_tools_and_provider_models_rejected",
-      "seconds": 0.0
+      "seconds": 0.003
     },
     {
       "id": "tests.conformance.test_admission.test_nondefault_app_and_run_features_rejected",
-      "seconds": 0.001
+      "seconds": 0.014
     },
     {
       "id": "tests.conformance.test_admission.test_callback_synthetic_result_rejected_before_model",
-      "seconds": 0.258
+      "seconds": 1.635
     },
     {
       "id": "tests.conformance.test_cleanup.test_capture_cancels_and_awaits_adk_before_return",
-      "seconds": 0.008
+      "seconds": 0.033
     },
     {
       "id": "tests.conformance.test_cleanup.test_native_final_callback_completes_before_done",
-      "seconds": 0.031
+      "seconds": 0.201
     },
     {
       "id": "tests.conformance.test_cleanup.test_two_calls_rejected_before_any_tool",
-      "seconds": 0.019
+      "seconds": 0.107
     },
     {
       "id": "tests.conformance.test_determinism.test_external_entropy_does_not_change_reconstruction_stream",
-      "seconds": 0.001
+      "seconds": 0.006
     },
     {
       "id": "tests.conformance.test_determinism.test_twenty_fresh_launches_reconstruct_all_prefixes",
-      "seconds": 96.38
+      "seconds": 204.671
     },
     {
       "id": "tests.conformance.test_invocation_scope.test_boundary_ids_are_bound_to_the_invocation",
-      "seconds": 0.001
+      "seconds": 0.003
     },
     {
       "id": "tests.conformance.test_invocation_scope.test_boundary_limit_is_enforced_before_capture",
@@ -82,39 +120,39 @@
     },
     {
       "id": "tests.conformance.test_prefix_reconstruction.test_every_committed_prefix_reconstructs_without_effects[normal]",
-      "seconds": 4.471
+      "seconds": 8.712
     },
     {
       "id": "tests.conformance.test_prefix_reconstruction.test_every_committed_prefix_reconstructs_without_effects[error]",
-      "seconds": 5.246
+      "seconds": 8.058
     },
     {
       "id": "tests.conformance.test_prefix_reconstruction.test_every_committed_prefix_reconstructs_without_effects[mutate]",
-      "seconds": 4.794
+      "seconds": 9.442
     },
     {
       "id": "tests.conformance.test_prefix_reconstruction.test_changed_committed_request_halts",
-      "seconds": 0.645
+      "seconds": 2.229
     },
     {
       "id": "tests.conformance.test_prefix_reconstruction.test_changed_pending_descriptor_halts_before_execution",
-      "seconds": 0.67
+      "seconds": 2.792
     },
     {
       "id": "tests.conformance.test_process.test_hung_replay_is_killed_and_reaped",
-      "seconds": 10.022
+      "seconds": 10.069
     },
     {
       "id": "tests.conformance.test_process.test_cancelled_client_reaps_child",
-      "seconds": 0.821
+      "seconds": 1.816
     },
     {
       "id": "tests.conformance.test_process.test_excess_output_is_bounded",
-      "seconds": 0.494
+      "seconds": 0.555
     },
     {
       "id": "tests.conformance.test_reference.test_native_reference_has_five_boundaries_and_final_callback_state",
-      "seconds": 0.015
+      "seconds": 0.041
     },
     {
       "id": "tests.conformance.test_serialization.test_json_is_stable_and_rejects_non_json",
@@ -122,7 +160,7 @@
     },
     {
       "id": "tests.conformance.test_serialization.test_response_roundtrip_preserves_full_provider_content",
-      "seconds": 0.001
+      "seconds": 0.003
     },
     {
       "id": "tests.conformance.test_serialization.test_missing_and_null_remain_distinct",
@@ -146,75 +184,299 @@
     },
     {
       "id": "tests.conformance.test_warm.test_warm_continuation_matches_native_without_repeating_callbacks_or_effects[normal]",
-      "seconds": 0.031
+      "seconds": 0.039
     },
     {
       "id": "tests.conformance.test_warm.test_warm_continuation_matches_native_without_repeating_callbacks_or_effects[error]",
-      "seconds": 0.03
+      "seconds": 0.044
     },
     {
       "id": "tests.conformance.test_warm.test_warm_continuation_matches_native_without_repeating_callbacks_or_effects[mutate]",
-      "seconds": 0.032
+      "seconds": 0.042
     },
     {
       "id": "tests.conformance.test_warm.test_warm_rejects_wrong_pending_and_cold_reconstructs_changed_prefix",
-      "seconds": 0.041
+      "seconds": 0.125
     },
     {
       "id": "tests.conformance.test_warm.test_failed_warm_cancellation_poisoned_until_sandbox_is_replaced",
-      "seconds": 0.067
+      "seconds": 0.07
     },
     {
       "id": "tests.conformance.test_warm.test_interrupted_close_fences_live_finalizer_and_cached_operation",
-      "seconds": 0.027
+      "seconds": 0.029
+    },
+    {
+      "id": "tests.production.test_agent_image.test_agent_build_tools_are_confined_to_builder",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_agent_image.test_ordinary_agent_image_has_no_qualification_canaries",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_artifact_io.test_receipt_validation_runs_off_loop_under_heartbeat",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.production.test_artifact_io.test_sdk_session_rejects_other_authority_before_sandbox_calls[provision]",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.production.test_artifact_io.test_sdk_session_rejects_other_authority_before_sandbox_calls[close]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_artifact_io.test_remote_artifact_store_calls_run_off_event_loop[advance]",
+      "seconds": 0.004
+    },
+    {
+      "id": "tests.production.test_artifact_io.test_remote_artifact_store_calls_run_off_event_loop[execute]",
+      "seconds": 0.003
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_permanent_cleanup_rejection_stops_temporal_retries[StatusCode.PERMISSION_DENIED]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_permanent_cleanup_rejection_stops_temporal_retries[StatusCode.UNAUTHENTICATED]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_permanent_cleanup_rejection_stops_temporal_retries[StatusCode.INVALID_ARGUMENT]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_permanent_cleanup_rejection_stops_temporal_retries[StatusCode.FAILED_PRECONDITION]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_permanent_cleanup_rejection_stops_temporal_retries[StatusCode.UNIMPLEMENTED]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_transient_cleanup_and_unconfirmed_deletion_remain_failures[failure0]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_transient_cleanup_and_unconfirmed_deletion_remain_failures[failure1]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_transient_cleanup_and_unconfirmed_deletion_remain_failures[failure2]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_transient_cleanup_and_unconfirmed_deletion_remain_failures[failure3]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_transient_cleanup_and_unconfirmed_deletion_remain_failures[failure4]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_identity_conflict_is_terminal_without_claiming_deletion",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_cleanup_failures.test_cleanup_workflow_only_completes_when_deletion_is_confirmed",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_contract.test_sdk_exports_standard_worker_factory",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_execution_identity.test_exact_execution_separates_workspaces",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_execution_identity.test_rejects_reset_and_continued_execution[lineage0]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_execution_identity.test_rejects_reset_and_continued_execution[lineage1]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_execution_identity.test_rejects_wrong_workflow_type_before_decoding",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_native_provisioning.test_fresh_adapter_replays_identical_native_create_across_recovery",
+      "seconds": 0.006
+    },
+    {
+      "id": "tests.production.test_native_provisioning.test_native_create_ids_separate_session_and_generation",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.production.test_native_provisioning.test_recovery_does_not_renew_expired_original_activity_window",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.production.test_temporal_identity.test_real_reset_history_is_rejected_before_sandbox_access",
+      "seconds": 0.804
+    },
+    {
+      "id": "tests.production.test_temporal_identity.test_real_foreign_runtime_request_is_rejected_before_sandbox_access",
+      "seconds": 0.252
+    },
+    {
+      "id": "tests.production.test_worker.test_capability_is_bound_to_execution_release_and_worker_key",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.production.test_worker.test_concurrent_cache_misses_construct_one_adapter",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.production.test_worker.test_cancelled_cache_initialization_retains_no_task",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unacknowledged_provision_or_retry_cannot_prove_cleanup[True-1-True]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unacknowledged_provision_or_retry_cannot_prove_cleanup[False-1-False]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unacknowledged_provision_or_retry_cannot_prove_cleanup[True-2-False]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[provision_session-approved0]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[provision_session-approved1]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[rebind_session-approved0]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[rebind_session-approved1]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[advance_runner-approved0]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[advance_runner-approved1]",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[execute_model-approved0]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[execute_model-approved1]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[execute_tool-approved0]",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.production.test_worker.test_unapproved_release_rejected_before_sandbox_access[execute_tool-approved1]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_approved_release_can_execute_from_cached_context[None]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_approved_release_can_execute_from_cached_context[matching]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_revoked_release_still_allows_cleanup",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.production.test_worker.test_invalid_release_approvals_fail_at_construction[release0]",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_worker.test_invalid_release_approvals_fail_at_construction[release1]",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_worker.test_invalid_release_approvals_fail_at_construction[123]",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_worker.test_invalid_release_approvals_fail_at_construction[invalid3]",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_worker.test_invalid_release_approvals_fail_at_construction[invalid4]",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_worker.test_invalid_release_approvals_fail_at_construction[invalid5]",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_worker.test_release_approvals_are_snapshotted",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.production.test_worker.test_create_worker_consumes_release_approval_and_keeps_native_options",
+      "seconds": 0.0
     },
     {
       "id": "tests.provider.test_recorded_vllm.test_real_vllm_recording_reconstructs_each_prefix_in_fresh_process[vllm_recording.json]",
-      "seconds": 4.284
+      "seconds": 8.348
     },
     {
       "id": "tests.provider.test_recorded_vllm.test_real_vllm_recording_reconstructs_each_prefix_in_fresh_process[vllm_warm_recording.json]",
-      "seconds": 4.31
+      "seconds": 8.056
     },
     {
       "id": "tests.provider.test_recorded_vllm.test_recorded_vllm_warm_continuation_survives_cache_loss[vllm_recording.json]",
-      "seconds": 0.066
+      "seconds": 0.058
     },
     {
       "id": "tests.provider.test_recorded_vllm.test_recorded_vllm_warm_continuation_survives_cache_loss[vllm_warm_recording.json]",
-      "seconds": 0.028
+      "seconds": 0.077
     },
     {
       "id": "tests.provider.test_vllm.test_official_connector_preserves_call_identity_usage_and_wire_controls",
-      "seconds": 1.958
+      "seconds": 4.976
     },
     {
       "id": "tests.provider.test_vllm.test_http_failure_sends_exactly_one_request[429]",
-      "seconds": 0.03
+      "seconds": 0.036
     },
     {
       "id": "tests.provider.test_vllm.test_http_failure_sends_exactly_one_request[500]",
-      "seconds": 0.022
+      "seconds": 0.025
     },
     {
       "id": "tests.provider.test_vllm.test_invalid_provider_result_rejected_before_acceptance[parallel]",
-      "seconds": 0.015
+      "seconds": 0.016
     },
     {
       "id": "tests.provider.test_vllm.test_invalid_provider_result_rejected_before_acceptance[malformed]",
-      "seconds": 0.011
+      "seconds": 0.013
     },
     {
       "id": "tests.provider.test_vllm.test_invalid_provider_result_rejected_before_acceptance[truncated]",
-      "seconds": 0.011
+      "seconds": 0.013
     },
     {
       "id": "tests.provider.test_vllm.test_invalid_provider_result_rejected_before_acceptance[unknown_tool]",
-      "seconds": 0.011
+      "seconds": 0.013
     },
     {
       "id": "tests.provider.test_vllm.test_live_profile_captures_pinned_model_identity",
-      "seconds": 0.008
+      "seconds": 0.009
     },
     {
       "id": "tests.provider.test_vllm.test_live_profile_rejects_unbound_manifest",
@@ -222,23 +484,27 @@
     },
     {
       "id": "tests.provider.test_vllm.test_recorded_provider_responses_reconstruct_without_network",
-      "seconds": 0.093
+      "seconds": 0.134
     },
     {
       "id": "tests.provider.test_vllm.test_manifest_generation_controls_cannot_be_overridden[max_output_tokens-4096]",
-      "seconds": 0.002
+      "seconds": 0.007
     },
     {
       "id": "tests.provider.test_vllm.test_manifest_generation_controls_cannot_be_overridden[temperature-1.0]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.provider.test_vllm.test_manifest_generation_controls_cannot_be_overridden[top_p-0.5]",
-      "seconds": 0.001
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.recovery.test_boundary_limit.test_64_effects_survive_cold_recovery_and_reject_boundary_65",
+      "seconds": 19.7
     },
     {
       "id": "tests.recovery.test_chunks.test_large_transfer_and_duplicate_chunks_are_not_progress",
-      "seconds": 0.019
+      "seconds": 0.023
     },
     {
       "id": "tests.recovery.test_chunks.test_missing_or_changed_transfer_chunk_rejected",
@@ -254,11 +520,11 @@
     },
     {
       "id": "tests.recovery.test_inline.test_inline_batch_includes_small_objects_and_leaves_large_objects_for_transfer",
-      "seconds": 0.006
+      "seconds": 0.003
     },
     {
       "id": "tests.recovery.test_inline.test_inline_batch_rejects_corrupt_or_unbound_artifacts[hash]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_inline.test_inline_batch_rejects_corrupt_or_unbound_artifacts[unknown]",
@@ -266,19 +532,19 @@
     },
     {
       "id": "tests.recovery.test_inline.test_inline_batch_rejects_corrupt_or_unbound_artifacts[duplicate]",
-      "seconds": 0.001
+      "seconds": 0.003
     },
     {
       "id": "tests.recovery.test_inline.test_inline_batch_rejects_corrupt_or_unbound_artifacts[encoding]",
-      "seconds": 0.001
-    },
-    {
-      "id": "tests.recovery.test_inline.test_inline_batch_rejects_corrupt_or_unbound_artifacts[budget]",
       "seconds": 0.002
     },
     {
-      "id": "tests.recovery.test_lifecycle.test_failed_replacement_cleanup_reconciles_unaccepted_generation",
+      "id": "tests.recovery.test_inline.test_inline_batch_rejects_corrupt_or_unbound_artifacts[budget]",
       "seconds": 0.003
+    },
+    {
+      "id": "tests.recovery.test_lifecycle.test_failed_replacement_cleanup_reconciles_unaccepted_generation",
+      "seconds": 0.006
     },
     {
       "id": "tests.recovery.test_lifecycle.test_orderly_stop_precedes_delete_but_never_replaces_confirmation",
@@ -294,15 +560,15 @@
     },
     {
       "id": "tests.recovery.test_lifecycle.test_stop_failure_falls_back_to_confirmed_deletion[StatusCode.DEADLINE_EXCEEDED]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_lifecycle.test_stop_failure_falls_back_to_confirmed_deletion[StatusCode.UNAVAILABLE]",
-      "seconds": 0.001
+      "seconds": 0.003
     },
     {
       "id": "tests.recovery.test_lifecycle.test_stop_does_not_authorize_deleting_a_changed_identity[id]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_lifecycle.test_stop_does_not_authorize_deleting_a_changed_identity[owner]",
@@ -310,7 +576,7 @@
     },
     {
       "id": "tests.recovery.test_lifecycle.test_stop_permission_failure_does_not_claim_cleanup",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_lifecycle.test_stop_success_and_delete_ack_cannot_mask_confirmation_timeout",
@@ -318,39 +584,39 @@
     },
     {
       "id": "tests.recovery.test_lifecycle.test_cancelled_create_settles_before_terminal_cleanup",
-      "seconds": 0.033
+      "seconds": 0.032
     },
     {
       "id": "tests.recovery.test_lifecycle.test_terminal_cleanup_fences_a_delayed_initial_lookup",
-      "seconds": 0.011
+      "seconds": 0.013
     },
     {
       "id": "tests.recovery.test_runtime.test_real_demo_runs_through_five_warm_boundaries",
-      "seconds": 0.056
+      "seconds": 0.079
     },
     {
       "id": "tests.recovery.test_runtime.test_candidate_cannot_resume_warm_agent_until_explicit_accepted_advance",
-      "seconds": 0.019
+      "seconds": 0.027
     },
     {
       "id": "tests.recovery.test_runtime.test_poisoned_runtime_cannot_execute_or_restore_workspace",
-      "seconds": 0.068
+      "seconds": 0.071
     },
     {
       "id": "tests.recovery.test_runtime.test_runtime_shutdown_fences_commands_even_when_close_is_cancelled",
-      "seconds": 0.008
+      "seconds": 0.013
     },
     {
       "id": "tests.recovery.test_runtime.test_runtime_shutdown_cancels_active_executor_before_waiting_for_command_lock",
-      "seconds": 0.009
+      "seconds": 0.013
     },
     {
       "id": "tests.recovery.test_tape.test_candidate_is_not_a_committed_head",
-      "seconds": 0.001
+      "seconds": 0.005
     },
     {
       "id": "tests.recovery.test_tape.test_tampered_or_missing_object_stops_recovery",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_tape.test_unknown_and_wrong_manifest_never_produce_receipt",
@@ -358,27 +624,27 @@
     },
     {
       "id": "tests.recovery.test_tape.test_large_results_use_refs_and_aggregate_load_is_bounded",
-      "seconds": 0.003
+      "seconds": 0.004
     },
     {
       "id": "tests.recovery.test_tape.test_changed_position_and_out_of_order_append_rejected",
-      "seconds": 0.001
-    },
-    {
-      "id": "tests.recovery.test_uncertain_outcomes.test_cold_reconstruction_uses_only_explicit_accepted_refs",
-      "seconds": 0.802
-    },
-    {
-      "id": "tests.recovery.test_uncertain_outcomes.test_lost_external_response_blocks_without_redispatch",
       "seconds": 0.002
     },
     {
+      "id": "tests.recovery.test_uncertain_outcomes.test_cold_reconstruction_uses_only_explicit_accepted_refs",
+      "seconds": 1.68
+    },
+    {
+      "id": "tests.recovery.test_uncertain_outcomes.test_lost_external_response_blocks_without_redispatch",
+      "seconds": 0.001
+    },
+    {
       "id": "tests.recovery.test_workspace.test_roundtrip_and_reject_overlay",
-      "seconds": 0.003
+      "seconds": 0.007
     },
     {
       "id": "tests.recovery.test_workspace.test_unsafe_manifest_paths[../escape]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_workspace.test_unsafe_manifest_paths[/tmp/escape]",
@@ -386,27 +652,27 @@
     },
     {
       "id": "tests.recovery.test_workspace.test_unsafe_manifest_paths[a/../../escape]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_workspace.test_unsafe_manifest_paths[a//b]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_workspace.test_unsafe_manifest_paths[.]",
-      "seconds": 0.001
+      "seconds": 0.004
     },
     {
       "id": "tests.recovery.test_workspace.test_links_budget_and_writers",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_workspace.test_outcome_checkpoint_is_indivisible[False]",
-      "seconds": 0.003
+      "seconds": 0.005
     },
     {
       "id": "tests.recovery.test_workspace.test_outcome_checkpoint_is_indivisible[True]",
-      "seconds": 0.004
+      "seconds": 0.005
     },
     {
       "id": "tests.recovery.test_workspace.test_failed_checkpoint_never_returns_success",
@@ -414,99 +680,123 @@
     },
     {
       "id": "tests.recovery.test_workspace.test_unrestorable_path_limits_rejected[xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_workspace.test_unrestorable_path_limits_rejected[x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x/x]",
-      "seconds": 0.001
+      "seconds": 0.003
     },
     {
       "id": "tests.recovery.test_workspace.test_unrestorable_path_limits_rejected[xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_workspace.test_implicit_parents_count_toward_entry_budget",
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "id": "tests.recovery.test_workspace.test_capture_ignores_access_time_changed_by_its_own_read",
       "seconds": 0.002
     },
     {
+      "id": "tests.sandbox.test_cleanup_recovery.test_normal_close_recovers_after_four_transient_gateway_failures",
+      "seconds": 52.288
+    },
+    {
+      "id": "tests.sandbox.test_cleanup_recovery.test_permanent_close_then_fresh_worker_reconciles_four_transient_failures",
+      "seconds": 55.365
+    },
+    {
       "id": "tests.sandbox.test_live.test_live_vllm_in_sandbox[normal]",
-      "seconds": 20.801
+      "seconds": 47.715
     },
     {
       "id": "tests.sandbox.test_live.test_live_vllm_in_sandbox[replacement]",
-      "seconds": 39.628
+      "seconds": 111.218
     },
     {
       "id": "tests.sandbox.test_live.test_live_vllm_in_sandbox[completion_loss]",
-      "seconds": 17.963
+      "seconds": 46.141
     },
     {
       "id": "tests.sandbox.test_policy.test_policy_enforced_inside_real_workload_and_identity_scoped",
-      "seconds": 20.444
+      "seconds": 15.012
     },
     {
       "id": "tests.sandbox.test_policy.test_gateway_rejects_client_without_certificate",
-      "seconds": 0.017
+      "seconds": 0.039
     },
     {
       "id": "tests.sandbox.test_policy.test_agent_specific_policy_can_allow_only_the_named_canary",
-      "seconds": 13.647
+      "seconds": 17.154
     },
     {
       "id": "tests.sandbox.test_policy.test_prebuilt_code_keeps_two_live_session_workspaces_fresh",
-      "seconds": 27.421
+      "seconds": 47.114
+    },
+    {
+      "id": "tests.sandbox.test_provisioning_recovery.test_lost_create_ack_fresh_worker_replays_native_request",
+      "seconds": 27.576
+    },
+    {
+      "id": "tests.sandbox.test_provisioning_recovery.test_retired_delayed_create_cannot_prove_deletion",
+      "seconds": 5.591
     },
     {
       "id": "tests.sandbox.test_sdk.test_public_sdk_release_session_and_repeated_submission[reporter-5]",
-      "seconds": 19.305
+      "seconds": 28.697
     },
     {
       "id": "tests.sandbox.test_sdk.test_public_sdk_release_session_and_repeated_submission[reader-3]",
-      "seconds": 18.041
+      "seconds": 29.056
     },
     {
-      "id": "tests.sandbox.test_sdk.test_public_sdk_release_session_and_repeated_submission[generated-5]",
-      "seconds": 14.039
+      "id": "tests.sandbox.test_sdk.test_public_sdk_release_session_and_repeated_submission[generated-3]",
+      "seconds": 25.419
+    },
+    {
+      "id": "tests.sandbox.test_sdk.test_public_sdk_in_flight_worker_replacement",
+      "seconds": 31.283
     },
     {
       "id": "tests.sandbox.test_sdk.test_public_sdk_live_model",
-      "seconds": 31.294
+      "seconds": 46.934
     },
     {
       "id": "tests.sandbox.test_sdk.test_public_sdk_terminal_cleanup[cancel]",
-      "seconds": 24.556
+      "seconds": 31.458
     },
     {
       "id": "tests.sandbox.test_sdk.test_public_sdk_terminal_cleanup[terminate]",
-      "seconds": 15.078
+      "seconds": 36.377
     },
     {
       "id": "tests.sandbox.test_sdk.test_generated_agent_sandbox_evaluation",
-      "seconds": 23.436
+      "seconds": 18.258
+    },
+    {
+      "id": "tests.sandbox.test_sdk.test_shared_worker_keeps_concurrent_session_workspaces_separate",
+      "seconds": 21.846
     },
     {
       "id": "tests.sandbox.test_session.test_temporal_owned_sandbox_and_cold_replacement[False]",
-      "seconds": 19.743
+      "seconds": 17.48
     },
     {
       "id": "tests.sandbox.test_session.test_temporal_owned_sandbox_and_cold_replacement[True]",
-      "seconds": 44.08
+      "seconds": 38.866
     },
     {
       "id": "tests.sandbox.test_session.test_temporal_owned_sandbox_and_cold_replacement[worker]",
-      "seconds": 18.923
+      "seconds": 17.545
     },
     {
       "id": "tests.sandbox.test_session.test_terminal_cleanup_and_external_reconciliation[cancel]",
-      "seconds": 13.351
+      "seconds": 13.477
     },
     {
       "id": "tests.sandbox.test_session.test_terminal_cleanup_and_external_reconciliation[terminate]",
-      "seconds": 13.186
+      "seconds": 13.476
     },
     {
       "id": "tests.sdk.test_agent.test_public_agent_api_exists",
@@ -514,7 +804,7 @@
     },
     {
       "id": "tests.sdk.test_agent.test_one_registration_drives_wrapper_and_executor",
-      "seconds": 0.005
+      "seconds": 0.021
     },
     {
       "id": "tests.sdk.test_agent.test_duplicate_and_foreign_registration_rejected",
@@ -529,40 +819,112 @@
       "seconds": 0.0
     },
     {
-      "id": "tests.sdk.test_cli.test_cli_module_exists",
-      "seconds": 0.0
-    },
-    {
-      "id": "tests.sdk.test_cli.test_terminal_execution_is_nonzero_even_after_confirmed_deletion",
+      "id": "tests.sdk.test_cli.test_cli_has_separate_worker_and_explicit_handles",
       "seconds": 0.006
     },
     {
-      "id": "tests.sdk.test_client.test_client_module_exists",
-      "seconds": 0.0
+      "id": "tests.sdk.test_cli.test_terminal_execution_is_nonzero_even_after_confirmed_deletion",
+      "seconds": 0.003
+    },
+    {
+      "id": "tests.sdk.test_cli.test_fixture_eval_does_not_require_connection",
+      "seconds": 0.003
+    },
+    {
+      "id": "tests.sdk.test_cli.test_run_emits_handle_accepted_by_status_before_wait",
+      "seconds": 0.007
     },
     {
       "id": "tests.sdk.test_client.test_success_requires_confirmed_cleanup",
       "seconds": 0.0
     },
     {
-      "id": "tests.sdk.test_client.test_session_path_and_worker_exclusion",
+      "id": "tests.sdk.test_client.test_wait_and_cancel_are_pinned_to_run",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_handle_runtime_mismatch_rejected_before_rpc",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_reconcile_only_closed_execution_and_preserves_uncertainty",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_duplicate_cleanup_uses_exception_run_id",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_cleanup_rejects_other_workflow_and_lineage[workflow_type-value0]",
       "seconds": 0.001
     },
     {
-      "id": "tests.sdk.test_client.test_terminal_cleanup_remains_separate_from_effect_outcome",
+      "id": "tests.sdk.test_client.test_cleanup_rejects_other_workflow_and_lineage[task_queue-value1]",
       "seconds": 0.001
     },
     {
-      "id": "tests.sdk.test_client.test_gateway_identity_pins_control_plane_and_client_identity",
+      "id": "tests.sdk.test_client.test_cleanup_rejects_other_workflow_and_lineage[original_execution_run_id-other-run]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.sdk.test_client.test_cleanup_rejects_other_workflow_and_lineage[first_execution_run_id-other-run]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.sdk.test_client.test_cleanup_rejects_other_workflow_and_lineage[continued_execution_run_id-previous-run]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.sdk.test_client.test_cleanup_rejects_other_workflow_and_lineage[attempt-2]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.sdk.test_client.test_cleanup_rejects_other_workflow_and_lineage[cron_schedule-* * * * *]",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.sdk.test_client.test_cleanup_rejects_another_execution_input",
+      "seconds": 0.001
+    },
+    {
+      "id": "tests.sdk.test_client.test_task_queue_mismatch_rejected_before_execution_rpc",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_completed_cleanup_can_be_retried_without_changing_execution_outcome[SUCCEEDED]",
+      "seconds": 0.003
+    },
+    {
+      "id": "tests.sdk.test_client.test_completed_cleanup_can_be_retried_without_changing_execution_outcome[OUTCOME_UNKNOWN]",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_unconfirmed_cleanup_workflow_can_be_attempted_again",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_status_reads_verified_cleanup_without_starting_workflow",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_cleanup_status_resolves_latest_then_reads_exact_verified_run",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_wait_observes_completed_cleanup_recovery_without_mutating",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_client.test_cleanup_reuses_success_with_server_enforced_failed_only_policy",
       "seconds": 0.002
     },
     {
       "id": "tests.sdk.test_definition.test_two_factories_reconstruct_every_accepted_boundary[workspace_reporter-5]",
-      "seconds": 0.162
+      "seconds": 0.971
     },
     {
       "id": "tests.sdk.test_definition.test_two_factories_reconstruct_every_accepted_boundary[document_reader-3]",
-      "seconds": 0.064
+      "seconds": 0.111
     },
     {
       "id": "tests.sdk.test_manifest.test_manifest_module_exists",
@@ -570,27 +932,91 @@
     },
     {
       "id": "tests.sdk.test_manifest.test_mutable_images_and_undeclared_fields_rejected",
-      "seconds": 0.001
+      "seconds": 0.0
     },
     {
       "id": "tests.sdk.test_manifest.test_snapshot_and_symlink_rules",
-      "seconds": 0.003
+      "seconds": 0.006
     },
     {
       "id": "tests.sdk.test_manifest.test_check_never_imports_agent_and_duplicate_keys_rejected",
-      "seconds": 0.001
+      "seconds": 0.004
     },
     {
       "id": "tests.sdk.test_manifest.test_source_digest_has_unambiguous_file_boundaries",
-      "seconds": 0.001
+      "seconds": 0.005
     },
     {
-      "id": "tests.sdk.test_manifest.test_agent_recipe_preserves_canonical_sdk_build_assets",
-      "seconds": 0.036
+      "id": "tests.sdk.test_manifest.test_agent_recipe_uses_only_project_lock_and_snapshot",
+      "seconds": 0.137
+    },
+    {
+      "id": "tests.sdk.test_manifest.test_build_rejects_unbound_sdk_lock[missing]",
+      "seconds": 0.044
+    },
+    {
+      "id": "tests.sdk.test_manifest.test_build_rejects_unbound_sdk_lock[mutable]",
+      "seconds": 0.064
+    },
+    {
+      "id": "tests.sdk.test_manifest.test_build_rejects_unbound_sdk_lock[mismatch]",
+      "seconds": 0.053
+    },
+    {
+      "id": "tests.sdk.test_manifest.test_build_rejects_unbound_sdk_lock[local]",
+      "seconds": 0.047
+    },
+    {
+      "id": "tests.sdk.test_manifest.test_snapshot_excludes_local_secrets_and_generated_evidence",
+      "seconds": 0.041
+    },
+    {
+      "id": "tests.sdk.test_manifest.test_standard_wheel_dependency_is_the_only_declared_sdk_pin",
+      "seconds": 0.006
+    },
+    {
+      "id": "tests.sdk.test_project.test_single_agent_is_selected_without_importing_factory",
+      "seconds": 0.003
+    },
+    {
+      "id": "tests.sdk.test_project.test_multiple_agents_require_explicit_selection",
+      "seconds": 0.005
+    },
+    {
+      "id": "tests.sdk.test_project.test_manifest_path_cannot_escape_project[../outside.yaml]",
+      "seconds": 0.003
+    },
+    {
+      "id": "tests.sdk.test_project.test_manifest_path_cannot_escape_project[/tmp/outside.yaml]",
+      "seconds": 0.003
+    },
+    {
+      "id": "tests.sdk.test_project.test_manifest_path_cannot_escape_project[src/../outside.yaml]",
+      "seconds": 0.002
+    },
+    {
+      "id": "tests.sdk.test_project.test_manifest_and_instruction_symlinks_are_rejected",
+      "seconds": 0.004
+    },
+    {
+      "id": "tests.sdk.test_project.test_manifest_name_must_match_index",
+      "seconds": 0.006
+    },
+    {
+      "id": "tests.sdk.test_project.test_missing_packaged_instruction_is_rejected_before_import",
+      "seconds": 0.006
+    },
+    {
+      "id": "tests.sdk.test_project.test_generated_outputs_do_not_change_release_source",
+      "seconds": 0.009
+    },
+    {
+      "id": "tests.sdk.test_project.test_packaged_instruction_is_supplied_before_factory",
+      "seconds": 0.006
     },
     {
       "id": "tests.sdk.test_release_binding.test_sandbox_labels_pin_release_image_and_policy",
-      "seconds": 0.001
+      "seconds": 0.0
     },
     {
       "id": "tests.sdk.test_release_binding.test_wrong_release_cannot_be_adopted",
@@ -598,71 +1024,127 @@
     },
     {
       "id": "tests.sdk.test_scaffold.test_generated_agent_runs_tests_and_eval_without_infrastructure",
-      "seconds": 2.105
+      "seconds": 1.844
     },
     {
       "id": "tests.sdk.test_scaffold.test_static_check_cannot_import_factory",
-      "seconds": 0.14
+      "seconds": 0.142
     },
     {
       "id": "tests.sdk.test_scaffold.test_profile_denials_never_become_permissions",
-      "seconds": 0.004
+      "seconds": 0.002
     },
     {
       "id": "tests.sdk.test_scaffold.test_fixture_runs_do_not_reuse_factories_from_other_sources",
-      "seconds": 1.779
+      "seconds": 1.942
     },
     {
-      "id": "tests.sdk.test_workflow_identity.test_wrong_owner_cannot_attach_to_same_workflow",
-      "seconds": 0.0
+      "id": "tests.sdk.test_scaffold.test_generated_distribution_and_import_names_are_consistent[my-reader]",
+      "seconds": 0.042
     },
     {
-      "id": "tests.temporal.test_faults.test_unaccepted_execution_never_redispatched[before_dispatch]",
-      "seconds": 1.122
+      "id": "tests.sdk.test_scaffold.test_generated_distribution_and_import_names_are_consistent[my_reader]",
+      "seconds": 0.041
     },
     {
-      "id": "tests.temporal.test_faults.test_unaccepted_execution_never_redispatched[after_effect]",
-      "seconds": 1.853
+      "id": "tests.sdk.test_scaffold.test_evidence_binds_selected_agent_and_dataset",
+      "seconds": 0.97
     },
     {
-      "id": "tests.temporal.test_faults.test_unaccepted_execution_never_redispatched[after_candidate]",
-      "seconds": 2.777
-    },
-    {
-      "id": "tests.temporal.test_faults.test_sigkill_worker_after_accepted_completion",
-      "seconds": 18.32
-    },
-    {
-      "id": "tests.temporal.test_faults.test_silent_remote_operation_keeps_heartbeating",
-      "seconds": 18.568
-    },
-    {
-      "id": "tests.temporal.test_faults.test_cancellation_stops_remote_work_and_removes_workspace",
-      "seconds": 9.259
-    },
-    {
-      "id": "tests.temporal.test_faults.test_missing_heartbeat_times_out_without_effect_retry",
-      "seconds": 11.257
-    },
-    {
-      "id": "tests.temporal.test_receipts.test_receipt_cannot_substitute_an_alternate_accepted_prefix",
-      "seconds": 0.008
-    },
-    {
-      "id": "tests.temporal.test_receipts.test_candidate_requires_verified_workspace_bytes[False]",
+      "id": "tests.sdk.test_scaffold.test_bundled_template_matches_recorded_canonical_tree",
       "seconds": 0.004
     },
     {
+      "id": "tests.sdk.test_scaffold.test_unqualified_execution_revision_cannot_generate_incompatible_project[None]",
+      "seconds": 0.021
+    },
+    {
+      "id": "tests.sdk.test_scaffold.test_unqualified_execution_revision_cannot_generate_incompatible_project[0000000000000000000000000000000000000000]",
+      "seconds": 0.011
+    },
+    {
+      "id": "tests.sdk.test_scaffold.test_sdk_renderer_rejects_reserved_names_without_writing[zetra]",
+      "seconds": 0.015
+    },
+    {
+      "id": "tests.sdk.test_scaffold.test_sdk_renderer_rejects_reserved_names_without_writing[google]",
+      "seconds": 0.015
+    },
+    {
+      "id": "tests.sdk.test_scaffold.test_sdk_renderer_rejects_reserved_names_without_writing[class]",
+      "seconds": 0.015
+    },
+    {
+      "id": "tests.sdk.test_scaffold.test_sdk_renderer_rejects_reserved_names_without_writing[pytest]",
+      "seconds": 0.015
+    },
+    {
+      "id": "tests.sdk.test_scaffold.test_sdk_renderer_rejects_reserved_names_without_writing[yaml]",
+      "seconds": 0.014
+    },
+    {
+      "id": "tests.sdk.test_scaffold.test_sdk_renderer_rejects_reserved_names_without_writing[json]",
+      "seconds": 0.015
+    },
+    {
+      "id": "tests.sdk.test_scaffold.test_bundled_renderer_matches_recorded_canonical_implementation",
+      "seconds": 0.0
+    },
+    {
+      "id": "tests.sdk.test_workflow_identity.test_duplicate_submit_compares_exact_original_start",
+      "seconds": 0.006
+    },
+    {
+      "id": "tests.temporal.test_cleanup_identity.test_failed_cleanup_can_retry_but_success_cannot_be_replaced",
+      "seconds": 0.293
+    },
+    {
+      "id": "tests.temporal.test_faults.test_unaccepted_execution_never_redispatched[before_dispatch]",
+      "seconds": 1.027
+    },
+    {
+      "id": "tests.temporal.test_faults.test_unaccepted_execution_never_redispatched[after_effect]",
+      "seconds": 1.052
+    },
+    {
+      "id": "tests.temporal.test_faults.test_unaccepted_execution_never_redispatched[after_candidate]",
+      "seconds": 1.55
+    },
+    {
+      "id": "tests.temporal.test_faults.test_sigkill_worker_after_accepted_completion",
+      "seconds": 16.882
+    },
+    {
+      "id": "tests.temporal.test_faults.test_silent_remote_operation_keeps_heartbeating",
+      "seconds": 16.209
+    },
+    {
+      "id": "tests.temporal.test_faults.test_cancellation_stops_remote_work_and_removes_workspace",
+      "seconds": 8.817
+    },
+    {
+      "id": "tests.temporal.test_faults.test_missing_heartbeat_times_out_without_effect_retry",
+      "seconds": 11.126
+    },
+    {
+      "id": "tests.temporal.test_receipts.test_receipt_cannot_substitute_an_alternate_accepted_prefix",
+      "seconds": 0.007
+    },
+    {
+      "id": "tests.temporal.test_receipts.test_candidate_requires_verified_workspace_bytes[False]",
+      "seconds": 0.003
+    },
+    {
       "id": "tests.temporal.test_receipts.test_candidate_requires_verified_workspace_bytes[True]",
-      "seconds": 0.005
+      "seconds": 0.002
     },
     {
       "id": "tests.temporal.test_transport.test_scoped_authenticated_commands",
-      "seconds": 0.001
+      "seconds": 0.0
     },
     {
       "id": "tests.temporal.test_transport.test_protocol_size_and_command_allowlist",
-      "seconds": 0.002
+      "seconds": 0.001
     },
     {
       "id": "tests.temporal.test_transport.test_temporal_wire_size_checks_converted_unicode_not_only_canonical_json",
@@ -670,15 +1152,15 @@
     },
     {
       "id": "tests.temporal.test_workflow.test_real_history_and_completion_loss[False]",
-      "seconds": 9.269
+      "seconds": 4.201
     },
     {
       "id": "tests.temporal.test_workflow.test_real_history_and_completion_loss[True]",
-      "seconds": 1.286
+      "seconds": 0.774
     },
     {
       "id": "tests.temporal.test_workflow.test_worker_restart_reuses_accepted_results",
-      "seconds": 6.047
+      "seconds": 4.182
     }
   ]
 }

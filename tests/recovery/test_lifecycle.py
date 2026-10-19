@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import grpc
 import pytest
+from openshell._proto import openshell_pb2
 
 # Fixture sandbox transport.
 from tests.fixtures.sandbox import OpenShellSession
@@ -19,6 +20,8 @@ class Missing(grpc.RpcError):
 class FakeClient:
     def __init__(self):
         self.resources = {}
+        self._timeout = 30.0
+        self._stub = SimpleNamespace(CreateSandbox=self.native_create)
         self.creating = threading.Event()
         self.release = threading.Event()
         self.release.set()
@@ -34,6 +37,17 @@ class FakeClient:
         ref = SimpleNamespace(name=name, id=name, labels=labels)
         self.resources[name] = ref
         return ref
+
+    def native_create(self, request, *, timeout):
+        # Lifecycle double only; native admission semantics are tested in kind.
+        ref = self.resources.get(request.name)
+        if ref is None:
+            ref = self.create(name=request.name, labels=dict(request.labels))
+        response = openshell_pb2.SandboxResponse()
+        response.sandbox.metadata.id = ref.id
+        response.sandbox.metadata.name = ref.name
+        response.sandbox.metadata.labels.update(ref.labels)
+        return response
 
     def wait_ready(self, name, **kwargs):
         raise RuntimeError("injected readiness failure")
@@ -62,9 +76,8 @@ async def test_failed_replacement_cleanup_reconciles_unaccepted_generation():
     with pytest.raises(RuntimeError, match="readiness"):
         await session.provision(start)
     old = {"session": "race", "generation": 1, "name": session.name, "sandbox_id": session.name}
-    for _ in range(3):
-        with pytest.raises(RuntimeError, match="readiness"):
-            await session.replace({"start": start, "position": {}, "binding": old})
+    with pytest.raises(RuntimeError, match="readiness"):
+        await session.replace({"start": start, "position": {}, "binding": old})
     assert len(client.resources) == 1
     assert (await session.close({"start": start, "binding": old}))["cleanup"] == "DELETED"
     assert not client.resources

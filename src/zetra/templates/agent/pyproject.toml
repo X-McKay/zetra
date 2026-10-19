@@ -1,10 +1,28 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
+
 [project]
-name = "agent_package"
+name = "agent-package"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["zetra==0.1.0"]
+dependencies = ["zetra @ git+https://github.com/X-McKay/zetra.git@af2e7542b89265eaa4572a586719a67e58238e74"]
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "ruff>=0.11,<1"]
+
+[tool.zetra.agents]
+document_reader = "src/agent_package/agents/document_reader/agent.yaml"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_package"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.hatch.metadata]
+allow-direct-references = true

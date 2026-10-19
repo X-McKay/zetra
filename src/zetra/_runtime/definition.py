@@ -1,10 +1,11 @@
 """Import and validate an immutable agent definition inside its sandbox only."""
 
 import importlib
+from importlib.resources import files
 from pathlib import Path
 
 from ..agent import AgentContext
-from ..manifest import AgentSpec
+from ..manifest import AgentSpec, resource_parts
 from .records import decode_model, encode_model, thaw
 from .vllm import MODEL, VllmExecutor
 
@@ -57,10 +58,16 @@ class Definition:
     def __init__(self, spec, workspace):
         self.spec = AgentSpec.model_validate(spec).validate_policy()
         self.workspace = Path(workspace)
+        self.instruction = ""
+        if self.spec.instructions:
+            package, resource = resource_parts(self.spec.instructions)
+            self.instruction = (
+                files(package).joinpath(resource.as_posix()).read_text(encoding="utf-8")
+            )
         module, name = self.spec.entrypoint.split(":")
         self.factory = getattr(importlib.import_module(module), name)
         self.model = MODEL if self.spec.model == "vllm" else "fixture"
-        context = AgentContext(None, workspace=self.workspace, model=self.model)
+        context = self.context(None)
         agent = context.seal(self.factory(context))
         self.inventory = [
             (t.name, t._get_declaration().model_dump(mode="json")) for t in agent.tools
@@ -69,9 +76,14 @@ class Definition:
         self.registry[self.model] = VllmExecutor() if self.spec.model == "vllm" else fixture_model
 
     def build(self, bridge):
-        context = AgentContext(bridge, workspace=self.workspace, model=self.model)
+        context = self.context(bridge)
         agent = context.seal(self.factory(context))
         inventory = [(t.name, t._get_declaration().model_dump(mode="json")) for t in agent.tools]
         if inventory != self.inventory:
             raise ValueError("factory registration changed")
         return agent
+
+    def context(self, bridge):
+        return AgentContext(
+            bridge, workspace=self.workspace, model=self.model, instruction=self.instruction
+        )

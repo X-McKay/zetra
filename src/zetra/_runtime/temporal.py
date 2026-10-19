@@ -7,6 +7,7 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError, is_cancelled_exception
 
 SAFE_RETRY = RetryPolicy(maximum_attempts=3)
+CLEANUP_RETRY = RetryPolicy(maximum_interval=timedelta(seconds=30))
 ONCE = RetryPolicy(maximum_attempts=1)
 
 
@@ -44,7 +45,11 @@ class SessionWorkflow:
                 else 100
             ),
             heartbeat_timeout=timedelta(seconds=10),
-            retry_policy=ONCE if effect else SAFE_RETRY,
+            retry_policy=ONCE
+            if effect
+            else CLEANUP_RETRY
+            if name == "close_session"
+            else SAFE_RETRY,
             cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
 
@@ -133,4 +138,30 @@ class SessionWorkflow:
                 result["cleanup"] = closed["cleanup"]
             except ActivityError:
                 result["cleanup"] = "REMEDIATION_REQUIRED"
+        return result
+
+
+@workflow.defn
+class CleanupWorkflow:
+    """Durable, explicit cleanup of an exact terminal execution; no effect retry."""
+
+    @workflow.run
+    async def run(self, target: dict) -> dict:
+        result = await workflow.execute_activity(
+            "reconcile_session",
+            target,
+            start_to_close_timeout=timedelta(seconds=120),
+            schedule_to_close_timeout=timedelta(minutes=10),
+            heartbeat_timeout=timedelta(seconds=10),
+            retry_policy=CLEANUP_RETRY,
+        )
+        # A completed run is permanent deletion proof. Failed runs remain
+        # explicitly retryable under Temporal's FAILED_ONLY ID reuse policy.
+        if result.get("cleanup") != "DELETED":
+            raise ApplicationError(
+                "cleanup did not confirm deletion",
+                result,
+                type="CleanupNotConfirmed",
+                non_retryable=True,
+            )
         return result

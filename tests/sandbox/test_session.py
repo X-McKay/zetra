@@ -166,14 +166,18 @@ async def test_terminal_cleanup_and_external_reconciliation(tmp_path, terminal):
                     if progress["position"]:
                         break
                     await asyncio.sleep(0.5)
-            assert (await remote.reconcile_closed(temporal))["cleanup"] == "ACTIVE"
+            # This adapter test inspects a pinned execution. Public reconciliation
+            # is covered through the SDK's exact-run CleanupWorkflow tests.
+            exact = temporal.get_workflow_handle(session, run_id=handle.first_execution_run_id)
+            assert (await exact.describe()).status.name == "RUNNING"
             if terminal == "terminate":
                 await handle.terminate("prototype cleanup injection")
             else:
                 await handle.cancel()
             with pytest.raises(WorkflowFailureError):
                 await handle.result()
-            assert (await remote.reconcile_closed(temporal))["cleanup"] == "DELETED"
+            assert (await exact.describe()).status.name != "RUNNING"
+            assert (await remote.close_all())["cleanup"] == "DELETED"
     finally:
         await remote.close({"binding": remote.binding})
         client.close()

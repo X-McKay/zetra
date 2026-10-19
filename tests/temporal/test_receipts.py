@@ -6,7 +6,7 @@ from zetra._runtime.artifacts import FileStore, Tape
 from zetra._runtime.records import describe
 
 
-async def test_receipt_cannot_substitute_an_alternate_accepted_prefix(tmp_path):
+def test_receipt_cannot_substitute_an_alternate_accepted_prefix(tmp_path):
     tape = Tape(FileStore(tmp_path), manifest="probe-v1")
     first = describe("tool", "inspect", {}, index=0)
     accepted = tape.append_candidate(
@@ -22,16 +22,14 @@ async def test_receipt_cannot_substitute_an_alternate_accepted_prefix(tmp_path):
     candidate["previous"] = accepted.head.model_dump()
     activities = Activities(None, None, tape)
 
-    async def remote(action, payload):
-        return candidate
-
-    activities.remote = remote
-    with pytest.raises(ApplicationError):
-        await activities.execute({"position": accepted.model_dump(), "operation": second})
+    with pytest.raises(ApplicationError, match="candidate does not extend accepted head"):
+        activities.validate_receipt(
+            {"position": accepted.model_dump(), "operation": second}, candidate
+        )
 
 
 @pytest.mark.parametrize("corrupt", [False, True])
-async def test_candidate_requires_verified_workspace_bytes(tmp_path, corrupt):
+def test_candidate_requires_verified_workspace_bytes(tmp_path, corrupt):
     from zetra._runtime.artifacts import Ref
 
     tape = Tape(FileStore(tmp_path), manifest="probe-v1")
@@ -46,9 +44,7 @@ async def test_candidate_requires_verified_workspace_bytes(tmp_path, corrupt):
     )
     activities = Activities(None, None, tape)
 
-    async def remote(action, payload):
-        return candidate.model_dump()
-
-    activities.remote = remote
     with pytest.raises((ApplicationError, ValueError)):
-        await activities.execute({"position": initial.model_dump(), "operation": operation})
+        activities.validate_receipt(
+            {"position": initial.model_dump(), "operation": operation}, candidate.model_dump()
+        )

@@ -1,0 +1,8 @@
+schema_version: 1
+name: workspace_reporter
+owner: local-development
+entrypoint: workspace_reporter.agents.workspace_reporter.factory:create_agent
+model: fixture
+profile: serial-v1
+policy: workspace
+instructions: workspace_reporter.agents.workspace_reporter:instructions/base.md

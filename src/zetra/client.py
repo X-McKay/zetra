@@ -1,263 +1,223 @@
-"""External session owner. Agent imports and tool bodies never run here."""
+"""Thin Temporal SDK client; execution belongs to independently running workers."""
 
+import asyncio
 import hashlib
-import json
-import os
-import re
-import secrets
-from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 
+from temporalio.client import WorkflowFailureError, WorkflowQueryFailedError
+from temporalio.common import WorkflowIDReusePolicy
+from temporalio.exceptions import ApplicationError, WorkflowAlreadyStartedError
+from temporalio.service import RPCError
+
+from ._runtime.artifacts import Position, Ref
+from ._runtime.records import canonical_bytes
+from ._runtime.workspace import Workspace, validate_snapshot
 from .manifest import Release
-
-
-def session_directory(state, session):
-    if not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", session):
-        raise ValueError("session ID must contain 1..80 letters, digits, underscore or hyphen")
-    root = Path(state).resolve() / session
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if root.is_symlink():
-        raise ValueError("session directory cannot be a symlink")
-    root.chmod(0o700)
-    return root
-
-
-@contextmanager
-def session_lock(root):
-    import fcntl
-
-    with (root / "worker.lock").open("a") as handle:
-        try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise ValueError("session already has a local worker") from exc
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
-def policy_for(release):
-    import hashlib
-
-    from ._runtime.openshell import policy, vllm_policy
-
-    selected = vllm_policy() if release.agent.policy == "vllm-chat" else policy()
-    actual = hashlib.sha256(selected.SerializeToString(deterministic=True)).hexdigest()
-    if actual != release.policy_sha256:
-        raise ValueError("release policy digest does not match qualified policy")
-    return selected
-
-
-def gateway_identity():
-    tls = Path(os.environ["OPENSHELL_TLS_DIR"])
-    return {
-        "address": os.environ["OPENSHELL_ADDRESS"],
-        "workspace": "default",
-        "ca_sha256": hashlib.sha256((tls / "ca.crt").read_bytes()).hexdigest(),
-        "client_sha256": hashlib.sha256((tls / "tls.crt").read_bytes()).hexdigest(),
-    }
-
-
-def open_gateway():
-    from openshell import SandboxClient, TlsConfig
-
-    tls = Path(os.environ["OPENSHELL_TLS_DIR"])
-    return SandboxClient(
-        os.environ["OPENSHELL_ADDRESS"],
-        tls=TlsConfig(ca_path=tls / "ca.crt", cert_path=tls / "tls.crt", key_path=tls / "tls.key"),
-    )
+from .session import SessionHandle, SessionRequest, load_execution
 
 
 class SessionClient:
-    """One local external worker per session; persistent state is required to resume.
+    """Submit and inspect executions through a caller-configured Temporal client."""
 
-    This is a single-host SDK runner, not a distributed lifecycle lease service.
-    """
+    def __init__(self, temporal, *, task_queue, runtime_id, artifacts):
+        if not task_queue or not runtime_id:
+            raise ValueError("task_queue and runtime_id are required")
+        self.temporal = temporal
+        self.task_queue = task_queue
+        self.runtime_id = runtime_id
+        self.artifacts = artifacts
 
-    def __init__(self, *, state: Path, address: str, namespace="default"):
-        self.state, self.address, self.namespace = Path(state), address, namespace
-
-    async def connect(self):
-        # Remote production connections require a separately qualified TLS/identity configuration.
-        from urllib.parse import urlsplit
-
-        from temporalio.client import Client
-
-        if urlsplit("//" + self.address).hostname not in ("localhost", "127.0.0.1", "::1"):
-            raise ValueError("this qualified runner requires a loopback Temporal endpoint")
-        return await Client.connect(self.address, namespace=self.namespace)
-
-    async def run(self, release: Release, *, session: str, message: str, workspace=None):
-        from temporalio.client import WorkflowFailureError
-        from temporalio.common import WorkflowIDReusePolicy
-        from temporalio.exceptions import WorkflowAlreadyStartedError
-        from temporalio.worker import Worker
-
-        from ._runtime.activities import Activities
-        from ._runtime.artifacts import FileStore, Tape
-        from ._runtime.openshell import OpenShellSession
-        from ._runtime.temporal import SessionWorkflow
-        from ._runtime.workspace import Workspace
-
+    async def submit(self, release: Release, *, session: str, message: str, workspace=None):
         release = Release.model_validate(release.model_dump())
         release.agent.validate_policy()
-        selected_policy = policy_for(release)
-        if not isinstance(message, str) or not 0 < len(message.encode()) <= 32_000:
-            raise ValueError("message must contain 1..32000 UTF-8 bytes")
-        gateway_binding = gateway_identity()
-        root = session_directory(self.state, session)
-        with session_lock(root):
-            record_path = root / "session.json"
-            store = FileStore(root / "objects")
-            tape = Tape(store, manifest=release.identity)
-            if record_path.is_symlink():
-                raise ValueError("session record cannot be a symlink")
-            if record_path.exists():
-                record = json.loads(record_path.read_text())
-                if (
-                    record.get("backend") != [self.address, self.namespace]
-                    or record.get("gateway") != gateway_binding
-                    or record["release"] != release.model_dump()
-                    or record["start"]["message"] != message
-                ):
-                    raise ValueError(
-                        "session is pinned to another backend, gateway, release or input"
-                    )
-                if workspace is not None:
-                    raise ValueError("workspace cannot be resupplied when resuming")
-            else:
-                base = Path(workspace) if workspace is not None else root / "initial"
-                if workspace is None:
-                    base.mkdir(exist_ok=True)
-                position = tape.empty(Workspace(base, store).capture())
-                record = {
-                    "backend": [self.address, self.namespace],
-                    "gateway": gateway_binding,
-                    "release": release.model_dump(),
-                    "key": secrets.token_hex(32),
-                    "start": {
-                        "session": session,
-                        "message": message,
-                        "position": position.model_dump(),
-                        "release_id": release.identity,
-                    },
-                }
-                record["start"]["owner_key_id"] = hashlib.sha256(
-                    bytes.fromhex(record["key"])
-                ).hexdigest()
-                fd = os.open(record_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-                with os.fdopen(fd, "w") as handle:
-                    json.dump(record, handle)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-            client = await self.connect()
-            gateway = open_gateway()
-            remote = OpenShellSession(
-                gateway,
-                store,
-                session=session,
-                manifest=release.identity,
-                key=bytes.fromhex(record["key"]),
-                image=release.image,
-                sandbox_policy=selected_policy,
-                provider="vllm" if release.agent.model == "vllm" else "scripted",
-                agent_spec=release.agent.model_dump(),
+        if workspace is None:
+            snapshot = await asyncio.to_thread(
+                self.artifacts.put, canonical_bytes({"version": 1, "files": [], "directories": []})
             )
-            activities = Activities(remote, remote, tape)
+        else:
+            snapshot = await asyncio.to_thread(Workspace(Path(workspace), self.artifacts).capture)
+        request = SessionRequest(
+            session=session,
+            message=message,
+            position=Position(workspace=snapshot),
+            release=release,
+            runtime_id=self.runtime_id,
+            task_queue=self.task_queue,
+        )
+        start = request.start()
+        try:
+            execution = await self.temporal.start_workflow(
+                "SessionWorkflow",
+                start,
+                id=session,
+                task_queue=self.task_queue,
+                execution_timeout=timedelta(minutes=30),
+                id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
+            )
+            run_id = execution.first_execution_run_id
+        except WorkflowAlreadyStartedError as exc:
+            run_id = exc.run_id
+            if not run_id:
+                raise ValueError("duplicate Workflow did not identify its exact run") from exc
+            handle = self._handle(session, run_id)
+            verify_start(await load_execution(self.temporal, handle), start)
+            return handle
+        if not run_id:
+            raise ValueError("Workflow start did not return an execution run ID")
+        return self._handle(session, run_id)
+
+    def _handle(self, workflow_id, run_id):
+        return SessionHandle(
+            namespace=self.temporal.namespace,
+            workflow_id=workflow_id,
+            run_id=run_id,
+            runtime_id=self.runtime_id,
+        )
+
+    async def _execution(self, handle):
+        handle = SessionHandle.model_validate(handle)
+        if handle.namespace != self.temporal.namespace:
+            raise ValueError("handle namespace does not match Temporal client")
+        if handle.runtime_id != self.runtime_id:
+            raise ValueError("handle runtime does not match client")
+        start = await load_execution(self.temporal, handle)
+        if start["task_queue"] != self.task_queue:
+            raise ValueError("handle task queue does not match client")
+        return self.temporal.get_workflow_handle(handle.workflow_id, run_id=handle.run_id)
+
+    async def run(self, release: Release, *, session: str, message: str, workspace=None):
+        handle = await self.submit(release, session=session, message=message, workspace=workspace)
+        return await self.wait(handle)
+
+    async def wait(self, handle):
+        execution = await self._execution(handle)
+        try:
+            result = dict(await execution.result(follow_runs=False))
+            if result.get("cleanup") != "DELETED":
+                cleanup = await self._cleanup_result(SessionHandle.model_validate(handle))
+                if cleanup is not None:
+                    result.update({k: v for k, v in cleanup.items() if k.startswith("cleanup")})
+            return normalized_result(result)
+        except WorkflowFailureError:
+            return await self.reconcile(handle)
+
+    async def status(self, handle):
+        execution = await self._execution(handle)
+        state = (await execution.describe()).status.name
+        result = {
+            "handle": SessionHandle.model_validate(handle).model_dump(),
+            "workflow_status": state,
+            "progress": None,
+        }
+        if state == "RUNNING":
             try:
-                try:
-                    handle = await client.start_workflow(
-                        SessionWorkflow.run,
-                        record["start"],
-                        id=session,
-                        task_queue="zetra-" + session,
-                        execution_timeout=timedelta(minutes=30),
-                        id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
-                    )
-                except WorkflowAlreadyStartedError:
-                    handle = client.get_workflow_handle(session)
-                    history = await handle.fetch_history()
-                    payloads = history.events[
-                        0
-                    ].workflow_execution_started_event_attributes.input.payloads
-                    original = (await client.data_converter.decode(payloads, [dict]))[0]
-                    verify_start(original, record["start"])
-                async with Worker(
-                    client,
-                    task_queue="zetra-" + session,
-                    workflows=[SessionWorkflow],
-                    activities=activities.registered(),
-                ):
-                    try:
-                        result = normalized_result(await handle.result())
-                    except WorkflowFailureError:
-                        result = await terminal_result(handle, remote, client)
-                    (root / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-                    return result
-            finally:
-                gateway.close()
-
-    async def status(self, session):
-        from temporalio.client import WorkflowQueryFailedError
-
-        root = session_directory(self.state, session)
-        client = await self.connect()
-        handle = client.get_workflow_handle(session)
-        description = await handle.describe()
-        result = {"session": session, "workflow_status": description.status.name}
-        result["progress"] = None
-        if description.status.name == "RUNNING":
-            from temporalio.service import RPCError
-
-            try:
-                result["progress"] = await handle.query(
+                result["progress"] = await execution.query(
                     "progress", rpc_timeout=timedelta(seconds=3)
                 )
             except (WorkflowQueryFailedError, RPCError):
                 result["progress_available"] = False
-        if description.status.name == "COMPLETED":
-            result["result"] = normalized_result(await handle.result())
-        elif description.status.name != "RUNNING":
-            saved = root / "result.json"
-            record = root / "session.json"
-            if (
-                saved.exists()
-                and record.exists()
-                and json.loads(record.read_text()).get("backend") == [self.address, self.namespace]
-            ):
-                result["result"] = json.loads(saved.read_text())
+        else:
+            if state == "COMPLETED":
+                outcome = dict(await execution.result(follow_runs=False))
             else:
-                result["result"] = {
-                    "status": description.status.name,
+                outcome = {
+                    "status": state,
                     "cleanup": "NOT_CONFIRMED",
                     "effect_status": "OUTCOME_UNKNOWN",
                 }
+            if outcome.get("cleanup") != "DELETED":
+                cleanup = await self._cleanup_result(SessionHandle.model_validate(handle))
+                if cleanup is not None:
+                    outcome.update({k: v for k, v in cleanup.items() if k.startswith("cleanup")})
+            if state != "COMPLETED" and outcome.get("cleanup") != "DELETED":
+                outcome.update(status="REMEDIATION_REQUIRED", execution_status=state)
+            result["result"] = normalized_result(outcome)
         return result
 
-    async def read_files(self, session):
-        """Read hash-validated final workspace bytes after confirmed successful cleanup."""
-        from ._runtime.artifacts import FileStore, Ref
-        from ._runtime.workspace import validate_snapshot
+    async def cancel(self, handle):
+        execution = await self._execution(handle)
+        await execution.cancel()
+        return {
+            "handle": SessionHandle.model_validate(handle).model_dump(),
+            "status": "CANCELLATION_REQUESTED",
+            "cleanup": "NOT_CONFIRMED",
+        }
 
-        root = session_directory(self.state, session)
-        record = json.loads((root / "session.json").read_text())
-        if record.get("backend") != [self.address, self.namespace]:
-            raise ValueError("session backend mismatch")
-        result = (await self.status(session)).get("result", {})
+    async def reconcile(self, handle):
+        handle = SessionHandle.model_validate(handle)
+        execution = await self._execution(handle)
+        state = (await execution.describe()).status.name
+        if state == "RUNNING":
+            raise ValueError("cannot reconcile a running Workflow")
+        if state == "COMPLETED":
+            result = dict(await execution.result(follow_runs=False))
+            if result.get("cleanup") == "DELETED":
+                return normalized_result(result)
+        else:
+            result = {
+                "status": state,
+                "cleanup": "NOT_CONFIRMED",
+                "effect_status": "OUTCOME_UNKNOWN",
+            }
+        cleanup_id = _cleanup_id(handle)
+        try:
+            try:
+                cleanup = await self.temporal.start_workflow(
+                    "CleanupWorkflow",
+                    handle.model_dump(),
+                    id=cleanup_id,
+                    task_queue=self.task_queue,
+                    # Only DELETED completes this Workflow. Temporal atomically rejects
+                    # replacement of successful proof, including racing clients.
+                    id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY,
+                    execution_timeout=timedelta(minutes=15),
+                )
+            except WorkflowAlreadyStartedError as exc:
+                if not exc.run_id:
+                    raise ValueError("duplicate cleanup did not identify its exact run") from exc
+                cleanup = self.temporal.get_workflow_handle(cleanup_id, run_id=exc.run_id)
+                await _verify_cleanup(self.temporal, cleanup, exc.run_id, handle, self.task_queue)
+            cleanup_result = await cleanup.result(follow_runs=False)
+            # A cleanup Workflow can report deletion, never certainty about effects.
+            result.update({k: v for k, v in cleanup_result.items() if k.startswith("cleanup")})
+        except WorkflowFailureError as exc:
+            cause = exc.cause
+            if isinstance(cause, ApplicationError) and cause.type == "CleanupNotConfirmed":
+                result["cleanup"] = "NOT_CONFIRMED"
+            result["cleanup_error_type"] = type(exc).__name__
+        except Exception as exc:  # noqa: BLE001 - retain visible cleanup uncertainty
+            result["cleanup_error_type"] = type(exc).__name__
+        if state != "COMPLETED" and result["cleanup"] != "DELETED":
+            result.update(status="REMEDIATION_REQUIRED", execution_status=state)
+        return normalized_result(result)
+
+    async def _cleanup_result(self, handle):
+        """Read the latest cleanup, then pin its run and validate its original target."""
+        try:
+            latest = self.temporal.get_workflow_handle(_cleanup_id(handle))
+            description = await latest.describe()
+            if description.status.name != "COMPLETED":
+                return None
+            execution = self.temporal.get_workflow_handle(
+                _cleanup_id(handle), run_id=description.run_id
+            )
+            await _verify_cleanup(
+                self.temporal, execution, description.run_id, handle, self.task_queue
+            )
+            return await execution.result(follow_runs=False)
+        except (RPCError, ValueError, WorkflowFailureError):
+            return None
+
+    async def read_files(self, handle):
+        result = await self.wait(handle)
         if result.get("status") != "SUCCEEDED" or result.get("cleanup") != "DELETED":
             raise ValueError("final files require successful execution and confirmed deletion")
-        _, files = validate_snapshot(
-            FileStore(root / "objects").get(Ref.model_validate(result["position"]["workspace"]))
+        data = await asyncio.to_thread(
+            self.artifacts.get, Ref.model_validate(result["position"]["workspace"])
         )
-        return {path.as_posix(): data for path, data in files}
-
-    async def cancel(self, session):
-        session_directory(self.state, session)
-        client = await self.connect()
-        await client.get_workflow_handle(session).cancel()
-        return {"session": session, "status": "CANCELLATION_REQUESTED", "cleanup": "NOT_CONFIRMED"}
+        _, files = validate_snapshot(data)
+        return {path.as_posix(): content for path, content in files}
 
 
 def normalized_result(result):
@@ -268,19 +228,31 @@ def normalized_result(result):
 
 def verify_start(original, expected):
     if original != expected:
-        raise ValueError("existing Workflow belongs to another session owner or release")
+        raise ValueError("existing Workflow belongs to another session request or release")
 
 
-async def terminal_result(handle, remote, client):
-    """Reconcile only an observed closed Workflow; never infer effect success."""
-    status = (await handle.describe()).status.name
-    if status == "RUNNING":
-        raise RuntimeError("cannot reconcile a running Workflow")
-    result = {"status": status, "cleanup": "NOT_CONFIRMED", "effect_status": "OUTCOME_UNKNOWN"}
-    try:
-        result.update(await remote.reconcile_closed(client))
-    except Exception as exc:  # noqa: BLE001 - preserve an explicit failure report across provider errors
-        result["cleanup_error_type"] = type(exc).__name__
-    if result["cleanup"] != "DELETED":
-        result.update(status="REMEDIATION_REQUIRED", execution_status=status)
-    return result
+async def _verify_cleanup(client, execution, run_id, handle, task_queue):
+    history = await execution.fetch_history()
+    if not history.events or not history.events[0].HasField(
+        "workflow_execution_started_event_attributes"
+    ):
+        raise ValueError("cleanup Workflow history is unavailable")
+    attrs = history.events[0].workflow_execution_started_event_attributes
+    if (
+        attrs.workflow_type.name != "CleanupWorkflow"
+        or attrs.task_queue.name != task_queue
+        or attrs.continued_execution_run_id
+        or attrs.original_execution_run_id not in ("", run_id)
+        or attrs.first_execution_run_id not in ("", run_id)
+        or attrs.attempt > 1
+        or attrs.cron_schedule
+    ):
+        raise ValueError("unexpected cleanup Workflow identity or lineage")
+    values = await client.data_converter.decode(attrs.input.payloads, [dict])
+    if values != [handle.model_dump()]:
+        raise ValueError("cleanup Workflow belongs to another execution")
+
+
+def _cleanup_id(handle):
+    identity = canonical_bytes([handle.namespace, handle.workflow_id, handle.run_id])
+    return "zetra-cleanup-" + hashlib.sha256(identity).hexdigest()

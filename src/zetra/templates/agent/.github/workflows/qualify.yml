@@ -1,0 +1,35 @@
+name: Qualify sandbox
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: [self-hosted, zetra-kind]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: '0.13.1'
+          python-version: '3.12.14'
+      - name: Require configured infrastructure
+        env:
+          ENABLED: ${{ vars.ZETRA_QUALIFICATION_ENABLED }}
+        run: |
+          test "$ENABLED" = true
+          test -n "$OPENSHELL_ADDRESS"
+          test -n "$OPENSHELL_TLS_DIR"
+          test -n "$TEMPORAL_ADDRESS"
+          command -v docker
+          command -v kind
+          kind get clusters | grep -x zetra-validation
+      - run: uv sync --locked
+      - run: uv run --locked zetra build . --tag agent-package:qualification --kind --output release.json
+      - run: uv run --locked zetra eval . --mode sandbox --release release.json --output qualification.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sandbox-evaluation
+          path: |
+            release.json
+            qualification.json
