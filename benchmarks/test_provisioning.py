@@ -113,6 +113,7 @@ async def test_fresh_provisioning_comparison(tmp_path):
             try:
                 begin = time.perf_counter()
                 binding = await remote.provision(start)
+                await remote.wait_ready(binding)
                 elapsed = time.perf_counter() - begin
                 calls = list(observed.calls)
                 assert sum(call["method"] == "create" for call in calls) == 1

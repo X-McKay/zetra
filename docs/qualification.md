@@ -1,5 +1,52 @@
 # Qualification
 
+## Two-phase provisioning follow-up
+
+Execution revision `5a588f2fc7129a475cebb9203e1159e7b2cc6852` records native
+OpenShell creation acknowledgement before readiness. Replacement generations use
+the same split. Readiness retries on cold workers cannot create another sandbox;
+creation uncertainty remains conservative. Old combined Activities are thin
+compositions used by retained native Temporal histories, not another adapter.
+
+The locked local gate passed 285 tests, docs/examples/fixture evaluations,
+lint/format and lock checks. All 46 native cases passed across the initial full
+kind run (42 passes) and a focused four-case rerun. Three initial history-count
+assertions still assumed a combined Activity, and an abrupt-restart fixture lacked
+a readiness method. Those initial failures remain recorded; the corrected tests
+require a creation/readiness pair for each generation. No single clean native
+full-run pass is claimed. Five focused native provisioning recovery cases and
+five native Temporal cancellation cases also passed. Sol reviewed the implementation,
+conformance tests, phase deadlines and live absence checks without unresolved findings.
+
+All three benchmark tests passed. Public SDK fixture sessions were
+14.447/15.392/15.716s; the vLLM session was 20.220s, including provisioning and
+confirmed deletion, excluding shared Worker startup. Four transport sessions,
+four native controls, 18 reconstructions, prepared replay and ten fresh provisioning
+trials passed. These use the new external worker with the lab's existing pinned
+sandbox images. Separate small samples do not establish a causal speedup or p95.
+[Verification and compatibility tuple](../benchmarks/results/two-phase/verification.json)
+links the observed scope; raw
+[transport](../benchmarks/results/two-phase/latency.json),
+[SDK latency](../benchmarks/results/two-phase/sdk-latency.json) and
+[provisioning](../benchmarks/results/two-phase/provisioning.json) observations are retained.
+
+The new amd64 Kubani image pins the execution revision above. Its six standard
+qualifications and both deterministic model/tool SIGKILL controls passed, with
+replay, no unknown-effect redispatch and confirmed native/Kubernetes deletion.
+The native credential/isolation control passed, and final inspection found zero
+session sandboxes/pods/PVCs/PVs. The agent gate passed 44 tests, official MCP
+fixture evaluation and wheel checks. Normal sessions were
+28.865/23.168/28.802s (median 28.802s); creation plus readiness was
+9.332–9.386s. Model/tool counts varied, so this does not isolate SDK overhead.
+
+The original supervisor-start failure remains failed with `NOT_CONFIRMED`; its
+22-event history replays successfully. The intermittent upstream stall was not
+reproduced or fixed. Acknowledged creation followed by readiness failure/cancellation
+now confirms deletion, including after worker loss. Unacknowledged or retired
+creation still requires native admission closure to establish stronger proof;
+no SDK controller, token service or additional durability engine was added.
+
+
 ## ToolContext admission follow-up
 
 SDK revision `af2e7542b89265eaa4572a586719a67e58238e74` rejects the pinned
@@ -366,3 +413,32 @@ controlled estimate of pure SDK overhead. The final worker/sandbox replacement
 runs took 30.180/48.893s; native cancellation took 19.801s. Final global inspection
 found zero native sandboxes, session pods/PVCs and session PV objects; shared POC
 infrastructure and artifact storage remain deployed.
+
+## Shared CLI follow-up (2026-10-19)
+
+SDK implementation `12647b3` passed the full locked local gate: 272 tests,
+42 cluster cases deselected, plus docs, examples, fixture evaluations, lint and
+lock checks. A separate complete kind run passed all 42 cluster cases, including
+live vLLM, recovery, cancellation, cleanup and replay. Four native cancellation
+regressions also passed against the isolated Kubani POC Temporal namespace.
+
+All three opt-in benchmark tests passed. The public SDK session samples were
+15.762/19.744/16.210 seconds with the fixture model and 23.205 seconds with vLLM,
+including fresh provisioning and confirmed deletion, excluding shared worker
+startup. Those sandbox releases retain SDK `61a579c`; the external worker uses the
+current SDK. The lower-level transport benchmark passed four durable samples,
+four native controls, 18 reconstruction samples and prepared replay. Fresh
+provisioning passed ten interleaved scripted/vLLM trials on the existing lab
+baseline/candidate images, with distinct identities and fresh workspace checks.
+These are regression observations; they do not establish a performance change,
+p95, or new MCP image qualification.
+
+The newly built Kubani investigator pins `12647b3` inside its immutable agent
+image and invokes the shared CLI for its worker and clients. Its exact image,
+model/tool SIGKILL controls, successful live sessions and retained failures are
+recorded in [Kubani POC findings](https://github.com/X-McKay/kubani/pull/219).
+The fault gate is application test code, outside the SDK. A pre-gate native
+supervisor startup failure retained `NOT_CONFIRMED` after cancellation before
+accepted provisioning; later observed absence does not upgrade that lifecycle
+proof. Separate fresh model and tool loss tests passed with unknown outcomes,
+no redispatch, replay and confirmed native/Kubernetes deletion.

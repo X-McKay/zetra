@@ -267,11 +267,6 @@ class OpenShellSession:
         self.verify_release(ref)
         if self.release_labels and ref.labels.get("bridge-generation") != str(self.generation):
             raise ProtocolError("sandbox generation mismatch")
-        ready = await asyncio.to_thread(
-            self.client.wait_ready, self.name, workspace="default", timeout_seconds=180
-        )
-        if ready.id != ref.id or ready.phase != 2:
-            raise ValueError("sandbox is not running")
         self.binding = {
             "session": self.session,
             "generation": self.generation,
@@ -279,6 +274,26 @@ class OpenShellSession:
             "sandbox_id": ref.id,
             "position": start["position"],
         }
+        return self.binding
+
+    async def wait_ready(self, binding):
+        """Observe an acknowledged instance; never create or replace a sandbox."""
+        self.select_binding(binding)
+        current = await asyncio.to_thread(self.client.get, self.name, workspace="default")
+        self.verify_release(current)
+        if (
+            current.id != binding["sandbox_id"]
+            or current.labels.get("bridge-session")
+            != hashlib.sha256(self.session.encode()).hexdigest()[:32]
+            or current.labels.get("bridge-generation") != str(self.generation)
+        ):
+            raise ProtocolError("sandbox readiness identity mismatch")
+        ready = await asyncio.to_thread(
+            self.client.wait_ready, self.name, workspace="default", timeout_seconds=180
+        )
+        self.verify_release(ready)
+        if ready.id != binding["sandbox_id"] or ready.phase != 2:
+            raise ProtocolError("sandbox readiness identity or phase mismatch")
         # Readiness means the supervisor is ready; wait for this service's socket.
         result = await asyncio.to_thread(
             self.client.exec,

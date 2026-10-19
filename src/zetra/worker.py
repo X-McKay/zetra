@@ -68,7 +68,11 @@ async def settled_provisioning(client, handle):
     for event in history.events:
         if event.HasField("activity_task_scheduled_event_attributes"):
             attrs = event.activity_task_scheduled_event_attributes
-            if attrs.activity_type.name in ("provision_session", "rebind_session"):
+            if attrs.activity_type.name in (
+                "provision_session",
+                "rebind_session",
+                "create_session",
+            ):
                 scheduled.add(event.event_id)
         elif event.HasField("activity_task_started_event_attributes"):
             attrs = event.activity_task_started_event_attributes
@@ -187,7 +191,7 @@ class ActivityRouter:
                 if command != context.start:
                     raise ApplicationError("start mismatch", non_retryable=True)
                 command = {**command, "session": execution_session(handle)}
-            elif name in ("rebind_session", "close_session"):
+            elif name in ("rebind_session", "create_session", "close_session"):
                 if command["start"] != context.start:
                     raise ApplicationError("start mismatch", non_retryable=True)
                 command = {
@@ -206,6 +210,14 @@ class ActivityRouter:
     @activity.defn
     async def rebind_session(self, command: dict) -> dict:
         return await self.invoke("rebind_session", command)
+
+    @activity.defn
+    async def create_session(self, command: dict) -> dict:
+        return await self.invoke("create_session", command)
+
+    @activity.defn
+    async def wait_session_ready(self, binding: dict) -> dict:
+        return await self.invoke("wait_session_ready", binding)
 
     @activity.defn
     async def advance_runner(self, command: dict) -> dict:
@@ -251,6 +263,8 @@ class ActivityRouter:
         return [
             self.provision_session,
             self.rebind_session,
+            self.create_session,
+            self.wait_session_ready,
             self.advance_runner,
             self.execute_model,
             self.execute_tool,

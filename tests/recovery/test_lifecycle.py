@@ -74,10 +74,12 @@ async def test_failed_replacement_cleanup_reconciles_unaccepted_generation():
     session = remote(client)
     start = {"session": "race", "message": "Inspect", "position": {}}
     with pytest.raises(RuntimeError, match="readiness"):
-        await session.provision(start)
+        await session.wait_ready(await session.provision(start))
     old = {"session": "race", "generation": 1, "name": session.name, "sandbox_id": session.name}
     with pytest.raises(RuntimeError, match="readiness"):
-        await session.replace({"start": start, "position": {}, "binding": old})
+        await session.wait_ready(
+            await session.replace({"start": start, "position": {}, "binding": old})
+        )
     assert len(client.resources) == 1
     assert (await session.close({"start": start, "binding": old}))["cleanup"] == "DELETED"
     assert not client.resources
@@ -95,7 +97,9 @@ async def cleanup_fixture():
     client = FakeClient()
     session = remote(client)
     with pytest.raises(RuntimeError, match="readiness"):
-        await session.provision({"session": "race", "message": "Inspect", "position": {}})
+        await session.wait_ready(
+            await session.provision({"session": "race", "message": "Inspect", "position": {}})
+        )
     binding = {"session": "race", "generation": 1, "name": session.name, "sandbox_id": session.name}
     return client, session, binding
 
@@ -237,3 +241,32 @@ async def test_terminal_cleanup_fences_a_delayed_initial_lookup():
     with pytest.raises(ProtocolError, match="closing"):
         await task
     assert not client.resources
+
+
+async def test_create_acknowledges_binding_before_readiness_failure():
+    client = FakeClient()
+    session = remote(client)
+    binding = await session.provision({"session": "race", "message": "Inspect", "position": {}})
+    assert binding["sandbox_id"] == client.get(binding["name"]).id
+    assert len(client.resources) == 1
+    with pytest.raises(RuntimeError, match="readiness"):
+        await remote(client).wait_ready(binding)
+    assert (await remote(client).close({"binding": binding}))["cleanup"] == "DELETED"
+    assert not client.resources
+
+
+async def test_cold_readiness_refuses_changed_instance_without_allocating():
+    from zetra._runtime.transport import ProtocolError
+
+    client = FakeClient()
+    binding = await remote(client).provision(
+        {"session": "race", "message": "Inspect", "position": {}}
+    )
+    original = client.get(binding["name"])
+    client.resources[binding["name"]] = SimpleNamespace(
+        name=original.name, id="replacement", labels=original.labels
+    )
+    with pytest.raises(ProtocolError, match="identity"):
+        await remote(client).wait_ready(binding)
+    assert len(client.resources) == 1
+    assert client.get(binding["name"]).id == "replacement"

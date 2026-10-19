@@ -27,9 +27,13 @@ pytestmark = pytest.mark.cluster
 class CompletedFixture:
     """Complete the real Workflow without invoking any sandbox transport."""
 
-    @activity.defn(name="provision_session")
-    async def provision(self, start: dict) -> dict:
-        return {"position": start["position"]}
+    @activity.defn(name="create_session")
+    async def provision(self, command: dict) -> dict:
+        return {"position": command["start"]["position"]}
+
+    @activity.defn(name="wait_session_ready")
+    async def ready(self, binding: dict) -> dict:
+        return binding
 
     @activity.defn(name="advance_runner")
     async def advance(self, command: dict) -> dict:
@@ -106,7 +110,7 @@ async def test_real_reset_history_is_rejected_before_sandbox_access(tmp_path):
         temporal,
         task_queue=request.task_queue,
         workflows=[SessionWorkflow],
-        activities=[fixture.provision, fixture.advance, fixture.close],
+        activities=[fixture.provision, fixture.ready, fixture.advance, fixture.close],
     ):
         original = await temporal.start_workflow(
             SessionWorkflow.run,

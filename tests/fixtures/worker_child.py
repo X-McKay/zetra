@@ -21,6 +21,9 @@ async def main():
         async def provision(self, start):
             return config["binding"]
 
+        async def wait_ready(self, binding):
+            return binding
+
         async def close(self, command):
             return await transport.call("close", command)
 

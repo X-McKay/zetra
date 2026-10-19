@@ -3,9 +3,14 @@
 import argparse
 import asyncio
 import json
+import math
 import os
+import shutil
+import signal
 import subprocess
 import sys
+import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 
@@ -39,6 +44,9 @@ def parser():
     run.add_argument("--session", required=True)
     run.add_argument("--input", required=True)
     run.add_argument("--workspace")
+    run.add_argument(
+        "--output", help="SDK-owned replaceable export directory for handle, result and workspace"
+    )
     for name in ("status", "cancel"):
         cmd = sub.add_parser(name)
         cmd.add_argument("handle", help="path to a SessionHandle JSON file")
@@ -48,10 +56,95 @@ def parser():
     qualify.add_argument("--suite", choices=["tests", "latency", "provisioning"], default="tests")
     worker = sub.add_parser("worker")
     worker.add_argument("--key-file", required=True)
+    worker.add_argument(
+        "--release", action="append", default=[], help="approve this release file (repeatable)"
+    )
+    worker.add_argument(
+        "--provider",
+        action="append",
+        default=[],
+        help="native OpenShell provider name (repeatable)",
+    )
+    worker.add_argument("--graceful-shutdown-seconds", type=grace_seconds, default=20)
     p.add_argument("--artifacts", default=".zetra/objects")
     p.add_argument("--task-queue", default="zetra")
     p.add_argument("--runtime-id", default="local")
     return p
+
+
+def grace_seconds(value):
+    number = float(value)
+    if not math.isfinite(number) or number < 0:
+        raise argparse.ArgumentTypeError("grace must be finite and nonnegative")
+    return number
+
+
+async def _run_worker(worker):
+    loop = asyncio.get_running_loop()
+    shutdown = None
+
+    def request_shutdown():
+        nonlocal shutdown
+        if shutdown is None:
+            shutdown = asyncio.create_task(worker.shutdown())
+
+    for selected in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(selected, request_shutdown)
+    try:
+        await worker.run()
+    finally:
+        if shutdown is not None:
+            await shutdown
+        for selected in (signal.SIGTERM, signal.SIGINT):
+            loop.remove_signal_handler(selected)
+
+
+def _write_json(path, value):
+    # These are disposable receipts/exports. Temporal remains recovery authority.
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(json.dumps(value, indent=2) + "\n")
+            stream.close()
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+_EXPORT_MARKER = ".zetra-export"
+_EXPORT_FORMAT = "zetra-export-v1\n"
+
+
+def _check_output(path, *, artifacts, workspace):
+    output = Path(path)
+    marker = output / _EXPORT_MARKER
+    if output.is_symlink() or (output / "workspace").is_symlink() or marker.is_symlink():
+        raise ValueError("output and workspace must not be symlinks")
+    resolved = output.resolve()
+    for source in (artifacts, workspace):
+        if source is not None:
+            backing = Path(source).resolve()
+            if resolved == backing or resolved in backing.parents or backing in resolved.parents:
+                raise ValueError("export must not overlap input workspace or artifact backing")
+    if output.exists() and (
+        not output.is_dir()
+        or (
+            any(output.iterdir()) and (not marker.is_file() or marker.read_text() != _EXPORT_FORMAT)
+        )
+    ):
+        raise ValueError("export directory must be empty or an existing Zetra export")
+    return output
+
+
+def _prepare_output(output):
+    output.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # This static marker permits replacing exports, never selecting recovery progress.
+    (output / _EXPORT_MARKER).write_text(_EXPORT_FORMAT)
+    (output / "result.json").unlink(missing_ok=True)
+    workspace = output / "workspace"
+    if workspace.exists():
+        shutil.rmtree(workspace)
+    return output
 
 
 def open_gateway():
@@ -92,8 +185,13 @@ async def execute(args, load_release):
                 sandbox_client=gateway,
                 artifacts=artifacts,
                 key=Path(args.key_file).read_bytes(),
+                approved_releases={load_release(path).identity for path in args.release}
+                if args.release
+                else None,
+                providers=args.provider,
+                graceful_shutdown_timeout=timedelta(seconds=args.graceful_shutdown_seconds),
             )
-            await worker.run()
+            await _run_worker(worker)
         finally:
             gateway.close()
         return {"status": "STOPPED"}
@@ -115,6 +213,13 @@ async def execute(args, load_release):
             client=client,
         )
     if args.command == "run":
+        from .client import normalized_result
+
+        output = (
+            _check_output(args.output, artifacts=args.artifacts, workspace=args.workspace)
+            if args.output
+            else None
+        )
         handle = await client.submit(
             load_release(args.release),
             session=args.session,
@@ -123,7 +228,31 @@ async def execute(args, load_release):
         )
         # Emit the handle before waiting so an interrupted CLI can resume inspection.
         print(handle.model_dump_json(), file=sys.stderr, flush=True)
-        return {"handle": handle.model_dump(), "result": await client.wait(handle)}
+        if output:
+            _prepare_output(output)
+            _write_json(output / "handle.json", handle.model_dump())
+        result = normalized_result(await client.wait(handle))
+        if output:
+            if result.get("status") == "SUCCEEDED" and result.get("cleanup") == "DELETED":
+                files = await client.read_files(handle)
+                with tempfile.TemporaryDirectory(dir=output) as directory:
+                    staged = Path(directory) / "workspace"
+                    staged.mkdir(mode=0o700)
+                    for name, content in files.items():
+                        target = staged / name
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(content)
+                    staged.replace(output / "workspace")
+            _write_json(output / "result.json", result)
+        return {
+            "handle": handle.model_dump(),
+            "result": {
+                "status": result.get("status"),
+                "cleanup": result.get("cleanup"),
+                "cursor": (result.get("position") or {}).get("cursor"),
+                "final_text": (result.get("result") or {}).get("final_text"),
+            },
+        }
     from .session import SessionHandle
 
     handle = SessionHandle.model_validate_json(Path(args.handle).read_text())
@@ -198,7 +327,7 @@ def main(argv=None):
         else:
             result = asyncio.run(execute(args, load_release))
         encoded = json.dumps(result, indent=2) + "\n"
-        if getattr(args, "output", None):
+        if getattr(args, "output", None) and args.command != "run":
             Path(args.output).write_text(encoded)
         else:
             print(encoded, end="")

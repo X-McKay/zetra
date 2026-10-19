@@ -71,3 +71,38 @@ Four real-server regressions cover successful provision, advance, execute and
 cleanup completion after cancellation, including an empty cancellation reason.
 They require CANCELED, no subsequent business boundaries, cleanup and replay.
 The original failed live cancellation observation is retained in the POC report.
+
+The shared CLI forwards native provider names, release approvals and Temporal
+graceful shutdown. Run exports save the exact handle before waiting, publish
+verified workspace files separately from metadata, and use a static local export
+ownership marker plus path-overlap guards. These receipts do not select progress
+or implement recovery; Temporal and immutable artifacts remain authoritative.
+
+The shared-CLI follow-up passed the full locked local gate (272 cases) and all
+42 dedicated kind cluster cases, including live vLLM, provisioning/recovery,
+cleanup, cancellation and history replay. Existing immutable sandbox images keep
+their recorded pins; the updated external worker runs this SDK revision. Kubani
+uses a newly built agent image pinned to the CLI implementation and supplies
+separate real MCP qualification. Test-only model/tool completion gates kill the
+exact worker child before Activity acceptance; no production fault hook is added.
+
+
+### Two-phase provisioning
+
+Creation acknowledgement and sandbox readiness are separate Temporal boundaries.
+The Workflow records the immutable binding before waiting for readiness; cold
+workers use that binding without creating another sandbox. Existing histories use
+native Temporal patching and thin combined Activity wrappers. Readiness failures
+and cancellations retain normal confirmed-deletion checks. Unacknowledged or retired
+create attempts still yield `NOT_CONFIRMED`; the original Kubani supervisor-start
+failure remains a failed observation. No gateway-side admission closure is claimed.
+
+
+Qualification of this split: 285 local tests passed; 46 native cases passed across
+42 passes in the initial full run and four cases on a focused rerun. Five focused
+creation/readiness recovery cases and five Temporal cancellation cases passed.
+The original failed history replays unchanged. All three benchmark cases and
+eight fresh Kubani qualifications passed, with final native/Kubernetes session
+resource absence and the exact new-image native credential/isolation control.
+See [the qualification report](qualification.md) for retained initial failures,
+compatibility tuples and measurement limits.

@@ -20,7 +20,8 @@ pytestmark = pytest.mark.cluster
 @pytest.mark.parametrize(
     "boundary,effects",
     [
-        ("provision_session", []),
+        ("create_session", []),
+        ("wait_session_ready", []),
         ("advance_runner", []),
         ("execute_model", ["fixture"]),
         ("close_session", ["fixture", "inspect_repository", "fixture", "write_report", "fixture"]),
@@ -46,9 +47,14 @@ async def test_successful_activity_after_cancel_stops_next_boundary(tmp_path, bo
                 await release.wait()
 
         @activity.defn
-        async def provision_session(self, command: dict) -> dict:
-            await self.gate("provision_session")
-            return await super().provision_session(command)
+        async def create_session(self, command: dict) -> dict:
+            await self.gate("create_session")
+            return await super().create_session(command)
+
+        @activity.defn
+        async def wait_session_ready(self, command: dict) -> dict:
+            await self.gate("wait_session_ready")
+            return await super().wait_session_ready(command)
 
         @activity.defn
         async def advance_runner(self, command: dict) -> dict:

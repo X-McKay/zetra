@@ -58,7 +58,15 @@ async def test_sdk_latency(tmp_path):
                 ).fetch_history()
                 rows = activity_timings(history)
                 active = [
-                    row for row in rows if row["name"] not in ("provision_session", "close_session")
+                    row
+                    for row in rows
+                    if row["name"]
+                    not in (
+                        "provision_session",
+                        "create_session",
+                        "wait_session_ready",
+                        "close_session",
+                    )
                 ]
                 samples.append(
                     {

@@ -61,6 +61,9 @@ class FixtureRuntime:
     async def provision(self, start):
         return {"session": self.session, "generation": 1, "position": self.initial.model_dump()}
 
+    async def wait_ready(self, binding):
+        return binding
+
     async def handle(self, request):
         action, payload = self.authority.verify(await request.json())
         if action == "close":

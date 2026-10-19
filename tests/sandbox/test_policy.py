@@ -48,6 +48,7 @@ async def test_policy_enforced_inside_real_workload_and_identity_scoped(gateway,
         binding = await runtime.provision(
             {"session": ident, "message": "policy check", "position": position.model_dump()}
         )
+        await runtime.wait_ready(binding)
         code = """import json,pathlib,socket,os
 results={}
 p=pathlib.Path('/sandbox/allowed');p.write_text('ok');results['workspace']=p.read_text()=='ok'
@@ -137,6 +138,7 @@ async def test_agent_specific_policy_can_allow_only_the_named_canary(gateway, tm
         binding = await runtime.provision(
             {"session": ident, "message": "policy check", "position": position.model_dump()}
         )
+        await runtime.wait_ready(binding)
         result = await asyncio.to_thread(
             gateway.exec,
             binding["name"],
@@ -189,6 +191,7 @@ print(json.dumps({'marker':(workspace/'session-marker').read_text(),'caches':len
             start = {"session": session, "message": "freshness", "position": position.model_dump()}
             sessions.append((remote, start))
             binding = await remote.provision(start)
+            await remote.wait_ready(binding)
             result = await asyncio.to_thread(
                 gateway.exec,
                 binding["name"],

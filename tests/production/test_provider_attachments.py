@@ -26,8 +26,7 @@ async def test_native_providers_are_rebound_identically_after_worker_loss():
         remote = OpenShellSession(
             client, None, session="one", manifest="m", key=b"x" * 32, providers=names
         )
-        with pytest.raises(RuntimeError, match="readiness"):
-            await remote.provision(start)
+        await remote.provision(start)
     requests = [request for request, _ in client.requests]
     assert list(requests[0].spec.providers) == ["inference", "k8s-read"]
     assert requests[0].SerializeToString(deterministic=True) == requests[1].SerializeToString(

@@ -82,7 +82,7 @@ async def test_lost_create_ack_fresh_worker_replays_native_request(tmp_path, mon
         native_create = gateway._stub.CreateSandbox
         requests, responses = [], []
         lost_ack = asyncio.Event()
-        original_provision = Activities.provision_session
+        original_create = Activities.create_session
 
         def create(request, **kwargs):
             requests.append(copy_request(request))
@@ -92,9 +92,9 @@ async def test_lost_create_ack_fresh_worker_replays_native_request(tmp_path, mon
                 raise InjectedRpcError(grpc.StatusCode.UNAVAILABLE)
             return response
 
-        async def park_lost_ack(self, start):
+        async def park_lost_ack(self, command):
             try:
-                return await original_provision(self, start)
+                return await original_create(self, command)
             except InjectedRpcError:
                 lost_ack.set()
                 await asyncio.Event().wait()
@@ -103,7 +103,7 @@ async def test_lost_create_ack_fresh_worker_replays_native_request(tmp_path, mon
         monkeypatch.setattr(gateway._stub, "CreateSandbox", create)
         try:
             with monkeypatch.context() as patch:
-                patch.setattr(Activities, "provision_session", park_lost_ack)
+                patch.setattr(Activities, "create_session", park_lost_ack)
                 async with create_worker(
                     temporal,
                     sandbox_client=gateway,
@@ -160,7 +160,7 @@ async def test_retired_delayed_create_cannot_prove_deletion(tmp_path, monkeypatc
         native_create = gateway._stub.CreateSandbox
         release_dispatch = threading.Event()
         retired = asyncio.Event()
-        original_provision = Activities.provision_session
+        original_create = Activities.create_session
         requests = []
         executor = ThreadPoolExecutor(max_workers=1)
         late = None
@@ -177,9 +177,9 @@ async def test_retired_delayed_create_cannot_prove_deletion(tmp_path, monkeypatc
                 raise InjectedRpcError(grpc.StatusCode.UNAVAILABLE)
             return native_create(request, **kwargs)
 
-        async def park_retired(self, start):
+        async def park_retired(self, command):
             try:
-                return await original_provision(self, start)
+                return await original_create(self, command)
             except InjectedRpcError:
                 retired.set()
                 await asyncio.Event().wait()
@@ -188,7 +188,7 @@ async def test_retired_delayed_create_cannot_prove_deletion(tmp_path, monkeypatc
         response = None
         try:
             with monkeypatch.context() as patch:
-                patch.setattr(Activities, "provision_session", park_retired)
+                patch.setattr(Activities, "create_session", park_retired)
                 async with create_worker(
                     temporal,
                     sandbox_client=gateway,
@@ -239,3 +239,113 @@ async def test_retired_delayed_create_cannot_prove_deletion(tmp_path, monkeypatc
             if response is not None:
                 await remove_exact(gateway, response.sandbox.metadata)
             executor.shutdown(wait=False)
+
+
+@pytest.mark.parametrize("recovery", ["failure", "replacement_failure", "replacement_cancel"])
+async def test_recorded_create_readiness_failure_confirms_native_deletion(
+    tmp_path, monkeypatch, recovery
+):
+    """Readiness retries and cancellation cannot retire or repeat a settled create."""
+    async with sdk_runtime(tmp_path) as (temporal, client, gateway, key, options):
+        release = load_release(".state/reporter-release.json")
+        native_create = gateway._stub.CreateSandbox
+        original_ready = Activities.wait_session_ready
+        responses = []
+        readiness = asyncio.Event()
+        attempts = []
+        handle = None
+
+        def create(request, **kwargs):
+            response = native_create(request, **kwargs)
+            responses.append(response)
+            return response
+
+        def fail_supervisor_readiness(*args, **kwargs):
+            raise ValueError("injected native supervisor readiness failure")
+
+        async def wait_ready(self, command):
+            # Temporal cannot dispatch this Activity until creation's immutable
+            # binding has been accepted into Workflow history.
+            attempts.append(command)
+            readiness.set()
+            if recovery != "failure" and len(attempts) == 1:
+                await asyncio.Event().wait()
+            return await original_ready(self, command)
+
+        monkeypatch.setattr(gateway._stub, "CreateSandbox", create)
+        monkeypatch.setattr(gateway, "wait_ready", fail_supervisor_readiness)
+        monkeypatch.setattr(Activities, "wait_session_ready", wait_ready)
+        try:
+            async with create_worker(
+                temporal,
+                sandbox_client=gateway,
+                key=key,
+                graceful_shutdown_timeout=timedelta(seconds=0),
+                **options,
+            ):
+                handle = await client.submit(
+                    release,
+                    session="ready-failure-" + uuid.uuid4().hex,
+                    message="Complete your task.",
+                )
+                await asyncio.wait_for(readiness.wait(), timeout=180)
+                workflow = temporal.get_workflow_handle(handle.workflow_id, run_id=handle.run_id)
+                history = await workflow.fetch_history()
+                completed_ids = {
+                    event.activity_task_completed_event_attributes.scheduled_event_id
+                    for event in history.events
+                    if event.HasField("activity_task_completed_event_attributes")
+                }
+                assert any(
+                    event.event_id in completed_ids
+                    and event.activity_task_scheduled_event_attributes.activity_type.name
+                    == "create_session"
+                    for event in history.events
+                    if event.HasField("activity_task_scheduled_event_attributes")
+                ), "creation binding must be recorded before readiness"
+                if recovery == "failure":
+                    result = await asyncio.wait_for(client.wait(handle), timeout=180)
+            if recovery != "failure":
+                # Reopen artifacts and instantiate a new router/lifecycle after
+                # losing the original worker during the readiness Activity.
+                replacement_options = {**options, "artifacts": FileStore(tmp_path / "objects")}
+                replacement = SessionClient(temporal, **replacement_options)
+                if recovery == "replacement_cancel":
+                    await replacement.cancel(handle)
+                async with sdk_worker(temporal, gateway, key, replacement_options):
+                    result = await asyncio.wait_for(replacement.wait(handle), timeout=240)
+            assert result["cleanup"] == "DELETED", result
+            if recovery != "replacement_cancel":
+                assert result["status"] == "FAILED", result
+            assert len(responses) == 1, "readiness retry must never allocate a sandbox"
+            if recovery == "replacement_failure":
+                assert len(attempts) == 2
+                assert attempts[0] == attempts[1], "readiness retries must retain the binding"
+            ref = responses[0].sandbox.metadata
+            with pytest.raises(grpc.RpcError) as missing:
+                await asyncio.to_thread(gateway.get, ref.name, workspace="default")
+            assert missing.value.code() == grpc.StatusCode.NOT_FOUND
+            await asyncio.to_thread(
+                gateway.wait_deleted,
+                ref.name,
+                workspace="default",
+                expected_sandbox_id=ref.id,
+                timeout_seconds=60,
+            )
+            history = await workflow.fetch_history()
+            scheduled = [
+                event.activity_task_scheduled_event_attributes.activity_type.name
+                for event in history.events
+                if event.HasField("activity_task_scheduled_event_attributes")
+            ]
+            assert scheduled.count("create_session") == 1
+            assert "execute_model" not in scheduled
+            assert "execute_tool" not in scheduled
+            await Replayer(workflows=[SessionWorkflow]).replay_workflow(history)
+        finally:
+            if handle is not None:
+                workflow = temporal.get_workflow_handle(handle.workflow_id, run_id=handle.run_id)
+                if (await workflow.describe()).status.name == "RUNNING":
+                    await workflow.terminate(reason="readiness recovery test teardown")
+            for response in responses:
+                await remove_exact(gateway, response.sandbox.metadata)

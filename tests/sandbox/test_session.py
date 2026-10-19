@@ -112,7 +112,15 @@ async def test_temporal_owned_sandbox_and_cold_replacement(tmp_path, replace):
         completed = [
             e for e in history.events if e.HasField("activity_task_completed_event_attributes")
         ]
-        assert len(completed) == (14 if replace is True else 13)
+        assert len(completed) == (16 if replace is True else 14)
+        scheduled = [
+            e.activity_task_scheduled_event_attributes.activity_type.name
+            for e in history.events
+            if e.HasField("activity_task_scheduled_event_attributes")
+        ]
+        generations = 2 if replace is True else 1
+        assert scheduled.count("create_session") == generations
+        assert scheduled.count("wait_session_ready") == generations
         # The Workflow's committed position, not a sandbox cache, chose the five boundaries.
     finally:
         await remote.close({"binding": remote.binding})
