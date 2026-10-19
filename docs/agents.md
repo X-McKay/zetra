@@ -14,6 +14,8 @@ project dependency; it is not a runtime compatibility or signature check. A newe
 CLI intentionally creates the last qualified template instead of rebinding it to
 its own Git revision. Standard wheel dependency metadata retains the exact SDK
 Git reference, so installing a built agent outside its checkout uses that pin too.
+A wheel does not carry the complete project lock: plain pip installation resolves
+transitive dependencies. Use the captured `uv.lock` for the qualified image environment.
 
 Project names cannot be Python keywords, standard-library modules, or reserved
 locked dependency distribution/import names. Rendering validates names before

@@ -39,3 +39,9 @@ proof across concurrent callers. Standard wheel metadata preserves SDK Git pins;
 canonical rendering rejects reserved names and rolls back failed output. Ordinary
 agent images exclude build-only Git and qualification canaries. Current test and
 benchmark evidence is recorded in [qualification](qualification.md).
+
+The 2026-10-19 review pass covers 279 distinct passing cases across runs,
+including the live model, with all three earlier failed attempts disclosed.
+Provisioning retries correctly preserve `NOT_CONFIRMED` despite later execution
+success. Latency and fresh-provisioning benchmarks passed; the report makes no
+single-clean-full-run or statistically significant performance claim.

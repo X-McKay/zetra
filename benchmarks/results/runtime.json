@@ -1,17 +1,18 @@
 {
-  "captured_at": "2026-10-18T23:15:38.469686+00:00",
+  "captured_at": "2026-10-19T01:15:33.021234+00:00",
   "trust": "local-unsigned",
   "cluster": "kind-zetra-validation",
   "architecture": "linux/arm64",
-  "sdk_source_sha256": "01be1acc2c2a0c5157824e3ea0bee9893cd1a896c1cc655bf57445002f89374e",
+  "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
   "hash_scope": "src/zetra excluding templates, _build and Python caches; includes agent.Dockerfile",
   "template_provenance": {
     "repository": "https://github.com/X-McKay/zetra-template",
-    "revision": "45b65fd68f12620d32ee0c41acfa961bdb2f2321",
-    "tree_sha256": "4855429f0e16c123655f0fee9d9cd3fe502c1cf26e7cdecab41258c896f29ab2",
-    "qualified_sdk_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+    "revision": "b0f1fb509f31b330c8a8b04abafdc9872433dc39",
+    "tree_sha256": "41e78086d57768f6331d059f1ae2f549c21b49c92d7651b8e62988ded5310528",
+    "qualified_sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+    "renderer_sha256": "2c84c50eefab67ebfc0bc9095aca7af6cf96dc9ddaad2276b1df51c0fdf2bd40"
   },
-  "agent_recipe_sha256": "999192add0496cbe3e67010de904416b1e9102b6274d962f54ed65d1b182874b",
+  "agent_recipe_sha256": "08dd25ece1b33a4f39f0e4c6b2ded4e966b21cf63ea66125de6aa4571c8d873c",
   "lockfile_sha256": "996dbe557a097a1914913e25f679b19f964b417bdbe0e57d4c0ce50675948347",
   "model_settings": {
     "api_base": "https://llm.almckay.io/v1",
@@ -26,30 +27,30 @@
   "images": [
     {
       "tag": "zetra-validation:local",
-      "image_id": "sha256:9c914d8348473e5b51614831d59ba40ca7592269ea97d2a0f90f04bb79b22f12",
+      "image_id": "sha256:d05b3749cb366fea93bb30e742c4d0977610d36caeb2ebcb26137c817fe6511d",
       "repo_digests": [
-        "zetra-validation@sha256:9c914d8348473e5b51614831d59ba40ca7592269ea97d2a0f90f04bb79b22f12"
+        "zetra-validation@sha256:d05b3749cb366fea93bb30e742c4d0977610d36caeb2ebcb26137c817fe6511d"
       ],
-      "docker_reported_bytes": 180291249,
-      "sdk_source_sha256": "01be1acc2c2a0c5157824e3ea0bee9893cd1a896c1cc655bf57445002f89374e"
+      "docker_reported_bytes": 180302226,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c"
     },
     {
       "tag": "zetra-validation:source",
-      "image_id": "sha256:d445742d545c29b7263992f9a642b08d60bbc18c0c57a3b83faa3c4d1f9fe957",
+      "image_id": "sha256:0a0b32a456004cd83d56c63754c03e7ce94b02d7ed0f49a556c9128367f4eb03",
       "repo_digests": [
-        "zetra-validation@sha256:d445742d545c29b7263992f9a642b08d60bbc18c0c57a3b83faa3c4d1f9fe957"
+        "zetra-validation@sha256:0a0b32a456004cd83d56c63754c03e7ce94b02d7ed0f49a556c9128367f4eb03"
       ],
-      "docker_reported_bytes": 145524232,
-      "sdk_source_sha256": "01be1acc2c2a0c5157824e3ea0bee9893cd1a896c1cc655bf57445002f89374e"
+      "docker_reported_bytes": 145529628,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c"
     },
     {
       "tag": "zetra-reporter:local",
-      "image_id": "sha256:8e5b55d831780f2c2b236f603be81f944dbedbb698167a4d1ba6ded3adb2c25d",
+      "image_id": "sha256:094f66a7b723294b539f5f639ee582096f5e0d6ca4f6869a5290f429f2c1f889",
       "repo_digests": [
-        "zetra-reporter@sha256:8e5b55d831780f2c2b236f603be81f944dbedbb698167a4d1ba6ded3adb2c25d"
+        "zetra-reporter@sha256:094f66a7b723294b539f5f639ee582096f5e0d6ca4f6869a5290f429f2c1f889"
       ],
-      "docker_reported_bytes": 214481188,
-      "sdk_source_sha256": "01be1acc2c2a0c5157824e3ea0bee9893cd1a896c1cc655bf57445002f89374e",
+      "docker_reported_bytes": 162666304,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
         "schema_version": 2,
         "agent": {
@@ -62,20 +63,20 @@
           "policy": "workspace",
           "instructions": "workspace_reporter.agents.workspace_reporter:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-reporter@sha256:8e5b55d831780f2c2b236f603be81f944dbedbb698167a4d1ba6ded3adb2c25d",
-        "source_sha256": "f247de6b22f7ee0b839769b9c034671557772731f880fe25f162eee2724aee85",
+        "image": "docker.io/library/zetra-reporter@sha256:094f66a7b723294b539f5f639ee582096f5e0d6ca4f6869a5290f429f2c1f889",
+        "source_sha256": "5e262d0a17fda0cf9f12e0f7ff0938ccfeadd0c23b0a6fd7406d500fd98cff2b",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
         "sdk": "0.1.0",
-        "lock_sha256": "a1f5cf842e0ce56e7136b25560dd95f3f9ac46cd6635f37fa04590752c543610",
-        "sdk_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+        "lock_sha256": "ccb9f4cefbaa79fc19d2d11b01817925c9d64b226c72586b33d654230d201f77",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
       },
       "installed_environment": {
         "direct_url": {
           "url": "https://github.com/X-McKay/zetra.git",
           "vcs_info": {
             "vcs": "git",
-            "commit_id": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf",
-            "requested_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
           }
         },
         "packages": [
@@ -416,16 +417,23 @@
             "4.1.1"
           ]
         ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     },
     {
       "tag": "zetra-reader:local",
-      "image_id": "sha256:a7a39ca4c4d7b306dc302ba3b5f19f62cf69243c301ba04e30dbaf4362da6aa1",
+      "image_id": "sha256:075c475f413b1319cc1bda2675d6cf7b8b379dc7c12d5c0b1b79d04089a20cf8",
       "repo_digests": [
-        "zetra-reader@sha256:a7a39ca4c4d7b306dc302ba3b5f19f62cf69243c301ba04e30dbaf4362da6aa1"
+        "zetra-reader@sha256:075c475f413b1319cc1bda2675d6cf7b8b379dc7c12d5c0b1b79d04089a20cf8"
       ],
-      "docker_reported_bytes": 214481549,
-      "sdk_source_sha256": "01be1acc2c2a0c5157824e3ea0bee9893cd1a896c1cc655bf57445002f89374e",
+      "docker_reported_bytes": 162671646,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
         "schema_version": 2,
         "agent": {
@@ -438,20 +446,20 @@
           "policy": "workspace",
           "instructions": "document_reader.agents.document_reader:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-reader@sha256:a7a39ca4c4d7b306dc302ba3b5f19f62cf69243c301ba04e30dbaf4362da6aa1",
-        "source_sha256": "dc5fe96088bdac44947af150bdd7e4e9fdfe648af8cc2fe7837b599737912aae",
+        "image": "docker.io/library/zetra-reader@sha256:075c475f413b1319cc1bda2675d6cf7b8b379dc7c12d5c0b1b79d04089a20cf8",
+        "source_sha256": "767843cd36090f37250a7cd160ff15c6500bbb39b495d2a40c8635960932dedb",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
         "sdk": "0.1.0",
-        "lock_sha256": "d2fb67921957e55b8a048712cfae3db70ed45a26863c56a942fa1a5e8a550ddb",
-        "sdk_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+        "lock_sha256": "68bc01f29c58161195804f73109cc02162985665deed2ea68345d356aefd25fa",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
       },
       "installed_environment": {
         "direct_url": {
           "url": "https://github.com/X-McKay/zetra.git",
           "vcs_info": {
             "vcs": "git",
-            "commit_id": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf",
-            "requested_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
           }
         },
         "packages": [
@@ -792,16 +800,23 @@
             "4.1.1"
           ]
         ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     },
     {
       "tag": "zetra-live:local",
-      "image_id": "sha256:48d3e7e6207cac1931bf06cf7236037763b339f26148a2b9d1b3e118160b17c1",
+      "image_id": "sha256:ffa4303c713357c47e43fe2cecbfee4dd568dbf2760b185f2039ce655167a104",
       "repo_digests": [
-        "zetra-live@sha256:48d3e7e6207cac1931bf06cf7236037763b339f26148a2b9d1b3e118160b17c1"
+        "zetra-live@sha256:ffa4303c713357c47e43fe2cecbfee4dd568dbf2760b185f2039ce655167a104"
       ],
-      "docker_reported_bytes": 214477823,
-      "sdk_source_sha256": "01be1acc2c2a0c5157824e3ea0bee9893cd1a896c1cc655bf57445002f89374e",
+      "docker_reported_bytes": 162667331,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
         "schema_version": 2,
         "agent": {
@@ -814,20 +829,20 @@
           "policy": "vllm-chat",
           "instructions": "workspace_reporter.agents.workspace_reporter:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-live@sha256:48d3e7e6207cac1931bf06cf7236037763b339f26148a2b9d1b3e118160b17c1",
-        "source_sha256": "54b28d62a647b32155a41d44fce2dd500aa9a8ca8cee15da0381dc778dfb7745",
+        "image": "docker.io/library/zetra-live@sha256:ffa4303c713357c47e43fe2cecbfee4dd568dbf2760b185f2039ce655167a104",
+        "source_sha256": "a79f92d6de4b0b21feb24dbf6669cd94d2d021c17e8b89424d673ff1e18b24ed",
         "policy_sha256": "fe6f7b41ff223ef430fe11d10bfdac1010c2437545b8e6756c2e1a8af1eb3f03",
         "sdk": "0.1.0",
-        "lock_sha256": "a1f5cf842e0ce56e7136b25560dd95f3f9ac46cd6635f37fa04590752c543610",
-        "sdk_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+        "lock_sha256": "ccb9f4cefbaa79fc19d2d11b01817925c9d64b226c72586b33d654230d201f77",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
       },
       "installed_environment": {
         "direct_url": {
           "url": "https://github.com/X-McKay/zetra.git",
           "vcs_info": {
             "vcs": "git",
-            "commit_id": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf",
-            "requested_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
           }
         },
         "packages": [
@@ -1168,16 +1183,23 @@
             "4.1.1"
           ]
         ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     },
     {
       "tag": "zetra-blocked:local",
-      "image_id": "sha256:4c723b58bd45b5396874996a26a79815c2961bbf610302ca98bc58c096389f22",
+      "image_id": "sha256:be45f7b4d97530de21875d5e14d4b97ec432a6b38ab36a519007ee6c91a04244",
       "repo_digests": [
-        "zetra-blocked@sha256:4c723b58bd45b5396874996a26a79815c2961bbf610302ca98bc58c096389f22"
+        "zetra-blocked@sha256:be45f7b4d97530de21875d5e14d4b97ec432a6b38ab36a519007ee6c91a04244"
       ],
-      "docker_reported_bytes": 214475461,
-      "sdk_source_sha256": "01be1acc2c2a0c5157824e3ea0bee9893cd1a896c1cc655bf57445002f89374e",
+      "docker_reported_bytes": 162665959,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
         "schema_version": 2,
         "agent": {
@@ -1190,20 +1212,20 @@
           "policy": "workspace",
           "instructions": "workspace_reporter.agents.workspace_reporter:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-blocked@sha256:4c723b58bd45b5396874996a26a79815c2961bbf610302ca98bc58c096389f22",
-        "source_sha256": "00e066ecafe4aea02e73442ac1ee5ca1a019f082a339487c3cb327c560d1eb4a",
+        "image": "docker.io/library/zetra-blocked@sha256:be45f7b4d97530de21875d5e14d4b97ec432a6b38ab36a519007ee6c91a04244",
+        "source_sha256": "0f503c7df14d6ca578cc55fefc052aadc83fbfc635dabc7b18edb2c1b6fbdaec",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
         "sdk": "0.1.0",
-        "lock_sha256": "a1f5cf842e0ce56e7136b25560dd95f3f9ac46cd6635f37fa04590752c543610",
-        "sdk_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+        "lock_sha256": "ccb9f4cefbaa79fc19d2d11b01817925c9d64b226c72586b33d654230d201f77",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
       },
       "installed_environment": {
         "direct_url": {
           "url": "https://github.com/X-McKay/zetra.git",
           "vcs_info": {
             "vcs": "git",
-            "commit_id": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf",
-            "requested_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
           }
         },
         "packages": [
@@ -1544,16 +1566,23 @@
             "4.1.1"
           ]
         ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     },
     {
       "tag": "zetra-generated:local",
-      "image_id": "sha256:3d9091c345cf5d1a34d209cc6804d5486f9f344cab656385ed64e950872591c1",
+      "image_id": "sha256:b3175345bc7bfed6ee79355d97a08fd5df83655c49db72eb90b7031a32d18d9f",
       "repo_digests": [
-        "zetra-generated@sha256:3d9091c345cf5d1a34d209cc6804d5486f9f344cab656385ed64e950872591c1"
+        "zetra-generated@sha256:b3175345bc7bfed6ee79355d97a08fd5df83655c49db72eb90b7031a32d18d9f"
       ],
-      "docker_reported_bytes": 214488065,
-      "sdk_source_sha256": "01be1acc2c2a0c5157824e3ea0bee9893cd1a896c1cc655bf57445002f89374e",
+      "docker_reported_bytes": 162673375,
+      "sdk_source_sha256": "fccedb48566cf52f4e2b954b88c667e7047949f685ccf2671c72fccc4c39b25c",
       "release": {
         "schema_version": 2,
         "agent": {
@@ -1566,20 +1595,20 @@
           "policy": "workspace",
           "instructions": "generated_agent.agents.document_reader:instructions/base.md"
         },
-        "image": "docker.io/library/zetra-generated@sha256:3d9091c345cf5d1a34d209cc6804d5486f9f344cab656385ed64e950872591c1",
-        "source_sha256": "82650a6c3d701d75a62fdf94064c9c2ab976e0a92ffb4659080190c266f3ff7b",
+        "image": "docker.io/library/zetra-generated@sha256:b3175345bc7bfed6ee79355d97a08fd5df83655c49db72eb90b7031a32d18d9f",
+        "source_sha256": "cca038bb900bee0cd4ce087576cc8ea37a44abc09498bf8c0f317c9484720b6c",
         "policy_sha256": "8096e18204b06a375cb2702063468606f61c6dea531830bb0537c3112b50513d",
         "sdk": "0.1.0",
-        "lock_sha256": "bc93c6a889df5396ea0aaf0db19aa194e4d9dd52e1709bd402fc0e4c606f9185",
-        "sdk_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+        "lock_sha256": "8604629ec1daa59ebc782df74c73df9cfcb1ad44ca7617819f90753711864a2f",
+        "sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
       },
       "installed_environment": {
         "direct_url": {
           "url": "https://github.com/X-McKay/zetra.git",
           "vcs_info": {
             "vcs": "git",
-            "commit_id": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf",
-            "requested_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf"
+            "commit_id": "61a579c3de43844c7bb0ef13fe32fab000316c07",
+            "requested_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
           }
         },
         "packages": [
@@ -1920,19 +1949,22 @@
             "4.1.1"
           ]
         ]
+      },
+      "runtime_hardening": {
+        "uid": 1500,
+        "git": null,
+        "uv": null,
+        "private_canary": false,
+        "restricted_write": false
       }
     }
   ],
-  "qualification_code_revision": "f38df5b92255e0cc4412df2662d25fba6f488fc9",
-  "template_checks": {
-    "repository_revision": "45b65fd68f12620d32ee0c41acfa961bdb2f2321",
-    "root_tests": 7,
-    "rendered_tests": 4,
-    "installed_sdk_revision": "4830a5f5eb7cf8400b4665b2706434c52aaa17cf",
-    "locked_sync": true,
-    "fixture_eval": "PASSED",
-    "wheel_resources": "PASSED",
-    "installed_resources_outside_checkout": "PASSED"
+  "qualification_commit": "522cd09f903255b9e6ada1f1ffc05a7fc35775f4",
+  "canonical_template_validation": {
+    "repository_tests": 13,
+    "generated_agent_tests": 4,
+    "isolated_wheel_dependency_install": true,
+    "installed_sdk_revision": "61a579c3de43844c7bb0ef13fe32fab000316c07"
   },
   "cleanup_inventory": {
     "cluster": "kind-zetra-validation",
@@ -1953,5 +1985,11 @@
       "openshell/openshell-data-openshell-0",
       "temporal/data-postgres-0"
     ]
+  },
+  "qualification_environment": {
+    "docker_vm_memory_gib": 8,
+    "prototype_cluster_paused_for_final_100_case_run_and_benchmarks": true,
+    "prototype_cluster_restored_afterwards": true,
+    "other_local_workloads_present": true
   }
 }
