@@ -44,6 +44,12 @@ Tool registration rejects the pinned ADK's injected context and stream parameter
 including typed aliases, before execution. The executor continues to accept only
 model-supplied arguments; no ADK context injection is implemented.
 
+The Kubani MCP POC adds an explicit `remote_read` tool classification and native
+OpenShell provider-name attachment in worker configuration. Providers remain a
+caller-managed trust boundary: their policies and credentials are not signed or
+frozen by Release metadata. Recorded kind qualification predates these additions;
+the Kubani POC must supply separate evidence and use its own runtime/queue.
+
 The 2026-10-19 review pass covers 279 distinct passing cases across runs,
 including the live model, with all three earlier failed attempts disclosed.
 Provisioning retries correctly preserve `NOT_CONFIRMED` despite later execution

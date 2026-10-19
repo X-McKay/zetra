@@ -8,7 +8,9 @@ import asyncio
 import base64
 import hashlib
 import json
+import re
 import time
+from collections.abc import Collection
 from contextlib import closing
 from uuid import NAMESPACE_URL, uuid5
 
@@ -28,6 +30,22 @@ PYTHON = "/app/.venv/bin/python"
 # Match the Workflow's provisioning schedule-to-close window; far below the
 # gateway's 24-hour successful replay retention. This is not a server fence.
 CREATE_WINDOW_SECONDS = 600
+
+
+def normalize_providers(providers):
+    """Canonical deployment-owned provider references; never credential values."""
+    if (
+        isinstance(providers, (str, bytes))
+        or not isinstance(providers, Collection)
+        or len(providers) > 8
+        or any(
+            not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,62}", name)
+            for name in providers
+        )
+        or len(set(providers)) != len(providers)
+    ):
+        raise ValueError("providers must contain up to eight unique provider names")
+    return tuple(sorted(providers))
 
 
 def native_create(client, request, deadline):
@@ -98,6 +116,7 @@ class OpenShellSession:
         provider="scripted",
         agent_spec=None,
         runtime_module="zetra._runtime.runtime",
+        providers=(),
     ):
         if provider not in ("scripted", "vllm"):
             raise ValueError("unsupported provider")
@@ -107,6 +126,7 @@ class OpenShellSession:
             if manifest != MANIFEST:
                 raise ValueError("live profile manifest mismatch")
         self.agent_spec = agent_spec
+        self.providers = normalize_providers(providers)
         self.runtime_module = runtime_module
         self.provider = provider
         self.client = client
@@ -224,6 +244,7 @@ class OpenShellSession:
                 "bridge-generation": str(self.generation),
             },
             spec=openshell_pb2.SandboxSpec(
+                providers=self.providers,
                 template=openshell_pb2.SandboxTemplate(image=self.image),
                 policy=self.policy,
                 environment={

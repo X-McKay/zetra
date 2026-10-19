@@ -53,6 +53,12 @@ Registered tools receive model-supplied arguments only. ADK-injected parameters
 `input_stream`) are rejected during tool registration, before any model or tool
 execution. Close over the supplied `AgentContext` for workspace access instead.
 
+Reviewed read-only integrations may register tools with `effect="remote_read"`.
+They use the existing single-attempt tool Activity; accepted responses replay from
+Temporal-selected artifacts. This does not admit remote writes or authorize any
+endpoint. The deployment must provide the required native OpenShell provider and
+enforce the endpoint, credential and remote-server permissions.
+
 ```yaml
 schema_version: 1
 name: document_reader

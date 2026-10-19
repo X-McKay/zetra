@@ -12,7 +12,7 @@ class Tool:
     effect: str
 
     def __post_init__(self):
-        if self.effect not in {"workspace_read", "workspace_write"}:
+        if self.effect not in {"workspace_read", "workspace_write", "remote_read"}:
             raise ValueError("unsupported tool effect")
         if not inspect.iscoroutinefunction(self.function):
             raise ValueError("tools must be async functions")
