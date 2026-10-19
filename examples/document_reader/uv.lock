@@ -291,7 +291,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "zetra", git = "https://github.com/X-McKay/zetra.git?rev=4830a5f5eb7cf8400b4665b2706434c52aaa17cf" }]
+requires-dist = [{ name = "zetra", git = "https://github.com/X-McKay/zetra.git?rev=61a579c3de43844c7bb0ef13fe32fab000316c07" }]
 
 [[package]]
 name = "fastapi"
@@ -1357,7 +1357,7 @@ wheels = [
 [[package]]
 name = "zetra"
 version = "0.1.0"
-source = { git = "https://github.com/X-McKay/zetra.git?rev=4830a5f5eb7cf8400b4665b2706434c52aaa17cf#4830a5f5eb7cf8400b4665b2706434c52aaa17cf" }
+source = { git = "https://github.com/X-McKay/zetra.git?rev=61a579c3de43844c7bb0ef13fe32fab000316c07#61a579c3de43844c7bb0ef13fe32fab000316c07" }
 dependencies = [
     { name = "google-adk" },
     { name = "google-genai" },
