@@ -77,3 +77,11 @@ graceful shutdown. Run exports save the exact handle before waiting, publish
 verified workspace files separately from metadata, and use a static local export
 ownership marker plus path-overlap guards. These receipts do not select progress
 or implement recovery; Temporal and immutable artifacts remain authoritative.
+
+The shared-CLI follow-up passed the full locked local gate (272 cases) and all
+42 dedicated kind cluster cases, including live vLLM, provisioning/recovery,
+cleanup, cancellation and history replay. Existing immutable sandbox images keep
+their recorded pins; the updated external worker runs this SDK revision. Kubani
+uses a newly built agent image pinned to the CLI implementation and supplies
+separate real MCP qualification. Test-only model/tool completion gates kill the
+exact worker child before Activity acceptance; no production fault hook is added.

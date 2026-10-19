@@ -366,3 +366,32 @@ controlled estimate of pure SDK overhead. The final worker/sandbox replacement
 runs took 30.180/48.893s; native cancellation took 19.801s. Final global inspection
 found zero native sandboxes, session pods/PVCs and session PV objects; shared POC
 infrastructure and artifact storage remain deployed.
+
+## Shared CLI follow-up (2026-10-19)
+
+SDK implementation `12647b3` passed the full locked local gate: 272 tests,
+42 cluster cases deselected, plus docs, examples, fixture evaluations, lint and
+lock checks. A separate complete kind run passed all 42 cluster cases, including
+live vLLM, recovery, cancellation, cleanup and replay. Four native cancellation
+regressions also passed against the isolated Kubani POC Temporal namespace.
+
+All three opt-in benchmark tests passed. The public SDK session samples were
+15.762/19.744/16.210 seconds with the fixture model and 23.205 seconds with vLLM,
+including fresh provisioning and confirmed deletion, excluding shared worker
+startup. Those sandbox releases retain SDK `61a579c`; the external worker uses the
+current SDK. The lower-level transport benchmark passed four durable samples,
+four native controls, 18 reconstruction samples and prepared replay. Fresh
+provisioning passed ten interleaved scripted/vLLM trials on the existing lab
+baseline/candidate images, with distinct identities and fresh workspace checks.
+These are regression observations; they do not establish a performance change,
+p95, or new MCP image qualification.
+
+The newly built Kubani investigator pins `12647b3` inside its immutable agent
+image and invokes the shared CLI for its worker and clients. Its exact image,
+model/tool SIGKILL controls, successful live sessions and retained failures are
+recorded in [Kubani POC findings](https://github.com/X-McKay/kubani/pull/219).
+The fault gate is application test code, outside the SDK. A pre-gate native
+supervisor startup failure retained `NOT_CONFIRMED` after cancellation before
+accepted provisioning; later observed absence does not upgrade that lifecycle
+proof. Separate fresh model and tool loss tests passed with unknown outcomes,
+no redispatch, replay and confirmed native/Kubernetes deletion.
