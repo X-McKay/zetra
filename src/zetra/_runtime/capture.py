@@ -93,6 +93,13 @@ class BridgeModel(BaseLlm):
 class BridgeTool(FunctionTool):
     def __init__(self, function, bridge):
         super().__init__(function)
+        # Pinned ADK excludes these injected parameters from model arguments.
+        # Our executor supplies only those arguments, never ADK context/streams.
+        injected = set(inspect.signature(function).parameters) & set(self._ignore_params)
+        if injected:
+            raise UnsupportedProfile(
+                f"ADK-injected tool parameters unsupported: {sorted(injected)}"
+            )
         self.bridge = bridge
 
     async def run_async(self, *, args, tool_context):

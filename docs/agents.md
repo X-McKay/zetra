@@ -48,6 +48,11 @@ One agent is inferred; multiple agents require `--agent NAME` for `check`, `buil
 project test suite. Names must match their manifest. Manifest and instruction paths
 must remain inside the project and cannot contain symlinks.
 
+Registered tools receive model-supplied arguments only. ADK-injected parameters
+(`ToolContext`, including typed aliases and defaulted parameters, and
+`input_stream`) are rejected during tool registration, before any model or tool
+execution. Close over the supplied `AgentContext` for workspace access instead.
+
 ```yaml
 schema_version: 1
 name: document_reader

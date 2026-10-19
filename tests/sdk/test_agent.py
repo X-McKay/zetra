@@ -8,6 +8,7 @@ def test_public_agent_api_exists():
 
 import pytest
 from google.adk.agents import LlmAgent
+from google.adk.tools import ToolContext
 
 from zetra import AgentContext, Tool
 
@@ -53,3 +54,63 @@ def test_positional_only_tool_rejected():
 
     with pytest.raises(ValueError, match="positional"):
         Tool(positional, "workspace_read")
+
+
+async def required_context(path: str, tool_context: ToolContext):
+    raise AssertionError("unsupported tool must not execute")
+
+
+async def default_context(path: str, tool_context: ToolContext = None):
+    raise AssertionError("unsupported tool must not execute")
+
+
+async def alias_context(path: str, ctx: ToolContext):
+    raise AssertionError("unsupported tool must not execute")
+
+
+async def forward_context(path: str, ctx: "ToolContext"):
+    raise AssertionError("unsupported tool must not execute")
+
+
+async def keyword_context(path: str, *, tool_context: ToolContext):
+    raise AssertionError("unsupported tool must not execute")
+
+
+async def untyped_context(path: str, tool_context):
+    raise AssertionError("unsupported tool must not execute")
+
+
+async def streaming_input(path: str, input_stream: str):
+    raise AssertionError("unsupported tool must not execute")
+
+
+@pytest.mark.parametrize(
+    "function",
+    [
+        required_context,
+        default_context,
+        alias_context,
+        forward_context,
+        keyword_context,
+        untyped_context,
+        streaming_input,
+    ],
+)
+def test_adk_injected_parameters_rejected_during_registration(tmp_path, function):
+    ctx = AgentContext(object(), workspace=tmp_path, model="fixture")
+    with pytest.raises(ValueError, match="ADK-injected"):
+        ctx.tools(Tool(function, "workspace_read"))
+
+
+@pytest.mark.asyncio
+async def test_ordinary_context_argument_remains_model_supplied(tmp_path):
+    async def contextual_read(context: str) -> dict:
+        """Read a caller-supplied context."""
+        return {"context": context}
+
+    ctx = AgentContext(object(), workspace=tmp_path, model="fixture")
+    wrapped = ctx.tools(Tool(contextual_read, "workspace_read"))
+    ctx.seal(LlmAgent(name="reader", model=ctx.model, tools=wrapped))
+    assert await ctx.executors()["contextual_read"]({"context": "docs"}, {}, "id") == {
+        "context": "docs"
+    }

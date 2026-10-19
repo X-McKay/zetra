@@ -40,6 +40,10 @@ canonical rendering rejects reserved names and rolls back failed output. Ordinar
 agent images exclude build-only Git and qualification canaries. Current test and
 benchmark evidence is recorded in [qualification](qualification.md).
 
+Tool registration rejects the pinned ADK's injected context and stream parameters,
+including typed aliases, before execution. The executor continues to accept only
+model-supplied arguments; no ADK context injection is implemented.
+
 The 2026-10-19 review pass covers 279 distinct passing cases across runs,
 including the live model, with all three earlier failed attempts disclosed.
 Provisioning retries correctly preserve `NOT_CONFIRMED` despite later execution
