@@ -114,3 +114,19 @@ async def test_ordinary_context_argument_remains_model_supplied(tmp_path):
     assert await ctx.executors()["contextual_read"]({"context": "docs"}, {}, "id") == {
         "context": "docs"
     }
+
+
+async def test_registered_remote_read_uses_existing_executor_boundary(tmp_path):
+    async def inspect_remote() -> dict:
+        """Read one approved remote resource."""
+        return {"phase": "Running"}
+
+    ctx = AgentContext(object(), workspace=tmp_path, model="fixture")
+    wrapped = ctx.tools(Tool(inspect_remote, "remote_read"))
+    ctx.seal(LlmAgent(name="investigator", model=ctx.model, tools=wrapped))
+    assert await ctx.executors()["inspect_remote"]({}, {}, "id") == {"phase": "Running"}
+
+
+def test_remote_writes_are_not_admitted():
+    with pytest.raises(ValueError, match="effect"):
+        Tool(required_context, "remote_write")

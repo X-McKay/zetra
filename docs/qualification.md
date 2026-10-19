@@ -296,9 +296,10 @@ service volumes remain. The dedicated test cluster was retained.
 The supported profile remains static, serial and nonstreaming, with 64 boundaries
 and a 30-minute session limit. Agent code and tools share a sandbox trust domain
 and cooperate with the protocol; OpenShell enforces the outer policy. No external
-business writes, MCP actions, parallel agents or automatic ambiguous-effect retry
-are admitted. AgentGateway is a future integration boundary, not an implemented
-transport or additional durability engine.
+business writes, parallel agents or automatic ambiguous-effect retry are admitted.
+Reviewed MCP reads use caller-owned tools and native provider configuration; the
+SDK has no built-in MCP transport or additional durability engine. AgentGateway
+authorization remains deployment-owned.
 
 Callers own Temporal/OpenShell identity, TLS/authentication/codecs, durable shared
 artifact backing, secret availability and retention. Workers on a queue must use
@@ -320,3 +321,48 @@ quota is 1,000. A gateway-side lifecycle fence or platform reconciliation remain
 necessary for a stronger closure claim, not a custom SDK scheduler. Resource removal does not prove physical erasure.
 No p95, throughput, cold-pull, hostile-code or production availability claim follows
 from these measurements.
+
+## Kubani reviewed MCP investigator, 2026-10-19
+
+SDK commit `328937a` passed the complete locked local gate: 256 tests passed,
+42 cluster cases deselected. Lint, formatting, lock, docs, packaged examples and
+fixture evaluations passed. Four additional real-Temporal regressions passed for
+successful provision, advance, model execution and cleanup completion after
+cancellation. The pre-fix completion-race test failed as expected. Original normal,
+worker-recovery, sandbox-recovery and failed cancellation histories replay with
+the native patch marker. GitHub SDK checks passed.
+
+The scaffolded application passed 25 tests, an official MCP fixture-server
+evaluation, and wheel/resource checks. Live Kubani runs use the real local vLLM
+endpoint and authenticated Kubernetes MCP through AgentGateway, with the entire
+agent/tools in a fresh native OpenShell sandbox. The final immutable image is
+`registry.almckay.io/zetra/kubani-investigator@sha256:a93557ad1581152d031dd22f0d2dc70ade957eb6140666894709ccbeeaf58193`.
+
+Final-image cancellation, graceful worker replacement and checkpoint-based sandbox
+replacement passed, including no later business work after cancellation, exact
+accepted receipt prefixes, different sandbox identity on replacement, history
+replay and native/Kubernetes resource absence. An unchanged warm process retained
+MCP access across native credential rotation; two concurrent native controls
+verified workspace separation and explicit denied filesystem/network paths. Native
+automatic refresh was observed when due. Reusable credentials remain in OpenShell's
+encrypted store; registry publishing used deleted temporary Docker authentication.
+
+The [Kubani POC report](https://github.com/X-McKay/kubani/pull/219) records compact
+attempts and timings, earlier failures and deployment friction. Two model boundaries
+ended unknown and were never redispatched. Independent diagnostic responses to a
+captured request reproduced provider truncation at 512 tokens; the agent now saves
+the report then emits a short acknowledgement. The original exception causes were
+not preserved, so those diagnostics do not retroactively establish their cause.
+Two abrupt-worker-loss injections missed their intended boundary and did not
+qualify. The original live cancellation failure is retained alongside the fix.
+These observations do not qualify node/storage loss, HA, hostile code, p95, pure
+SDK overhead, scoped production identities or stronger late-admission closure.
+
+The three final normal Kubani sessions took 24.840/28.786/24.794s (median 24.840s),
+including fresh provisioning, inference, MCP/checkpoints and confirmed cleanup.
+Provisioning/runtime startup took 9.309–9.332s; cleanup took 2.742–3.148s. Model/tool
+counts varied 6/5 to 7/6. These are observations from three sessions, not p95 or a
+controlled estimate of pure SDK overhead. The final worker/sandbox replacement
+runs took 30.180/48.893s; native cancellation took 19.801s. Final global inspection
+found zero native sandboxes, session pods/PVCs and session PV objects; shared POC
+infrastructure and artifact storage remain deployed.

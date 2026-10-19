@@ -14,7 +14,7 @@ from temporalio.worker import Worker
 
 from ._runtime.activities import Activities
 from ._runtime.artifacts import Tape
-from ._runtime.openshell import OpenShellSession, policy, vllm_policy
+from ._runtime.openshell import OpenShellSession, normalize_providers, policy, vllm_policy
 from ._runtime.records import canonical_bytes
 from ._runtime.temporal import CleanupWorkflow, SessionWorkflow
 from .manifest import Release
@@ -92,6 +92,7 @@ class ActivityRouter:
         artifacts,
         key,
         approved_releases: Collection[str] | None = None,
+        providers: Collection[str] = (),
     ):
         if not isinstance(key, bytes) or len(key) < 32:
             raise ValueError("worker key must contain at least 32 bytes")
@@ -106,6 +107,7 @@ class ActivityRouter:
                 "approved_releases must be a collection of nonempty release identities"
             )
         self.approved_releases = None if approved_releases is None else frozenset(approved_releases)
+        self.providers = normalize_providers(providers)
         self.temporal = temporal
         self.task_queue, self.runtime_id = task_queue, runtime_id
         self.sandbox_client, self.artifacts, self.key = sandbox_client, artifacts, key
@@ -136,6 +138,7 @@ class ActivityRouter:
             sandbox_policy=policy_for(release),
             provider="vllm" if release.agent.model == "vllm" else "scripted",
             agent_spec=release.agent.model_dump(),
+            providers=self.providers,
         )
         return Context(
             start, Activities(remote, remote, Tape(self.artifacts, manifest=release.identity))
@@ -265,6 +268,7 @@ def create_worker(
     artifacts,
     key,
     approved_releases: Collection[str] | None = None,
+    providers: Collection[str] = (),
     **worker_options,
 ):
     """Return an ordinary Worker; the caller owns connections, secrets and storage.
@@ -278,6 +282,11 @@ def create_worker(
     submitters. Revocation prevents new execution but never blocks cleanup.
     Release approval does not establish runtime compatibility: callers must keep
     the worker, bridge and release compatible across upgrades.
+
+    providers names native OpenShell providers to attach to every session on
+    this queue. The caller owns their policies, credentials and renewal. Align
+    provider names and profile configuration across workers; use a fresh runtime
+    identity/queue when changing them. Credential values never enter Workflow inputs.
     """
     router = ActivityRouter(
         temporal,
@@ -287,6 +296,7 @@ def create_worker(
         artifacts=artifacts,
         key=key,
         approved_releases=approved_releases,
+        providers=providers,
     )
     return Worker(
         temporal,
