@@ -1,5 +1,31 @@
 # Qualification
 
+## ToolContext admission follow-up
+
+SDK revision `af2e7542b89265eaa4572a586719a67e58238e74` rejects the pinned
+ADK's injected tool parameters at bridge registration. This includes required,
+defaulted, keyword-only and untyped `tool_context`, typed/forward-referenced
+aliases, and `input_stream`. Ordinary model-supplied `context: str` arguments
+remain supported. No context reconstruction or execution-path change was added.
+The canonical template and both examples now pin this revision.
+
+Seven regression cases failed before the fix. The focused admission/definition
+suite passed 26 tests; an independent Sol review found no actionable issues and
+passed all 13 tool-registration tests. Canonical validation passed 13 repository
+tests and four rendered-project tests, fixture evaluation and wheel checks. An
+installed Git-pinned SDK check also rejected an aliased ToolContext parameter.
+The final locked `nix develop --command just check` passed 249 tests with 38
+cluster tests deselected, lint/format/lock/docs checks, both example tests and both
+fixture evaluations. The only warning was the existing ADK experimental-feature
+warning. The examples and bundled canonical template were checked at their new pin.
+
+The cluster and benchmark evidence below records the preceding execution revision
+`61a579c3de43844c7bb0ef13fe32fab000316c07`. Those images and measurements were not
+rebuilt or rerun for this admission-only follow-up; they must not be represented
+as measurements of the newly pinned revision.
+
+## Cluster and benchmark qualification
+
 This report records fresh, unsigned local evidence for the ordinary-worker SDK on
 2026-10-19. It qualifies the admitted serial profile in this environment, not a
 production service deployment.
