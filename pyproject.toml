@@ -18,7 +18,7 @@ zetra = "zetra.cli:main"
 
 [dependency-groups]
 dev = [
-    "aiohttp==3.13.3",
+    "aiohttp==3.14.3",
     "pytest>=8,<10",
     "pytest-asyncio>=1,<2",
     "ruff>=0.14",
