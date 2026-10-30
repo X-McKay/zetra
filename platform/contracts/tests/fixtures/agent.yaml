@@ -1,0 +1,22 @@
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: investigator
+  namespace: tenant-a
+spec:
+  owner: platform-team@example.com
+  description: Read-only Kubernetes incident investigator
+  identity:
+    mode: on-behalf-of
+    onBehalfOf: {required: true, fallback: deny}
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [Qwen3.6-35B-A3B-NVFP4]
+        budget: {tokensPerDay: 5000000, tokensPerSession: 200000}
+    mcp:
+      - backend: kubernetes
+        effect: remote_read
+        tools: [pods_list_in_namespace, pods_get, events_list]
+        delegation: inherit
+  runtime: {cpu: "1", memory: 2Gi, ttlSeconds: 1800}

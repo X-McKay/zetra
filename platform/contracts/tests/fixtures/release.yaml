@@ -1,0 +1,17 @@
+apiVersion: agentplatform.io/v1alpha1
+kind: AgentRelease
+metadata:
+  name: investigator-2026-10-29-a93557ad
+  namespace: tenant-a
+spec:
+  agent: investigator
+  image: registry.example.com/agents/investigator@sha256:a93557ad1581152d031dd22f0d2dc70ade957eb6140666894709ccbeeaf58193
+  manifestSha256: 4e0c4e0c4e0c4e0c4e0c4e0c4e0c4e0c4e0c4e0c4e0c4e0c4e0c4e0c4e0c4e0c
+  policySha256: 0000000000000000000000000000000000000000000000000000000000000000
+  lockSha256: 91bd91bd91bd91bd91bd91bd91bd91bd91bd91bd91bd91bd91bd91bd91bd91bd
+  buildRevision: 12647b3
+  approval:
+    approved: true
+    approvedBy: security-review@example.com
+    approvedAt: "2026-10-29T16:00:00Z"
+    ticket: SEC-412
