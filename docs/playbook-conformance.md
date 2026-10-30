@@ -24,6 +24,7 @@ and the limitations that remain before production deployment.
 | Build/evidence identity | Image/source/manifest/lock/SDK revision binding; eval agent and dataset identity | Unsigned consistency checks; OS and build-system inputs are not bit reproducible |
 | External actions and MCP | Reviewed `remote_read` tools admitted; writes excluded | Native provider policy and backend authorization are deployment-owned; writes require idempotency and reconciliation |
 | Multi-agent execution | Not admitted | Requires a separately admitted execution design |
+| Agent Runtime Platform | [Kata, gateway, policy service and runner](platform.md) built alongside OpenShell | Unit and integration tests only; no cluster qualification yet |
 
 A future AgentGateway should attach through the existing tool dispatcher rather
 than adding an execution engine. It must enforce receiver-scoped capabilities and

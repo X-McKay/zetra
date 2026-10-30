@@ -1,0 +1,41 @@
+[project]
+name = "agent-platform-controller"
+version = "0.1.0"
+description = "Agent Runtime Platform Registry Controller (kopf operator)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "PyYAML==6.0.3",
+    "agent-platform-contracts",
+    "httpx==0.28.1",
+    "kopf==1.45.2",
+    "kubernetes==34.1.0",
+]
+
+[project.scripts]
+agent-registry-controller = "registry_controller.operator:main"
+
+[tool.uv.sources]
+agent-platform-contracts = { path = "../contracts", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest==8.4.2",
+    "ruff==0.14.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["registry_controller"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["cluster: requires a real cluster and Keycloak"]
+addopts = "-m 'not cluster'"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100

@@ -1,0 +1,169 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: agent-sandbox-admission
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    # Rule 0: every pod in a tenant namespace must declare itself a sandbox.
+    - name: tenant-pods-are-sandboxes
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchExpressions:
+                  - {key: agentplatform.io/tenant, operator: Exists}
+      validate:
+        message: "only sandbox pods may exist in a tenant namespace"
+        pattern:
+          metadata:
+            labels:
+              agentplatform.io/sandbox: "true"
+              agentplatform.io/agent: "?*"
+              agentplatform.io/release: "?*"
+              agentplatform.io/session: "?*"
+              agentplatform.io/generation: "?*"
+            annotations:
+              agentplatform.io/policy-digest: "sha256:?*"
+    # Rule 1: the image is signed by the organisation key.
+    - name: verify-image-signature
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchExpressions:
+                  - {key: agentplatform.io/tenant, operator: Exists}
+      verifyImages:
+        - imageReferences: ["registry.example.com/agents/*"]
+          mutateDigest: false
+          verifyDigest: true
+          required: true
+          attestors:
+            - entries:
+                - keys:
+                    publicKeys: |-
+                      -----BEGIN PUBLIC KEY-----
+                      <organisation cosign public key>
+                      -----END PUBLIC KEY-----
+    # Rule 2: the pod's shape is the template's shape. Fields with a required
+    # literal are pinned; fields that must be absent are denied below.
+    - name: sandbox-shape
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchExpressions:
+                  - {key: agentplatform.io/tenant, operator: Exists}
+      validate:
+        message: "sandbox pod does not match the required shape"
+        pattern:
+          spec:
+            runtimeClassName: kata-qemu-runtime-rs
+            automountServiceAccountToken: false          # must be present and false; absence fails
+            serviceAccountName: "agent-{{request.object.metadata.labels.\"agentplatform.io/agent\"}}"
+            hostNetwork: false
+            hostPID: false
+            hostIPC: false
+            dnsPolicy: None
+            restartPolicy: Never
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 1500
+              seccompProfile: {type: RuntimeDefault}
+            initContainers:
+              - name: egress-guard
+                image: "registry.example.com/platform/egress-guard@sha256:5b2c*"
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities: {drop: ["ALL"]}
+            containers:
+              - name: agent
+                command: ["/app/.venv/bin/python", "-m", "agent_runtime.wait"]
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  privileged: "!true"
+                  capabilities: {drop: ["ALL"]}
+            volumes:
+              - name: agent-identity
+                projected:
+                  sources:
+                    - serviceAccountToken:
+                        audience: https://idp.example.com/realms/agents
+                        expirationSeconds: 600
+              - name: gateway-ca
+                configMap: {name: agent-gateway-ca}
+              - name: podinfo
+                downwardAPI: {}
+              - name: workspace
+                emptyDir: {}
+              - name: tmp
+                emptyDir: {}
+    # Rule 3: exactly one init container and one container; no other volume types.
+    - name: sandbox-no-extras
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchExpressions:
+                  - {key: agentplatform.io/tenant, operator: Exists}
+      validate:
+        message: "sandbox pod has extra containers or disallowed volumes"
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.containers | length(@) }}"
+                operator: NotEquals
+                value: 1
+              - key: "{{ request.object.spec.initContainers | length(@) }}"
+                operator: NotEquals
+                value: 1
+              - key: "{{ request.object.spec.volumes | length(@) }}"
+                operator: NotEquals
+                value: 5
+              - key: "{{ request.object.spec.volumes[?hostPath] | length(@) }}"
+                operator: GreaterThan
+                value: 0
+              - key: "{{ request.object.spec.volumes[?secret] | length(@) }}"
+                operator: GreaterThan
+                value: 0
+              - key: "{{ request.object.spec.volumes[?persistentVolumeClaim] | length(@) }}"
+                operator: GreaterThan
+                value: 0
+    # Rule 4: the release is ready and the pod carries its image and digest.
+    - name: release-must-be-ready-and-match
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchExpressions:
+                  - {key: agentplatform.io/tenant, operator: Exists}
+      context:
+        - name: release
+          apiCall:
+            urlPath: "/apis/agentplatform.io/v1alpha1/namespaces/{{request.namespace}}/agentreleases/{{request.object.metadata.labels.\"agentplatform.io/release\"}}"
+            jmesPath: "{ready: status.ready, image: spec.image, digest: status.policyDigest, agent: spec.agent}"
+      validate:
+        message: "sandbox must reference a ready AgentRelease whose image, agent and policy digest match"
+        deny:
+          conditions:
+            any:
+              - key: "{{ release.ready }}"
+                operator: NotEquals
+                value: true
+              - key: "{{ request.object.spec.containers[0].image }}"
+                operator: NotEquals
+                value: "{{ release.image }}"
+              - key: "{{ request.object.metadata.labels.\"agentplatform.io/agent\" }}"
+                operator: NotEquals
+                value: "{{ release.agent }}"
+              - key: "{{ request.object.metadata.annotations.\"agentplatform.io/policy-digest\" }}"
+                operator: NotEquals
+                value: "{{ release.digest }}"
