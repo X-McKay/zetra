@@ -1,0 +1,40 @@
+[project]
+name = "agent-runtime"
+version = "0.1.0"
+description = "Sandbox runtime SDK: agent identity, gateway clients and the one-boundary step protocol"
+requires-python = ">=3.12,<3.13"
+# httpx: the spec names 0.27.x; mcp 1.30.0 requires httpx>=0.27.1,<1 and openai 1.109.1 accepts
+# both, so this pins the same httpx as the zetra root project (0.28.1).
+dependencies = [
+    "PyYAML==6.0.3",
+    "httpx==0.28.1",
+    "mcp==1.30.0",
+    "openai==1.109.1",
+]
+
+[project.optional-dependencies]
+landlock = ["landlock==1.0.0.dev5"]
+
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+    "pytest-asyncio==1.4.1",
+    "ruff==0.17.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agent_runtime"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = ["cluster: requires a real cluster, identity provider and gateway"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
