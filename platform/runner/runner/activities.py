@@ -357,7 +357,10 @@ def preflight(inp: SessionInput) -> None:
 
 @activity.defn
 def set_generation(g: GenIn) -> None:
-    deps().aps.put(f"/v1/sessions/{g.inp.session_id}/generation", {"generation": g.generation})
+    deps().aps.put(
+        f"/v1/sessions/{g.inp.session_id}/generation",
+        {"generation": g.generation, "tenant": g.inp.tenant, "agent": g.inp.agent},
+    )
 
 
 @activity.defn
