@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 
@@ -37,8 +38,33 @@ def parser():
         if name in ("build", "release", "eval"):
             cmd.add_argument("--output")
         if name == "eval":
-            cmd.add_argument("--mode", choices=["fixture", "sandbox"], required=True)
+            cmd.add_argument("--mode", choices=["fixture", "local", "sandbox"], required=True)
             cmd.add_argument("--release")
+            cmd.add_argument("--model-config")
+    dev = sub.add_parser("dev", help="run trusted project code locally without Temporal")
+    dev.add_argument("path")
+    dev.add_argument("--agent")
+    dev.add_argument("--input", required=True)
+    dev.add_argument("--model-config")
+    dev.add_argument("--timeout", type=float, default=60)
+    dev.add_argument("--workspace")
+    dev.add_argument("--output", help="new directory for a private report and workspace export")
+    temporal = dev.add_mutually_exclusive_group()
+    temporal.add_argument(
+        "--temporal", action="store_true", help="start a local Temporal dev server"
+    )
+    temporal.add_argument(
+        "--temporal-address", help="connect to an explicit loopback Temporal host:port"
+    )
+    dev.add_argument("--temporal-binary", help="Temporal CLI binary for an owned local server")
+    dev.add_argument("--temporal-state", help="private state directory outside the agent project")
+    quality = sub.add_parser("quality", help="explain or execute local quality requirements")
+    quality.add_argument("path")
+    quality.add_argument("--agent")
+    quality.add_argument("--explain", action="store_true")
+    quality.add_argument("--mode", choices=["fixture", "local"], default="fixture")
+    quality.add_argument("--model-config")
+    quality.add_argument("--output")
     run = sub.add_parser("run")
     run.add_argument("release")
     run.add_argument("--session", required=True)
@@ -158,10 +184,57 @@ def open_gateway():
 
 
 async def execute(args, load_release):
-    if args.command == "eval" and args.mode == "fixture":
+    if args.command == "dev":
+        if args.temporal or args.temporal_address:
+            from .local_temporal import dev_temporal
+
+            with _cancel_on_sigterm():
+                return await dev_temporal(
+                    args.path,
+                    args.input,
+                    agent=args.agent,
+                    model_config=_model_config(args.model_config),
+                    timeout=args.timeout,
+                    workspace=args.workspace,
+                    output=args.output,
+                    address=args.temporal_address,
+                    binary=args.temporal_binary,
+                    state_dir=args.temporal_state,
+                )
+        if args.temporal_binary or args.temporal_state:
+            raise ValueError("Temporal options require an explicit Temporal mode")
+        from .local import local_run
+
+        return await local_run(
+            args.path,
+            args.input,
+            agent=args.agent,
+            model_config=_model_config(args.model_config),
+            timeout=args.timeout,
+            workspace=args.workspace,
+            output=args.output,
+        )
+    if args.command == "quality":
+        from .quality import run_quality
+
+        return await run_quality(
+            args.path,
+            agent=args.agent,
+            mode=args.mode,
+            model_config=_model_config(args.model_config),
+        )
+    if args.command == "eval" and args.mode in ("fixture", "local"):
         from .evaluation import evaluate
 
-        return await evaluate(args.path, mode="fixture", agent=args.agent)
+        return await evaluate(
+            args.path,
+            mode=args.mode,
+            agent=args.agent,
+            model_config=_model_config(args.model_config),
+        )
+
+    if args.command == "eval" and args.model_config:
+        raise ValueError("development model overrides cannot be used in sandbox mode")
 
     from temporalio.client import Client
 
@@ -261,6 +334,31 @@ async def execute(args, load_release):
     return await client.cancel(handle)
 
 
+def _model_config(path):
+    return json.loads(Path(path).read_text()) if path else None
+
+
+@contextmanager
+def _cancel_on_sigterm():
+    loop = asyncio.get_running_loop()
+    task = asyncio.current_task()
+    previous = signal.getsignal(signal.SIGTERM)
+    stopping = False
+
+    def stop():
+        nonlocal stopping
+        if not stopping:
+            stopping = True
+            task.cancel()
+
+    loop.add_signal_handler(signal.SIGTERM, stop)
+    try:
+        yield
+    finally:
+        loop.remove_signal_handler(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, previous)
+
+
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
@@ -270,6 +368,10 @@ def main(argv=None):
             from .scaffold import scaffold
 
             result = scaffold(args.path, args.name)
+        elif args.command == "quality" and args.explain:
+            from .quality import explain_quality
+
+            result = explain_quality(args.path, agent=args.agent)
         elif args.command == "check":
             spec = load_agent(args.path, args.agent)
             result = {
@@ -327,20 +429,29 @@ def main(argv=None):
         else:
             result = asyncio.run(execute(args, load_release))
         encoded = json.dumps(result, indent=2) + "\n"
-        if getattr(args, "output", None) and args.command != "run":
-            Path(args.output).write_text(encoded)
+        if getattr(args, "output", None) and args.command not in ("run", "dev"):
+            _write_json(Path(args.output), result)
         else:
             print(encoded, end="")
         if args.command == "run":
             return 0 if result["result"].get("status") == "SUCCEEDED" else 1
         return (
             1
-            if result.get("status") in ("FAILED", "OUTCOME_UNKNOWN", "REMEDIATION_REQUIRED")
+            if result.get("status")
+            in ("FAILED", "OUTCOME_UNKNOWN", "REMEDIATION_REQUIRED", "CANCELED")
             else 0
         )
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as exc:
         print(f"zetra: {exc}", file=sys.stderr)
         return 1
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        if args.command != "dev" or not (args.temporal or args.temporal_address):
+            raise
+        print(
+            "zetra: local Temporal execution canceled; inspect retained state for cleanup",
+            file=sys.stderr,
+        )
+        return 130
 
 
 if __name__ == "__main__":

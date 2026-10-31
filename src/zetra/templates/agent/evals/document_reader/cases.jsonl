@@ -1,1 +1,1 @@
-{"id":"approved-guide","input":"Read and summarize the approved guide.","contains":"Completed.","files":[]}
+{"schema_version":2,"id":"fixture-guide-boundaries","input":"Read the approved guide with document_id guide, then finish.","assertions":[{"type":"text_contains","value":"Completed."},{"type":"tool_called","tool":"read_document","arguments":{"document_id":"guide"}},{"type":"max_steps","maximum":3}]}

@@ -37,6 +37,14 @@ The same registration produces capture wrappers and effect executors. The admitt
 profile is static, serial and nonstreaming, with at most 64 model/tool boundaries.
 Each effect has one Temporal Activity attempt. Lost completion remains unknown.
 
+The current SDK also provides `zetra dev PATH --input TEXT` for cluster-free
+execution and `zetra quality PATH --explain` / `zetra quality PATH` to explain and
+enforce mapped test/evaluation requirements. Explicit model configuration enables
+local inference; fixtures need no services. See [local development and quality
+gates](docs/local-development.md) for examples and the activated starter workflow.
+`zetra dev PATH --temporal --input TEXT` adds a local Temporal server and real
+model/tool checkpoints; the default command keeps no Temporal dependency at runtime.
+
 ## Embed the SDK
 
 ```python

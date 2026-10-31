@@ -19,7 +19,7 @@ and the limitations that remain before production deployment.
 | Lifecycle | Normal and explicit terminal cleanup share bounded Temporal retries and permanent-error handling; read-only status | Late provisioning uncertainty remains `NOT_CONFIRMED`; [native admission-closure proposal](openshell-admission-closure-proposal.md) is unimplemented |
 | Worker rollouts | Native Temporal Worker options | Replay-compatible changes and native deployment versioning require rollout qualification |
 | Key lifecycle | Per-execution capability derivation from persistent worker secret | Rotation is not versioned; retain original key and runtime configuration |
-| Evaluation | Fixture and sandbox modes; release-bound evidence | Evidence is unsigned and observations remain scoped |
+| Evaluation | Fixture, local-model and sandbox modes; typed outcome/trajectory assertions and complete case accounting | Evidence is unsigned; local execution is trusted host Python |
 | Developer workflow | Canonical nested template; data-only agent index; packaged instructions; one project lock used by image build | Optional application layers are not generated; local kind harness is separate from production deployment |
 | Build/evidence identity | Image/source/manifest/lock/SDK revision binding; eval agent and dataset identity | Unsigned consistency checks; OS and build-system inputs are not bit reproducible |
 | External actions and MCP | Reviewed `remote_read` tools admitted; writes excluded | Native provider policy and backend authorization are deployment-owned; writes require idempotency and reconciliation |
@@ -107,3 +107,39 @@ eight fresh Kubani qualifications passed, with final native/Kubernetes session
 resource absence and the exact new-image native credential/isolation control.
 See [the qualification report](qualification.md) for retained initial failures,
 compatibility tuples and measurement limits.
+
+### Repository developer skills
+
+The canonical agent starter now includes shared Claude Code/Codex developer
+guidance, a versioned inventory, local drift/conflict checking and application-wheel
+exclusion of developer-assistant assets. SDK scaffolding bundles that same tree.
+The starter's SDK pin and runtime admission behavior are unchanged. Guidance and
+local consistency checks do not add runtime policy enforcement, model-quality
+coverage, live isolation evidence or production authorization. See the
+[delivery and validation record](developer-skills.md) for actual checks, retained
+initial failures, environment differences and behavioral-benchmark limitations.
+
+### Local execution and quality requirements
+
+The shared agent core now supports explicit no-Temporal host execution, including
+an explicitly configured OpenAI-compatible model. Typed assertions cover final
+outcomes, file contents, observed tool arguments/order and execution limits.
+The local quality gate maps component requirements to freshly executed tests and
+cases, checks complete accounting and tool inventory, and rejects changed inputs.
+Missing, skipped, deselected, xfailed or failed required evidence cannot pass.
+This is repository-controlled unsigned evidence, not independent production policy.
+Runtime skills remain explicitly declared resources without automatic discovery.
+
+The canonical starter now installs a reachable SDK pin with the active quality
+contract and a pre-build CI gate. The separate local Temporal adapter reuses the
+production Workflow and core with cold Linux host children, accepted-history
+reconstruction, retained admission fences and one-attempt uncertainty markers.
+It does not use production Releases or OpenShell and does not migrate the separate
+platform runtime. See
+[local development](local-development.md) and the
+[validation record](evidence/local-quality-2026-10-31.md) for exercised scope and limits.
+
+The [starter rollout and local Temporal record](evidence/local-temporal-2026-10-31.md)
+separately documents native history/replay, worker/server restart, lost completion,
+supervised cancellation and publication checks. These observations do not qualify
+the production sandbox or the separate platform runtime.

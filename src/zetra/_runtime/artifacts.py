@@ -153,6 +153,13 @@ class Tape:
         )
 
     def load(self, position):
+        return [
+            {"operation": entry["operation"], "outcome": entry["outcome"]["value"]}
+            for entry in self.records(position)
+        ]
+
+    def records(self, position):
+        """Verified accepted records retaining definitive outcome status for diagnostics."""
         position = Position.model_validate(position)
         total = 0
 
@@ -205,7 +212,7 @@ class Tape:
                     != entries[0]["operation"]["operation_id"].rsplit(":", 1)[0]
                 ):
                     raise IntegrityError("invocation mismatch")
-                entries.append({"operation": operation, "outcome": outcome["value"]})
+                entries.append({"operation": operation, "outcome": outcome})
             if len(entries) != position.cursor or prefix != position.prefix_digest:
                 raise IntegrityError("position mismatch")
             if nodes and nodes[0]["workspace"] != (

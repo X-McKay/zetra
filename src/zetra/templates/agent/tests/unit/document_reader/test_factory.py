@@ -1,7 +1,9 @@
 from google.adk.agents import LlmAgent
 from zetra.agent import AgentContext
 
-from agent_package.agents.document_reader.factory import create_agent
+from agent_package.agents.document_reader.factory import (
+    create_agent,
+)
 
 
 def test_factory_uses_context_model_tools_and_packaged_instruction(tmp_path):

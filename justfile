@@ -16,6 +16,7 @@ check: lint
     uv run --frozen python -m zetra test examples/document_reader
     uv run --frozen python -m zetra eval examples/workspace_reporter --mode fixture
     uv run --frozen python -m zetra eval examples/document_reader --mode fixture
+    uv run --frozen python -m zetra quality examples/workspace_reporter
 cluster-up:
     bash scripts/kind-up.sh
 qualify:

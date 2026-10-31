@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "agent": "workspace_reporter",
+  "tools": {"inspect_workspace": "workspace_read", "write_summary": "workspace_write"},
+  "skills": {},
+  "live_model_required": false,
+  "requirements": [
+    {"id": "summary-outcome", "component": "agent", "kind": "outcome", "cases": ["summary"]},
+    {"id": "inspect-before-write", "component": "agent", "kind": "trajectory", "cases": ["summary"]},
+    {"id": "bounded-steps", "component": "agent", "kind": "performance", "cases": ["summary"]},
+    {"id": "read-contract", "component": "tool:inspect_workspace", "kind": "contract", "tests": ["tests/unit/workspace_reporter/test_agent.py::test_tools_are_scoped"]},
+    {"id": "read-scope", "component": "tool:inspect_workspace", "kind": "security", "tests": ["tests/unit/workspace_reporter/test_agent.py::test_rejected_path_does_not_disclose_parent_files"]},
+    {"id": "read-error", "component": "tool:inspect_workspace", "kind": "recovery", "tests": ["tests/unit/workspace_reporter/test_agent.py::test_rejected_read_does_not_prevent_later_valid_read"]},
+    {"id": "write-contract", "component": "tool:write_summary", "kind": "contract", "tests": ["tests/unit/workspace_reporter/test_agent.py::test_tools_are_scoped"]},
+    {"id": "write-scope", "component": "tool:write_summary", "kind": "security", "tests": ["tests/unit/workspace_reporter/test_agent.py::test_summary_content_cannot_select_output_path"]},
+    {"id": "write-error", "component": "tool:write_summary", "kind": "recovery", "tests": ["tests/unit/workspace_reporter/test_agent.py::test_summary_failure_does_not_write_an_alternate_file"]}
+  ]
+}
