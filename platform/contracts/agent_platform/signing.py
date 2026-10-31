@@ -37,11 +37,17 @@ def subject_regexp_for(repository: str, workflow: str = "release.yml") -> str:
     """The identity a repo's release workflow gets from Fulcio on an `<agent>/v*` tag."""
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("repository must be owner/name")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+\.ya?ml", workflow):
+        raise ValueError("workflow must be a file name under .github/workflows")
+
+    def lit(text: str) -> str:  # only "." needs escaping in these charsets; RE2 and re agree
+        return text.replace(".", "\\.")
+
     return (
         "^https://github\\.com/"
-        + re.escape(repository)
+        + lit(repository)
         + "/\\.github/workflows/"
-        + re.escape(workflow)
+        + lit(workflow)
         + "@refs/tags/[a-z0-9-]+/v[0-9][A-Za-z0-9.+-]*$"
     )
 
