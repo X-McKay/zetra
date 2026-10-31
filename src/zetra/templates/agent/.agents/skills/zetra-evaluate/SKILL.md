@@ -5,7 +5,11 @@ description: Use when designing, extending, running, or interpreting tests and e
 
 Read [current evaluation commands and evidence limits](../../../docs/development.md).
 Inspect the changed capabilities, existing tests/datasets, and installed evaluator
-before selecting a grader. Do not invent trajectory flags or quality-gate APIs.
+before selecting a grader. Use `zetra quality . --explain` to inspect requirement
+coverage, then `zetra quality .` to execute mapped tests and fixture evaluation.
+V2 JSONL assertions grade final text, tool calls and bounded steps; use supported
+assertions rather than inventing flags. Keep `quality.json` mappings current when
+changing tools, runtime skills or required evidence.
 
 Map each requirement to a component, scenario, assertion/grader and runner. Cover
 outcomes, tool arguments/effects, runtime-skill activation/nonactivation, required

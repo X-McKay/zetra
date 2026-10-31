@@ -26,7 +26,11 @@ options. A command absent from that installed help is a missing capability.
 | Lint / format check | `uv run --locked ruff check .` / `uv run --locked ruff format --check .` |
 | Unit and packaging tests | `uv run --locked pytest` |
 | Static selected-agent metadata | `uv run --locked zetra check . --agent document_reader` |
-| Deterministic fixture evaluation | `uv run --locked zetra eval . --agent document_reader --mode fixture` |
+| Explain quality requirement coverage | `uv run --locked zetra quality . --agent document_reader --explain` |
+| Execute quality gate (mapped tests and fixture eval) | `uv run --locked zetra quality . --agent document_reader` |
+| Deterministic fixture evaluation (standalone diagnosis) | `uv run --locked zetra eval . --agent document_reader --mode fixture` |
+| Trusted host local inference | `uv run --locked zetra dev . --agent document_reader --input "Read the guide" --model-config model.json` |
+| Evaluate a configured local model | `uv run --locked zetra eval . --agent document_reader --mode local --model-config model.json` |
 | Build application wheel | `uv build --wheel` |
 | Verify wheel resources and dependency pin | `uv run --locked python tests/packaging/check_wheel.py dist/*.whl` |
 | All starter checks | `just validate` |
@@ -35,30 +39,36 @@ Replace `document_reader` with an indexed agent name when appropriate. Static
 checks do not import factories. Tests and fixture evaluation execute trusted
 project Python on the host. The fixture model deterministically calls a tool and
 returns `Completed.`; adding natural-language cases does not make it a real model.
-Current JSONL cases support `id`, `input`, `contains`, and `files`. They do not
-provide built-in trajectory grading, runtime-skill activation metrics, or statistical
-model-quality evaluation. Use explicit tests for observable behavior that the
-current fixture cannot score and identify missing model-based evidence separately.
+The active V2 JSONL dataset uses `schema_version: 2` and typed `assertions` for
+final text, tool calls/arguments and bounded steps. `quality.json` maps each agent,
+tool and declared runtime-skill requirement to case IDs or pytest selectors.
+`zetra quality . --explain` checks coverage; execution runs fresh mapped tests and
+evaluation and rejects missing or incomplete evidence. The normal gate already
+runs fixture evaluation, so validation does not run a second standalone eval.
+These assertions do not measure statistical model quality; use representative
+live cases and explicit tests for properties the selected grader cannot score.
 
 ## Local execution and boundaries
 
 Unit tests, pack checks, static checks and fixture evaluation require no cluster
 or Temporal connection. Dependency installation may need network access. Genuine
-model evaluation needs a configured provider; a fully offline model requires a
-supported local provider and downloaded weights. No-Temporal live inference and
-a turnkey local-Temporal runner are planned platform work, not commands supplied
-by this pinned starter. Missing live infrastructure is not permission to relabel
-fixture results or silently change the execution mode.
+model evaluation needs an explicitly configured endpoint and model; a fully offline
+model requires a supported local endpoint and downloaded weights. `zetra dev`,
+`eval --mode local` and `quality --mode local` run trusted project code without
+Temporal or a cluster. Supply `--model-config model.json` with `base_url`, `model`
+and optionally `api_key_env`, `max_tokens`, `timeout` and `temperature`. Keep secrets
+in the named environment variable. Use the installed help for supported options.
+Local Temporal remains separate platform work. Missing live infrastructure is not
+permission to relabel fixture results or silently change execution mode.
 
-The pinned SDK admits only `workspace_read` and `workspace_write` tool effects.
-It rejects `remote_read` as well as remote writes; newer SDK checkouts may have
-different capabilities. Remote/MCP tools require a separately reviewed SDK upgrade,
-compatible lockfile and runtime qualification before use in this starter. Arbitrary
-background processes and parallel tools are also outside its admitted profile.
-A prompt or Python annotation is not authorization or sandbox enforcement. Any
-future remote integration needs explicit transport, identity, resource scope and
-deployment policy. Do not acquire production credentials or change a global kube
-context to make a local task run.
+The pinned SDK admits `workspace_read`, `workspace_write` and reviewed
+`remote_read` tool effects. Remote writes, arbitrary background processes and
+parallel tools remain outside its admitted profile. Admission does not install an
+MCP transport or supply identity, resource scoping or deployment policy. Review and
+implement those integrations explicitly, test accepted/rejected resource scopes,
+and qualify the intended runtime. A prompt or Python annotation is not
+authorization or sandbox enforcement. Do not acquire production credentials or
+change a global kube context to make a local task run.
 
 The separate qualification workflow requires its documented infrastructure and
 explicit configuration. Retain `OUTCOME_UNKNOWN` and unconfirmed cleanup states.
@@ -80,15 +90,17 @@ tests. Runtime skills need loading/packaging, activation, nonactivation, conflic
 instructions, tool interactions and outcome tests. Add injection, data-disclosure,
 recovery, escalation/abstention and efficiency cases where the capabilities make
 them relevant. A skipped or unscored case is missing evidence, not a passing case.
-Developer-defined domain criteria complement platform requirements; this starter
-does not yet implement the proposed mandatory cross-component quality contract.
+Developer-defined domain criteria complement the active component quality
+contract. Keep contract inventories and mapped tests/cases consistent with actual
+capabilities; a declared runtime skill needs its required evidence mappings.
 
-See [the prepared quality upgrade](quality-upgrade/README.md) for an inactive V2
-fixture case, tool-test contract and disposable candidate rehearsal. Enable
-`zetra quality` in normal CI only after a reachable published SDK revision is
-selected, the Git pin and lockfile are updated together, and rendered validation
-passes. The prepared files do not change this starter's active legacy dataset;
-local Temporal remains separate.
+See [the quality contract reference](quality-upgrade/README.md) for the active
+starter mappings, their limits and upgrade history. Both validation and release
+workflows run `zetra quality .` before building. The current fixture contract sets
+`live_model_required` to false; set it true when live evidence becomes a gate
+requirement, then run `quality --mode local --model-config model.json` with
+appropriate live assertions. The `Completed.` marker case is not a live
+summarization grader.
 
 Prefer deterministic assertions when they express the requirement. Calibrate model
 graders against reviewed labels, keep held-out data separate from prompt tuning,

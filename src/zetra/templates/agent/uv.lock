@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 
 [[package]]
@@ -17,7 +17,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "zetra", git = "https://github.com/X-McKay/zetra.git?rev=af2e7542b89265eaa4572a586719a67e58238e74" }]
+requires-dist = [{ name = "zetra", git = "https://github.com/X-McKay/zetra.git?rev=e9bdc66fb52a4f1c0d713b2cfb30e467afc7ec94" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1437,7 +1437,7 @@ wheels = [
 [[package]]
 name = "zetra"
 version = "0.1.0"
-source = { git = "https://github.com/X-McKay/zetra.git?rev=af2e7542b89265eaa4572a586719a67e58238e74#af2e7542b89265eaa4572a586719a67e58238e74" }
+source = { git = "https://github.com/X-McKay/zetra.git?rev=e9bdc66fb52a4f1c0d713b2cfb30e467afc7ec94#e9bdc66fb52a4f1c0d713b2cfb30e467afc7ec94" }
 dependencies = [
     { name = "google-adk" },
     { name = "google-genai" },

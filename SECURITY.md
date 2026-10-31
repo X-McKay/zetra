@@ -1,6 +1,6 @@
 # Security boundaries
 
-Each durable session runs in a fresh OpenShell sandbox and writable volume. Landlock,
+Each production session runs in a fresh OpenShell sandbox and writable volume. Landlock,
 seccomp and reviewed network policy constrain the workload. Agent code, bridge and
 tool bodies share its security domain. Python admission checks apply to cooperative
 registered code; they are not isolation against hostile Python.
@@ -78,6 +78,17 @@ metadata without importing factories. Evaluation, enforcement and recovery evide
 are separate. Do not commit keys, confidential traces, artifacts or kubeconfigs.
 Report security issues privately to the repository owner. Resource deletion does
 not prove secure physical storage erasure.
+
+The optional local Temporal adapter is also trusted-host execution. It uses Linux
+process supervision and leases held through child exit, retained generation and
+terminal fences, and an uncertainty marker before each effect. The admitted local
+tool profile is cooperative in-process execution; ordinary subprocess/fork/exec
+APIs are rejected by an audit guard. This is not a security boundary against
+hostile Python or native syscalls. Unmanaged threads/background work are outside
+the profile. Local cleanup confirms supported runner/workspace removal, not
+OpenShell isolation or erasure of retained artifacts/history. Keep the private
+state directory and exact source/config identity for recovery; never delete its
+leases or tombstones while a retained execution can still receive work.
 
 The per-execution `BRIDGE_KEY` is delivered in the OpenShell sandbox specification.
 Treat OpenShell spec-read access and underlying control-plane access as privileged:

@@ -41,7 +41,9 @@ The current SDK also provides `zetra dev PATH --input TEXT` for cluster-free
 execution and `zetra quality PATH --explain` / `zetra quality PATH` to explain and
 enforce mapped test/evaluation requirements. Explicit model configuration enables
 local inference; fixtures need no services. See [local development and quality
-gates](docs/local-development.md) for examples and the starter's pending pin upgrade.
+gates](docs/local-development.md) for examples and the activated starter workflow.
+`zetra dev PATH --temporal --input TEXT` adds a local Temporal server and real
+model/tool checkpoints; the default command keeps no Temporal dependency at runtime.
 
 ## Embed the SDK
 

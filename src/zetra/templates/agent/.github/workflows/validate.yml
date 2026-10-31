@@ -19,7 +19,7 @@ jobs:
       - run: uv run --locked ruff format --check .
       - run: uv run --locked pytest
       - run: uv run --locked zetra check .
-      - run: uv run --locked zetra eval . --mode fixture
+      - run: uv run --locked zetra quality .
       - run: uv build --wheel
       - run: uv run --locked python tests/packaging/check_wheel.py dist/*.whl
       - run: uv venv /tmp/zetra-wheel-install

@@ -16,7 +16,9 @@ from .manifest import digest, load_agent, source_digest
 
 
 class LocalModelConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
+    model_config = ConfigDict(
+        extra="forbid", frozen=True, strict=True, hide_input_in_errors=True, validate_default=True
+    )
     base_url: str
     model: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
     api_key_env: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -150,8 +152,14 @@ async def local_run(
                 "output_tokens": None,
             },
         }
-    if source != source_digest(root):
-        result.update(status="FAILED", error_type="SourceChanged")
+    try:
+        changed = source != source_digest(root)
+    except (OSError, ValueError):
+        changed = True
+    if changed:
+        result.update(error_type="SourceChanged", integrity_errors=["source_changed_or_unreadable"])
+        if result["status"] not in {"OUTCOME_UNKNOWN", "CANCELED", "REMEDIATION_REQUIRED"}:
+            result["status"] = "FAILED"
     result.update(
         schema_version=1,
         mode="local" if config else "fixture",

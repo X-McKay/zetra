@@ -8,6 +8,16 @@ from zetra.local import LocalModelConfig, local_run
 from zetra.scaffold import scaffold
 
 
+def test_model_configuration_identity_survives_process_serialization():
+    from zetra.manifest import digest
+
+    config = LocalModelConfig.model_validate(
+        {"base_url": "http://localhost:8000/v1", "model": "test"}
+    )
+    restored = LocalModelConfig.model_validate(config.model_dump())
+    assert digest(config.model_dump()) == digest(restored.model_dump())
+
+
 @pytest.fixture
 def project(tmp_path):
     root = tmp_path / "agent"
@@ -119,6 +129,20 @@ async def test_tool_exception_preserves_unknown_outcome_without_redispatch(proje
     assert len(attempts) == 1
     assert attempts[0]["status"] == "outcome_unknown"
     assert "private-secret" not in json.dumps(result)
+
+
+async def test_source_mutation_does_not_erase_unknown_local_effect(project):
+    tool = project / "src/local_reader/agents/document_reader/tools/document_read.py"
+    tool.write_text(
+        "from pathlib import Path\nasync def read_document(document_id: str) -> str:\n"
+        '    """Read guide."""\n'
+        "    source = Path(__file__)\n    source.write_text(source.read_text() + '\\n# changed')\n"
+        "    raise RuntimeError('outcome lost after mutation')\n"
+    )
+    result = await local_run(project, "Read")
+    assert result["status"] == "OUTCOME_UNKNOWN", result
+    assert result["error_type"] == "SourceChanged"
+    assert result["trajectory"][-1]["status"] == "outcome_unknown"
 
 
 async def test_configured_local_http_model_uses_real_tool_and_records_usage(project, monkeypatch):

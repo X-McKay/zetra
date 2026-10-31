@@ -1,12 +1,17 @@
-# Prepared local quality upgrade
+# Active quality contract
 
-These files are a prepared upgrade, outside the active `evals/document_reader`
-dataset. The pinned SDK does not supply these V2 assertions or `zetra quality`.
-Keep normal validation and CI on their supported commands until a new SDK revision
-is published and reachable, its exact Git pin and lockfile are updated together,
-and the rendered project passes validation. Then review and activate the prepared
-case and contract before enabling `zetra quality` in CI. A local SDK checkout is
-candidate evidence, not a published dependency or permission to change the pin.
+The starter pins SDK `e9bdc66fb52a4f1c0d713b2cfb30e467afc7ec94`. Its V2 dataset
+and quality contract are active in [evals/document_reader](../../evals/document_reader).
+These are the sole maintained case and contract copies. This directory originally
+held an inactive upgrade rehearsal for the earlier SDK pin; activation updated the
+Git dependency and lockfile together and enabled the gate before wheel builds.
+
+```sh
+uv sync --locked
+uv run --locked zetra quality . --agent document_reader --explain
+uv run --locked zetra quality . --agent document_reader
+just validate
+```
 
 The case checks the fixture's final `Completed.` marker, the actual
 `read_document(document_id="guide")` call and at most three model/tool boundaries
@@ -17,32 +22,15 @@ tool call succeeds after rejection; it does not test durable recovery. No runtim
 skills are declared. Fixture success establishes plumbing and bounded execution,
 not guide-summary accuracy, prompt-injection resistance or live model quality.
 
-Rehearse only in a disposable rendered project. From the canonical template
-repository, set `CANDIDATE_SDK` to a reviewed candidate SDK checkout whose locked
-Python environment is already installed:
+The gate executes its mapped pytest selectors and fixture evaluation itself;
+`--explain` checks coverage without executing that evidence. The normal validation
+and release workflows execute the gate before building the application wheel.
 
-```sh
-REHEARSAL_PARENT=$(mktemp -d)
-python scripts/render.py "$REHEARSAL_PARENT/project" --name quality-rehearsal
-cd "$REHEARSAL_PARENT/project"
-cp docs/quality-upgrade/cases.jsonl evals/document_reader/cases.jsonl
-cp docs/quality-upgrade/quality.json evals/document_reader/quality.json
-export PYTHONPATH="$PWD/src:$CANDIDATE_SDK/src"
-"$CANDIDATE_SDK/.venv/bin/python" -m pytest
-"$CANDIDATE_SDK/.venv/bin/python" -m zetra quality . --agent document_reader --explain
-"$CANDIDATE_SDK/.venv/bin/python" -m zetra eval . --agent document_reader --mode fixture
-"$CANDIDATE_SDK/.venv/bin/python" -m zetra quality . --agent document_reader --mode fixture
-```
-
-This deliberately runs the candidate interpreter and SDK source rather than
-claiming that `uv run --locked` uses an unpublished revision. Do not copy the
-rehearsal's eval replacement back into the active pinned starter yet.
-
-For live evidence, create separate outcome assertions grounded in the guide's
-contents, configure an explicit model endpoint with the candidate SDK's supported
-`--model-config` option, and run `zetra dev`, `eval --mode local` or
-`quality --mode local`. Keep credentials in the referenced environment variable,
-not the config or report. The fixture marker case is not a live summarization
-grader. Set `live_model_required` when live evidence becomes a gate requirement.
-The local runner needs no Temporal or cluster connection; local Temporal remains
-a separate, explicitly configured milestone.
+For live evidence, create outcome assertions grounded in the guide's contents,
+configure an explicit model endpoint using `--model-config`, and run `zetra dev`,
+`eval --mode local` or `quality --mode local`. Keep credentials in the referenced
+environment variable, not the config or report. The fixture marker case is not a
+live summarization grader. Set `live_model_required` when live evidence becomes a
+gate requirement. Local inference needs no Temporal or cluster connection; local
+Temporal remains separate platform work. See [development](../development.md) for
+supported commands, configuration and runtime boundaries.

@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 
@@ -48,6 +49,15 @@ def parser():
     dev.add_argument("--timeout", type=float, default=60)
     dev.add_argument("--workspace")
     dev.add_argument("--output", help="new directory for a private report and workspace export")
+    temporal = dev.add_mutually_exclusive_group()
+    temporal.add_argument(
+        "--temporal", action="store_true", help="start a local Temporal dev server"
+    )
+    temporal.add_argument(
+        "--temporal-address", help="connect to an explicit loopback Temporal host:port"
+    )
+    dev.add_argument("--temporal-binary", help="Temporal CLI binary for an owned local server")
+    dev.add_argument("--temporal-state", help="private state directory outside the agent project")
     quality = sub.add_parser("quality", help="explain or execute local quality requirements")
     quality.add_argument("path")
     quality.add_argument("--agent")
@@ -175,6 +185,24 @@ def open_gateway():
 
 async def execute(args, load_release):
     if args.command == "dev":
+        if args.temporal or args.temporal_address:
+            from .local_temporal import dev_temporal
+
+            with _cancel_on_sigterm():
+                return await dev_temporal(
+                    args.path,
+                    args.input,
+                    agent=args.agent,
+                    model_config=_model_config(args.model_config),
+                    timeout=args.timeout,
+                    workspace=args.workspace,
+                    output=args.output,
+                    address=args.temporal_address,
+                    binary=args.temporal_binary,
+                    state_dir=args.temporal_state,
+                )
+        if args.temporal_binary or args.temporal_state:
+            raise ValueError("Temporal options require an explicit Temporal mode")
         from .local import local_run
 
         return await local_run(
@@ -310,6 +338,27 @@ def _model_config(path):
     return json.loads(Path(path).read_text()) if path else None
 
 
+@contextmanager
+def _cancel_on_sigterm():
+    loop = asyncio.get_running_loop()
+    task = asyncio.current_task()
+    previous = signal.getsignal(signal.SIGTERM)
+    stopping = False
+
+    def stop():
+        nonlocal stopping
+        if not stopping:
+            stopping = True
+            task.cancel()
+
+    loop.add_signal_handler(signal.SIGTERM, stop)
+    try:
+        yield
+    finally:
+        loop.remove_signal_handler(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, previous)
+
+
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
@@ -388,12 +437,21 @@ def main(argv=None):
             return 0 if result["result"].get("status") == "SUCCEEDED" else 1
         return (
             1
-            if result.get("status") in ("FAILED", "OUTCOME_UNKNOWN", "REMEDIATION_REQUIRED")
+            if result.get("status")
+            in ("FAILED", "OUTCOME_UNKNOWN", "REMEDIATION_REQUIRED", "CANCELED")
             else 0
         )
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as exc:
         print(f"zetra: {exc}", file=sys.stderr)
         return 1
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        if args.command != "dev" or not (args.temporal or args.temporal_address):
+            raise
+        print(
+            "zetra: local Temporal execution canceled; inspect retained state for cleanup",
+            file=sys.stderr,
+        )
+        return 130
 
 
 if __name__ == "__main__":

@@ -29,6 +29,14 @@ model reasoning. Quality checks execute fresh tests/cases, verify input identiti
 and reconcile admitted tools, but repository-controlled tests/contracts do not
 provide independent production authorization. See [local development](local-development.md).
 
+The optional LocalTemporal adapter uses the same SessionWorkflow and Activities
+with a separate strict host-development request. Cold children reconstruct each
+boundary from Temporal-accepted tape and share an immutable local object store.
+Per-execution leases, generation fences, terminal tombstones and pre-effect
+attempt markers fence local admission and preserve uncertainty after worker loss.
+They never select accepted progress. This Linux cooperative in-process profile
+is distinct from production OpenShell isolation and the separate platform engine.
+
 `SessionHandle` pins namespace, Workflow ID, run ID and runtime identity. Loading
 history validates the original start and rejects reset, retry, continuation and
 cron lineages. Per-run capabilities derive from the worker secret, exact handle

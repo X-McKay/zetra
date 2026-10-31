@@ -130,9 +130,16 @@ Missing, skipped, deselected, xfailed or failed required evidence cannot pass.
 This is repository-controlled unsigned evidence, not independent production policy.
 Runtime skills remain explicitly declared resources without automatic discovery.
 
-The canonical starter includes stronger tool tests and a prepared quality upgrade.
-Its active SDK pin/lock and CI remain on the previous reachable SDK until the new
-SDK is published and pinned together with a validated lock. Local Temporal and
-the separate platform runtime still need adapters/migration. See
+The canonical starter now installs a reachable SDK pin with the active quality
+contract and a pre-build CI gate. The separate local Temporal adapter reuses the
+production Workflow and core with cold Linux host children, accepted-history
+reconstruction, retained admission fences and one-attempt uncertainty markers.
+It does not use production Releases or OpenShell and does not migrate the separate
+platform runtime. See
 [local development](local-development.md) and the
 [validation record](evidence/local-quality-2026-10-31.md) for exercised scope and limits.
+
+The [starter rollout and local Temporal record](evidence/local-temporal-2026-10-31.md)
+separately documents native history/replay, worker/server restart, lost completion,
+supervised cancellation and publication checks. These observations do not qualify
+the production sandbox or the separate platform runtime.

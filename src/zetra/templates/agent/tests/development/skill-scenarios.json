@@ -19,7 +19,7 @@
       "id": "tool-pinned-remote-read",
       "skill": "zetra-author-tool",
       "request": "Add a remote_read MCP deployment-history tool using this starter's unchanged SDK pin.",
-      "acceptance": ["Inspects the installed SDK rather than a newer checkout", "Identifies remote_read as unsupported by the current pin", "Does not relabel a remote effect as workspace_read", "Explains the separately reviewed upgrade and qualification requirement"]
+      "acceptance": ["Inspects the installed SDK rather than a newer checkout", "Recognizes reviewed remote_read admission and the need for explicit transport, identity, resource scope and deployment policy", "Does not relabel a remote effect as workspace_read", "Tests the scoped integration with synthetic inputs and identifies missing runtime qualification"]
     },
     {
       "id": "runtime-skill-loading",

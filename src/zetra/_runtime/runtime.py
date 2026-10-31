@@ -42,13 +42,16 @@ class Runtime:
         generation=1,
         provider="scripted",
         definition=None,
+        objects_root=None,
     ):
         self.root = Path(root)
         self.session = session
         self.manifest = manifest
         self.message = message
         self.provider = provider
-        self.store = TrackingStore(self.root / "objects")
+        self.store = TrackingStore(
+            objects_root if objects_root is not None else self.root / "objects"
+        )
         self.tape = Tape(self.store, manifest=manifest)
         self.workdir = self.root / "workspace"
         self.workdir.mkdir(exist_ok=True)

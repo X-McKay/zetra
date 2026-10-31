@@ -8,10 +8,11 @@ registration and the tool's callers before choosing its contract.
 
 Specify typed inputs, bounded outputs, resource scope, timeout/error behavior and
 actual effect. Register the tool through the existing context and match the effect
-to what the implementation does. For example, this starter's pinned SDK rejects
-`remote_read`; reading deployment history through MCP needs a separately qualified
-SDK upgrade. Restarting pods is a remote write and is also unsupported. Do not
-relabel either operation as a workspace read to pass admission.
+to what the implementation does. The pinned SDK admits reviewed `remote_read`
+tools alongside workspace reads/writes. A deployment-history MCP tool still needs
+an explicit transport, identity, resource scope and deployment policy; admission
+does not supply these integrations. Restarting pods is an unsupported remote
+write. Do not relabel a remote effect as a workspace read to pass admission.
 
 Use synthetic local fixtures to test accepted inputs, invalid/out-of-scope inputs,
 empty/malformed upstream results, failures and output limits. Test that rejected
