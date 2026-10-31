@@ -7,6 +7,19 @@ import pytest
 from zetra.scaffold import scaffold
 
 
+def test_generated_developer_pack_detects_mirror_drift(tmp_path):
+    root = tmp_path / "created"
+    scaffold(root, "renamed-reader")
+    command = [sys.executable, str(root / "scripts/developer_skills.py"), "--check"]
+    checked = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert checked.returncode == 0, checked.stderr
+    mirror = root / ".claude/skills/zetra-evaluate/SKILL.md"
+    mirror.write_text(mirror.read_text() + "\nUnreviewed change.\n")
+    checked = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert checked.returncode != 0
+    assert "drift" in checked.stderr.lower()
+
+
 def test_generated_agent_runs_tests_and_eval_without_infrastructure(tmp_path):
     root = tmp_path / "created"
     scaffold(root, "generated_reader")

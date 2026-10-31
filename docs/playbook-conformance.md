@@ -107,3 +107,14 @@ eight fresh Kubani qualifications passed, with final native/Kubernetes session
 resource absence and the exact new-image native credential/isolation control.
 See [the qualification report](qualification.md) for retained initial failures,
 compatibility tuples and measurement limits.
+
+### Repository developer skills
+
+The canonical agent starter now includes shared Claude Code/Codex developer
+guidance, a versioned inventory, local drift/conflict checking and application-wheel
+exclusion of developer-assistant assets. SDK scaffolding bundles that same tree.
+The starter's SDK pin and runtime admission behavior are unchanged. Guidance and
+local consistency checks do not add runtime policy enforcement, model-quality
+coverage, live isolation evidence or production authorization. See the
+[delivery and validation record](developer-skills.md) for actual checks, retained
+initial failures, environment differences and behavioral-benchmark limitations.

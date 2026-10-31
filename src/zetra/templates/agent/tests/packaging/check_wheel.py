@@ -3,7 +3,7 @@
 import argparse
 import tomllib
 from email.parser import BytesParser
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
 
@@ -16,6 +16,15 @@ def check(wheel: Path) -> None:
     project = tomllib.loads((source.parent / "pyproject.toml").read_text(encoding="utf-8"))
     expected = project["project"]["dependencies"]
     with ZipFile(wheel) as archive:
+        for name in archive.namelist():
+            path = PurePosixPath(name)
+            if {".agents", ".claude"}.intersection(path.parts) or path.name in {
+                "AGENTS.md",
+                "CLAUDE.md",
+                "developer-skills.json",
+                "developer_skills.py",
+            }:
+                raise ValueError(f"wheel contains developer-only assistant assets: {name}")
         for resource in resources:
             try:
                 actual = archive.read(resource.as_posix())

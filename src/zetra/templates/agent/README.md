@@ -16,3 +16,9 @@ The default `fixture` model deterministically invokes the tool and returns `Comp
 Durable qualification requires an explicitly configured self-hosted runner labelled `zetra-kind`, the dedicated zetra-validation kind cluster, Docker, Temporal, OpenShell credentials, and a running compatible worker. Set the repository variable ZETRA_QUALIFICATION_ENABLED to true only after configuring this infrastructure. The manually dispatched qualify workflow builds and loads a source image, binds a release to that source, and evaluates it in the sandbox. Missing infrastructure fails the run. Review SDK documentation before provisioning; this project does not provision clusters.
 
 The release workflow produces a Python wheel and SHA-256 checksum artifact. It does not publish an image, promote a release, or issue an attestation. SDK runtime image publication remains an explicit operator step.
+
+Claude Code and Codex receive the same versioned developer skill pack with this
+repository. See [the development workflow](docs/development.md) for authoring tools
+and runtime skills, evaluation, debugging, optimization, release review and pack
+updates. `just validate` checks that both assistant copies match the inventory.
+Developer skills are excluded from the application wheel.
