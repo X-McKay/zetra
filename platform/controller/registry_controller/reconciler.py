@@ -22,11 +22,12 @@ from agent_platform.constants import (
     TENANT_NETWORK_POLICIES,
 )
 from agent_platform.podtemplate import render_pod_template
+from agent_platform.signing import SignerIdentity
 from registry_controller import desired
 from registry_controller.config import ControllerConfig
 from registry_controller.idp import AgentClientSpec, IdpAdapter
 from registry_controller.kube import KubePort
-from registry_controller.signature import SignatureVerifier
+from registry_controller.signature import SignatureVerifier, Verification
 
 log = logging.getLogger(__name__)
 NETPOL_API = "networking.k8s.io/v1"
@@ -266,22 +267,24 @@ class Reconciler:
         conds = old.get("conditions") or []
         status: dict[str, Any] = {}
 
-        try:
-            signed = bool(
-                self.verifier.verify(spec["image"], spec["manifestSha256"], spec["policySha256"])
-            )
-        except Exception as exc:  # fail closed
-            log.warning(
-                "signature verification error for %s/%s: %s", tenant, name, type(exc).__name__
-            )
-            signed = False
+        verification = self._verify(tenant, name, spec)
+        signed = verification.ok
         status["signatureVerified"] = signed
+        status["verifiedSigner"] = (
+            {
+                "issuer": verification.issuer,
+                "subject": verification.subject,
+                "attestations": list(verification.attestations),
+            }
+            if signed and verification.subject
+            else None
+        )
         conds = desired.set_condition(
             conds,
             "SignatureVerified",
             signed,
-            "Verified" if signed else "VerificationFailed",
-            "",
+            "Verified" if signed else (verification.reason or "VerificationFailed"),
+            verification.subject if signed else "",
             now,
         )
 
@@ -346,6 +349,30 @@ class Reconciler:
         )
         self.kube.patch_status(GROUP_VERSION, "AgentRelease", tenant, name, status)
         return self._finish(status, regenerate)
+
+    def _verify(self, tenant: str, name: str, spec: dict[str, Any]) -> Verification:
+        """Fail closed: a missing or malformed signer declaration is a failed check."""
+        signer: SignerIdentity | None = None
+        if self.cfg.signature_profile == "keyless":
+            try:
+                signer = SignerIdentity.from_namespace(
+                    self.kube.get("v1", "Namespace", None, tenant)
+                )
+            except ValueError as exc:
+                log.warning("tenant %s has no usable signer identity: %s", tenant, exc)
+                return Verification(False, "SignerIdentityMissing")
+        try:
+            result = self.verifier.verify(
+                spec["image"], spec["manifestSha256"], spec["policySha256"], signer
+            )
+        except Exception as exc:  # fail closed
+            log.warning(
+                "signature verification error for %s/%s: %s", tenant, name, type(exc).__name__
+            )
+            return Verification(False, "VerificationError")
+        if isinstance(result, Verification):
+            return result
+        return Verification(bool(result), "Verified" if result else "VerificationFailed")
 
     def _finish(self, status: dict, regenerate: bool) -> dict:
         if regenerate:
