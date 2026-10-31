@@ -14,6 +14,7 @@ from agent_platform.signing import (
     ANNOTATION_SIGNER_SUBJECT_REGEXP,
     DEFAULT_REQUIRED_ATTESTATIONS,
     GITHUB_ACTIONS_ISSUER,
+    PREDICATE_RELEASE,
     PREDICATE_SLSA,
     SignerIdentity,
     eval_problems,
@@ -64,7 +65,8 @@ def test_identity_from_annotations_round_trips_and_defaults():
             ANNOTATION_REQUIRED_ATTESTATIONS: f" {PREDICATE_SLSA} ,",
         }
     )
-    assert narrow.required_attestations == (PREDICATE_SLSA,)
+    # Overriding the list can add requirements but never drops the manifest binding.
+    assert narrow.required_attestations == (PREDICATE_SLSA, PREDICATE_RELEASE)
 
 
 @pytest.mark.parametrize(
@@ -75,6 +77,15 @@ def test_identity_from_annotations_round_trips_and_defaults():
         {ANNOTATION_SIGNER_ISSUER: "http://x", ANNOTATION_SIGNER_SUBJECT_REGEXP: "^a$"},
         {ANNOTATION_SIGNER_ISSUER: GITHUB_ACTIONS_ISSUER, ANNOTATION_SIGNER_SUBJECT_REGEXP: "a"},
         {ANNOTATION_SIGNER_ISSUER: GITHUB_ACTIONS_ISSUER, ANNOTATION_SIGNER_SUBJECT_REGEXP: "^(a$"},
+        # `\$` is a literal dollar: the pattern is open-ended, not anchored.
+        {
+            ANNOTATION_SIGNER_ISSUER: GITHUB_ACTIONS_ISSUER,
+            ANNOTATION_SIGNER_SUBJECT_REGEXP: r"^a\$",
+        },
+        {
+            ANNOTATION_SIGNER_ISSUER: GITHUB_ACTIONS_ISSUER,
+            ANNOTATION_SIGNER_SUBJECT_REGEXP: r"^a\\\$",
+        },
         {
             ANNOTATION_SIGNER_ISSUER: GITHUB_ACTIONS_ISSUER,
             ANNOTATION_SIGNER_SUBJECT_REGEXP: "^a$",
@@ -89,6 +100,13 @@ def test_bad_declarations_are_refused(annotations):
         SignerIdentity.from_namespace(
             {"metadata": {"annotations": annotations}} if annotations else None
         )
+
+
+def test_escaped_backslash_before_anchor_is_still_anchored():
+    # `\\$` is a literal backslash followed by the end anchor.
+    identity = SignerIdentity(GITHUB_ACTIONS_ISSUER, r"^a\\$")
+    assert identity.matches(GITHUB_ACTIONS_ISSUER, "a\\")
+    assert not identity.matches(GITHUB_ACTIONS_ISSUER, "a\\x")
 
 
 def test_eval_conditions():

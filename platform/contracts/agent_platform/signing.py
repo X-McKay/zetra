@@ -87,7 +87,13 @@ class SignerIdentity:
     def __post_init__(self) -> None:
         if not self.issuer.startswith("https://"):
             raise ValueError(f"{ANNOTATION_SIGNER_ISSUER} must be an https URL")
-        if not (self.subject_regexp.startswith("^") and self.subject_regexp.endswith("$")):
+        body = self.subject_regexp[:-1]
+        backslashes = len(body) - len(body.rstrip("\\"))
+        if (
+            not self.subject_regexp.startswith("^")
+            or not self.subject_regexp.endswith("$")
+            or backslashes % 2 == 1  # `\$` is a literal dollar, not an anchor
+        ):
             # An unanchored pattern would accept any repo whose URL contains the text.
             raise ValueError(f"{ANNOTATION_SIGNER_SUBJECT_REGEXP} must be anchored with ^ and $")
         if _top_level_alternation(self.subject_regexp[1:-1]):
@@ -120,6 +126,9 @@ class SignerIdentity:
                 f"namespace needs {ANNOTATION_SIGNER_ISSUER} and {ANNOTATION_SIGNER_SUBJECT_REGEXP}"
             )
         required = _split(a.get(ANNOTATION_REQUIRED_ATTESTATIONS)) or DEFAULT_REQUIRED_ATTESTATIONS
+        if PREDICATE_RELEASE not in required:
+            # The annotation may add requirements, never drop the manifest binding.
+            required = (*required, PREDICATE_RELEASE)
         return cls(issuer, subject, required, _split(a.get(ANNOTATION_VULN_EXCEPTIONS)))
 
     @classmethod
