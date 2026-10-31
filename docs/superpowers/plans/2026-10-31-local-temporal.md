@@ -43,7 +43,10 @@ Interface: dev --temporal or --temporal-address, optional explicit binary/state;
 - [x] Add failing CLI tests, implement owned local-server startup/shutdown and accepted-result reports.
 - [x] Test installed wheel with a real local CLI server, full SDK suite, examples/lint/lock/docs.
 - [x] Independent whole-change review, fix material findings with regressions, record failures and limits.
-- [ ] Commit/publish SDK, ensure starter pin exposes tested capabilities, sync provenance and validate final remote CI.
+- [x] Commit/publish SDK, ensure starter pin exposes tested capabilities, sync provenance and verify the final installed bundle.
+
+After publication, validate final-head remote CI and record its result on the
+paired PRs; those checks necessarily run after the source and this plan are committed.
 
 ## Ledger
 
@@ -61,3 +64,10 @@ cancels the Workflow, retains its report and stops the owned server; source
 integrity errors preserve unknown/canceled outcomes in both runners. Each failing
 regression passed after correction. Startup cancellation also has a real-server
 regression. No additional review round is needed for this fix pass.
+
+Delivery: published SDK c128bb199c64386e2fbda224e500ef40451eadcb passed the full
+native-enabled suite (418 passed, 46 skipped). Canonical starter
+e7417ee595d89e1d3093531dfe9ba93320919eea pins it; fresh installed validation
+passed 30 tests, six quality requirements and both default/Temporal runs with
+confirmed Temporal cleanup. Other locked dependencies and the factory stayed
+unchanged. Final bundle/provenance and remote checks complete the delivery step.

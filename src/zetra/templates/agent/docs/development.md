@@ -58,7 +58,8 @@ model requires a supported local endpoint and downloaded weights. `zetra dev`,
 Temporal or a cluster. Supply `--model-config model.json` with `base_url`, `model`
 and optionally `api_key_env`, `max_tokens`, `timeout` and `temperature`. Keep secrets
 in the named environment variable. Use the installed help for supported options.
-Local Temporal remains separate platform work. Missing live infrastructure is not
+No-Temporal execution remains the default. Optional local Temporal is described
+below. Missing live infrastructure is not
 permission to relabel fixture results or silently change execution mode.
 
 The pinned SDK admits `workspace_read`, `workspace_write` and reviewed
@@ -75,6 +76,42 @@ explicit configuration. Retain `OUTCOME_UNKNOWN` and unconfirmed cleanup states.
 Do not automatically repeat an operation whose external outcome is unknown.
 Keep credentials, private prompts, and raw sensitive traces out of tracked data;
 use synthetic or reviewed, redacted fixtures. Local `.zetra/` artifacts are ignored.
+
+## Optional local Temporal
+
+On Linux, `dev` can run the shared Workflow and actual model/tool Activities with
+an owned local Temporal server. With an installed CLI and fixture model, no cluster,
+OpenShell or remote model endpoint is needed:
+
+```sh
+uv run --locked zetra dev . --input 'Read the approved guide.' --temporal \
+  --temporal-binary /path/to/temporal \
+  --temporal-state /outside/project/private-state
+```
+
+Without `--temporal-binary`, owned-server mode downloads pinned Temporal CLI 1.9.1
+on first use. To use an existing server, replace the owned-server options with
+`--temporal-address 127.0.0.1:7233 --temporal-state /outside/project/private-state`.
+Only loopback servers are accepted. `--model-config`, `--workspace`, `--timeout`
+and private `--output` export also work. Model request timeouts are capped at
+30 seconds within the shared 45-second effect Activity deadline.
+
+State must be outside the project and remains private and retained after exit:
+SQLite history, immutable artifacts, execution fences, `last-handle.json` and
+`last-report.json` can contain prompts and tool/file contents. Reports identify
+`state_dir` and the exact namespace/Workflow/run handle. Use a new state directory
+after source changes. Owned servers stop on normal completion or graceful
+cancellation; caller-managed servers remain running. After forced termination,
+inspect retained state and any surviving server. Do not delete live state as a
+cancellation mechanism or retry an effect with an unknown outcome.
+
+This is trusted host execution for cooperative in-process tools on Linux. Each
+boundary runs in a fresh Python child using Temporal-accepted artifacts. Normal
+process creation APIs are rejected; native syscall bypasses, hostile Python and
+unmanaged background threads/processes are outside the supported profile. The
+audit guard is not a sandbox. Local cleanup does not erase retained history and
+is not production isolation evidence. `eval` and `quality` still use fixture or
+explicit local-model modes; their reports do not certify Temporal orchestration.
 
 ## Quality evidence
 

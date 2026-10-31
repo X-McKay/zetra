@@ -1,6 +1,6 @@
 # Active quality contract
 
-The starter pins SDK `e9bdc66fb52a4f1c0d713b2cfb30e467afc7ec94`. Its V2 dataset
+The starter pins SDK `c128bb199c64386e2fbda224e500ef40451eadcb`. Its V2 dataset
 and quality contract are active in [evals/document_reader](../../evals/document_reader).
 These are the sole maintained case and contract copies. This directory originally
 held an inactive upgrade rehearsal for the earlier SDK pin; activation updated the
@@ -31,6 +31,8 @@ configure an explicit model endpoint using `--model-config`, and run `zetra dev`
 `eval --mode local` or `quality --mode local`. Keep credentials in the referenced
 environment variable, not the config or report. The fixture marker case is not a
 live summarization grader. Set `live_model_required` when live evidence becomes a
-gate requirement. Local inference needs no Temporal or cluster connection; local
-Temporal remains separate platform work. See [development](../development.md) for
+gate requirement. Local inference needs no Temporal or cluster connection.
+Optional Linux `dev --temporal` runs actual Workflow/Activity boundaries; eval
+and quality retain their existing fixture/local modes. See
+[development](../development.md) for
 supported commands, configuration and runtime boundaries.

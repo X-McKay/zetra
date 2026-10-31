@@ -26,4 +26,6 @@ updates. `just validate` checks that both assistant copies match the inventory.
 Developer skills are excluded from the application wheel.
 
 [The quality contract reference](docs/quality-upgrade/README.md) explains the active
-requirements and the upgrade history. Local Temporal remains separate platform work.
+requirements and the upgrade history. Optional Linux local Temporal runs are
+available through `zetra dev . --temporal`; see the development workflow for
+private state and trusted host limits.

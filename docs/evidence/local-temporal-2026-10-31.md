@@ -92,6 +92,33 @@ tests. Ruff, formatting (175 files), documentation links, canonical bundle
 provenance and the final wheel build passed. The 46 skips remain unqualified
 environment-dependent coverage, not successful enforcement evidence.
 
+## Final starter pin and installed validation
+
+Temporal-capable SDK revision `c128bb199c64386e2fbda224e500ef40451eadcb` was
+published and independently verified reachable through GitHub before changing
+the starter. Canonical template revision
+`e7417ee595d89e1d3093531dfe9ba93320919eea` pins that exact revision and updates
+the lock and local-mode documentation. All non-SDK locked package records and
+the ordinary Python factory are unchanged. The SDK bundle records this canonical
+revision and its tree digest in `src/zetra/templates/provenance.json`.
+
+A fresh canonical render installed the published Git revision into site-packages
+with no caller PYTHONPATH substitution. Distribution `direct_url.json` confirmed
+both the requested and installed revision. Canonical tests passed 13/13; the
+rendered `just validate` passed all 30 tests, developer-skill consistency,
+lint/format, all 6 quality requirements (9 mapped test items and 1 fixture case),
+and wheel/resource/dependency checks. Default `dev` succeeded with three steps.
+Installed `dev --temporal` with explicit CLI 1.9.1 also succeeded with three
+steps and `DELETED` cleanup. Its private retained state was outside the project.
+These fixture runs establish plumbing and lifecycle behavior, not model accuracy.
+
+After the final canonical synchronization, all 18 scaffold/renderer tests passed;
+provenance, docs and lint/format checks passed again. The final wheel was installed
+in a separate environment, generated a starter with the exact SDK pin and active
+quality contract, and passed that contract. Runtime code is identical to the
+418-test SDK revision. Final head GitHub check outcomes are recorded on the paired
+draft PRs after publication.
+
 ## Limits and design decisions
 
 This is Linux trusted-host development with cooperative in-process tools. The
