@@ -108,7 +108,9 @@ class FakeVerifier:
     def __init__(self, ok: bool = True) -> None:
         self.ok = ok
         self.calls: list[str] = []
+        self.signers: list = []
 
-    def verify(self, image, manifest_sha256, policy_sha256):
+    def verify(self, image, manifest_sha256, policy_sha256, signer=None):
         self.calls.append(image)
+        self.signers.append(signer)
         return self.ok

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import itertools
 import json
 
@@ -10,7 +11,9 @@ import yaml
 from agent_platform.bundle import compile_bundle, digest_hex
 from agent_platform.netpol import netpol_digest, tenant_policy_specs
 from registry_controller import desired
-from tests.conftest import AGENT, make_release
+from registry_controller.signature import Verification
+from tests.conftest import AGENT, World, make_release
+from tests.fakes import FakeVerifier
 
 GV = "agentplatform.io/v1alpha1"
 
@@ -366,3 +369,75 @@ def test_bundle_in_configmap_matches_contracts(world, cfg):
         world.get("v1", "ConfigMap", "tenant-a", "policy-investigator-r1")["data"]["bundle.json"]
     )
     assert have == want
+
+
+# ---- keyless signer identity (private Sigstore) ---------------------------------------
+
+
+def keyless_world(cfg, annotations=None):
+    w = World(dataclasses.replace(cfg, signature_profile="keyless"))
+    if annotations is not None:
+        ns = w.kube.obj("v1", "Namespace", None, "tenant-a")
+        ns["metadata"]["annotations"] = annotations
+    return w
+
+
+SIGNER_ANNOTATIONS = {
+    "agentplatform.io/signer-issuer": "https://token.actions.githubusercontent.com",
+    "agentplatform.io/signer-subject-regexp": "^https://github\\.com/X-McKay/zetra-agents/.+$",
+}
+
+
+def test_keyless_without_namespace_declaration_fails_closed(cfg):
+    w = keyless_world(cfg)
+    release = setup(w)
+    assert release["status"]["signatureVerified"] is False and release["status"]["ready"] is False
+    cond = {c["type"]: c for c in release["status"]["conditions"]}["SignatureVerified"]
+    assert cond["reason"] == "SignerIdentityMissing"
+    assert w.verifier.calls == []  # never asked cosign without an identity to pin
+
+
+def test_keyless_unanchored_declaration_is_refused(cfg):
+    bad = dict(SIGNER_ANNOTATIONS, **{"agentplatform.io/signer-subject-regexp": "zetra-agents"})
+    release = setup(keyless_world(cfg, bad))
+    assert release["status"]["signatureVerified"] is False
+
+
+def test_keyless_passes_namespace_signer_and_records_identity(cfg):
+    w = keyless_world(cfg, SIGNER_ANNOTATIONS)
+    subject = "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/investigator/v1"
+
+    class Keyless(FakeVerifier):
+        def verify(self, image, m, p, signer=None):
+            super().verify(image, m, p, signer)
+            return Verification(
+                True, "Verified", signer.issuer, subject, signer.required_attestations
+            )
+
+    w.rec.verifier = verifier = Keyless()
+    release = setup(w)
+    signer = verifier.signers[-1]
+    assert signer.subject_regexp == SIGNER_ANNOTATIONS["agentplatform.io/signer-subject-regexp"]
+    status = release["status"]
+    assert status["signatureVerified"] is True and status["ready"] is True
+    assert status["verifiedSigner"]["subject"] == subject
+    assert len(status["verifiedSigner"]["attestations"]) == 5
+
+
+def test_keyless_refuses_a_certificate_from_another_agents_tag(cfg):
+    w = keyless_world(cfg, SIGNER_ANNOTATIONS)
+    other = (
+        "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/b-agent/v1"
+    )
+
+    class OtherTag(FakeVerifier):
+        def verify(self, image, m, p, signer=None):
+            return Verification(
+                True, "Verified", signer.issuer, other, signer.required_attestations
+            )
+
+    w.rec.verifier = OtherTag()
+    status = setup(w)["status"]
+    assert status["signatureVerified"] is False and status["ready"] is False
+    cond = {c["type"]: c for c in status["conditions"]}["SignatureVerified"]
+    assert cond["reason"] == "SignerAgentMismatch"

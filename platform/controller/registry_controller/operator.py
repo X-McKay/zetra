@@ -13,7 +13,7 @@ from registry_controller.config import ControllerConfig
 from registry_controller.idp import KeycloakAdmin
 from registry_controller.kube import ApiServer
 from registry_controller.reconciler import Reconciler
-from registry_controller.signature import CosignVerifier
+from registry_controller.signature import CosignVerifier, KeylessVerifier, SignatureVerifier
 
 log = logging.getLogger(__name__)
 CFG = ControllerConfig.from_env()
@@ -31,7 +31,11 @@ def reconciler() -> Reconciler:
             idp_alias=CFG.idp_alias,
             template=CFG.client_template(),
         )
-        verifier = CosignVerifier(CFG.cosign_key, profile=CFG.signature_profile)
+        verifier: SignatureVerifier
+        if CFG.signature_profile == "keyless":
+            verifier = KeylessVerifier(CFG.trusted_root, rekor_url=CFG.rekor_url)
+        else:
+            verifier = CosignVerifier(CFG.cosign_key, profile=CFG.signature_profile)
         _reconciler = Reconciler(ApiServer(), idp, verifier, CFG)
     return _reconciler
 

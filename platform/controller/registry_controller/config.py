@@ -22,7 +22,9 @@ class ControllerConfig:
     keycloak_secret_file: str = "/var/run/secrets/idp-client/client_secret"
     keycloak_client_template: str = ""  # path to the exported hand-made client JSON
     cosign_key: str = "/etc/cosign/cosign.pub"
-    signature_profile: str = "homelab"
+    signature_profile: str = "homelab"  # homelab | enterprise (cosign key) | keyless
+    trusted_root: str = "/etc/sigstore/trusted_root.json"  # keyless: private Sigstore root
+    rekor_url: str = ""  # keyless: https://rekor.<domain>; empty uses the root's log only
     resync_seconds: float = 60.0
 
     @classmethod
@@ -39,6 +41,8 @@ class ControllerConfig:
             keycloak_client_template=e.get("REGISTRY_KEYCLOAK_CLIENT_TEMPLATE", ""),
             cosign_key=e.get("REGISTRY_COSIGN_KEY", cls.cosign_key),
             signature_profile=e.get("REGISTRY_SIGNATURE_PROFILE", "homelab"),
+            trusted_root=e.get("REGISTRY_SIGSTORE_TRUSTED_ROOT", cls.trusted_root),
+            rekor_url=e.get("REGISTRY_SIGSTORE_REKOR_URL", ""),
             resync_seconds=float(e.get("REGISTRY_RESYNC_SECONDS", "60")),
         )
 
