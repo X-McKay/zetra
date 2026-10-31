@@ -22,9 +22,10 @@ ROOT = Path(__file__).resolve().parents[2]
 )
 def test_wheel_rejects_developer_assistant_assets(tmp_path, asset):
     wheel = tmp_path / "agent_package-0.1.0-py3-none-any.whl"
+    metadata_name = "agent_package-0.1.0.dist-info/METADATA"
     dependency = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["dependencies"][0]
     with ZipFile(wheel, "w") as archive:
-        archive.writestr("agent_package-0.1.0.dist-info/METADATA", f"Requires-Dist: {dependency}\n")
+        archive.writestr(metadata_name, f"Requires-Dist: {dependency}\n")
         for relative in (
             "agent_package/agents/document_reader/agent.yaml",
             "agent_package/agents/document_reader/instructions/base.md",

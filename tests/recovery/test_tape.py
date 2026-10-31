@@ -21,6 +21,19 @@ def test_candidate_is_not_a_committed_head(tmp_path):
     assert receipt.position.cursor == 1
 
 
+def test_observable_records_retain_known_error_without_changing_replay_values(tmp_path):
+    tape = Tape(FileStore(tmp_path), manifest="probe-v1")
+    start = tape.empty()
+    error = {"code": "denied", "message": "outside allowed scope"}
+    receipt = tape.append_candidate(start, op(), {"status": "known_error", "value": error})
+    assert tape.records(start) == []
+    assert tape.records(receipt.position)[0]["outcome"] == {
+        "status": "known_error",
+        "value": error,
+    }
+    assert tape.load(receipt.position)[0]["outcome"] == error
+
+
 def test_tampered_or_missing_object_stops_recovery(tmp_path):
     store = FileStore(tmp_path)
     tape = Tape(store, manifest="probe-v1")

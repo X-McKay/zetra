@@ -1,4 +1,4 @@
-"""Import and validate an immutable agent definition inside its sandbox only."""
+"""Import and validate an agent definition in a sandbox or explicit trusted-host run."""
 
 import importlib
 from importlib.resources import files
@@ -55,7 +55,7 @@ async def fixture_model(payload, state, key):
 
 
 class Definition:
-    def __init__(self, spec, workspace):
+    def __init__(self, spec, workspace, *, model_binding=None):
         self.spec = AgentSpec.model_validate(spec).validate_policy()
         self.workspace = Path(workspace)
         self.instruction = ""
@@ -66,20 +66,36 @@ class Definition:
             )
         module, name = self.spec.entrypoint.split(":")
         self.factory = getattr(importlib.import_module(module), name)
-        self.model = MODEL if self.spec.model == "vllm" else "fixture"
+        self.model = (
+            model_binding[0]
+            if model_binding is not None
+            else MODEL
+            if self.spec.model == "vllm"
+            else "fixture"
+        )
         context = self.context(None)
         agent = context.seal(self.factory(context))
         self.inventory = [
             (t.name, t._get_declaration().model_dump(mode="json")) for t in agent.tools
         ]
         self.registry = context.executors()
-        self.registry[self.model] = VllmExecutor() if self.spec.model == "vllm" else fixture_model
+        self.tools = {name: tool.effect for name, tool in context._specs.items()}
+        self.registry[self.model] = (
+            model_binding[1]
+            if model_binding is not None
+            else VllmExecutor()
+            if self.spec.model == "vllm"
+            else fixture_model
+        )
 
     def build(self, bridge):
         context = self.context(bridge)
         agent = context.seal(self.factory(context))
         inventory = [(t.name, t._get_declaration().model_dump(mode="json")) for t in agent.tools]
-        if inventory != self.inventory:
+        if (
+            inventory != self.inventory
+            or {name: tool.effect for name, tool in context._specs.items()} != self.tools
+        ):
             raise ValueError("factory registration changed")
         return agent
 

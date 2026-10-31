@@ -16,4 +16,5 @@ jobs:
       - run: uv run ruff check src tests scripts benchmarks examples
       - run: uv run ruff format --check src tests scripts benchmarks examples
       - run: uv run pytest -m 'not cluster' -q
+      - run: uv run zetra quality examples/workspace_reporter
       - run: uv run python scripts/check_docs.py

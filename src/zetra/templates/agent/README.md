@@ -22,3 +22,8 @@ repository. See [the development workflow](docs/development.md) for authoring to
 and runtime skills, evaluation, debugging, optimization, release review and pack
 updates. `just validate` checks that both assistant copies match the inventory.
 Developer skills are excluded from the application wheel.
+
+[The prepared quality upgrade](docs/quality-upgrade/README.md) contains a V2
+fixture case and mapped tool-test contract for candidate SDK rehearsal. Activating
+`zetra quality` in CI requires a reachable published SDK revision and an updated
+Git pin and lockfile first. Local Temporal remains separate platform work.

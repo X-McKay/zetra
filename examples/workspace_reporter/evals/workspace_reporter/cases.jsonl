@@ -1,1 +1,1 @@
-{"id":"summary","input":"Inspect the workspace and write a summary.","contains":"Completed.","files":["summary.md"]}
+{"schema_version":2,"id":"summary","input":"Inspect the workspace and write a summary.","assertions":[{"type":"text_contains","value":"Completed."},{"type":"file_contains","path":"summary.md","value":"Workspace inspected."},{"type":"tool_called","tool":"inspect_workspace","arguments":{"path":"."}},{"type":"tool_before","tool":"inspect_workspace","before":"write_summary"},{"type":"max_steps","maximum":5}]}

@@ -4,7 +4,7 @@
 returns an ordinary Temporal Worker that runs the provision/advance/execute/cleanup
 Workflow. Callers supply configured Temporal and OpenShell clients, an artifact
 store and a persistent worker secret. The worker reads data-only release metadata
-and validates responses; agent factories and effect bodies run inside OpenShell.
+and validates responses; durable-session factories and effect bodies run inside OpenShell.
 
 Bridge model and tool wrappers describe each boundary. Temporal schedules its
 execute Activity with one attempt. The sandbox produces a candidate receipt and
@@ -18,6 +18,16 @@ the accepted tape without invoking recorded effect bodies. Replacement first
 confirms deletion of the old immutable sandbox instance. Unknown execute outcomes
 remain unknown even when candidate bytes exist. One invocation admits at most 64
 serial, nonstreaming model/tool boundaries.
+
+The explicit local-development driver reuses Definition, Runtime, the warm ADK
+continuation and Dispatcher in a fresh trusted-host child. It supplies a local
+accepted position and optional explicit model binding without Temporal or
+OpenShell. That position is disposable execution state, not durable recovery
+authority. Provider conversion/validation is shared with the production vLLM
+adapter; production defaults remain fixed. Local observable reports omit raw
+model reasoning. Quality checks execute fresh tests/cases, verify input identities
+and reconcile admitted tools, but repository-controlled tests/contracts do not
+provide independent production authorization. See [local development](local-development.md).
 
 `SessionHandle` pins namespace, Workflow ID, run ID and runtime identity. Loading
 history validates the original start and rejects reset, retry, continuation and

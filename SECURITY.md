@@ -1,6 +1,6 @@
 # Security boundaries
 
-Each session runs in a fresh OpenShell sandbox and writable volume. Landlock,
+Each durable session runs in a fresh OpenShell sandbox and writable volume. Landlock,
 seccomp and reviewed network policy constrain the workload. Agent code, bridge and
 tool bodies share its security domain. Python admission checks apply to cooperative
 registered code; they are not isolation against hostile Python.
@@ -68,7 +68,12 @@ Future AgentGateway integration requires scoped receiver identity, authorization
 idempotency and reconciliation bound to each operation. A gateway cannot resolve
 commit ambiguity by itself or replace Temporal's acceptance authority.
 
-Local fixture tests execute trusted project code on the host. Static checks read
+Local dev, fixture/model evaluation and quality tests execute trusted project code
+on the host with its ambient permissions. A fresh process and disposable workspace
+are not a sandbox. Model configuration is explicit and separate from production
+policy. Reports can contain sensitive free text, tool results and workspace data
+despite selective key masking. Quality labels/tests are repository-controlled;
+their unsigned evidence is not independent production authorization. Static checks read
 metadata without importing factories. Evaluation, enforcement and recovery evidence
 are separate. Do not commit keys, confidential traces, artifacts or kubeconfigs.
 Report security issues privately to the repository owner. Resource deletion does

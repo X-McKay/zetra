@@ -1,88 +1,41 @@
-"""Explicit fixture execution and separately labelled sandbox evaluation."""
+"""Complete, explicitly scoped evaluation of local or durable agent executions."""
 
 import hashlib
-import json
-import sys
-import tempfile
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .manifest import digest, load_agent, source_digest
+from .eval_cases import grade, load_cases
+from .manifest import digest, load_agent, project_file, source_digest
 
 
 async def fixture_run(root, message, *, agent=None):
-    from ._runtime.process import run_child
+    from .local import local_run
 
-    return await run_child(
-        "zetra.testing.fixture",
-        {"root": str(Path(root).resolve()), "message": message, "agent": agent},
-        timeout=60,
-    )
+    return await local_run(root, message, agent=agent)
 
 
 async def _fixture_run_in_process(root, message, *, agent=None):
-    # This mode explicitly executes trusted developer code on the host.
-    from ._runtime.artifacts import Receipt
-    from ._runtime.definition import Definition
-    from ._runtime.runtime import Runtime
+    from .local import _run_in_process
 
-    spec = load_agent(root, agent)
-    if spec.model != "fixture":
-        raise ValueError("fixture mode requires the fixture model; it cannot issue inference")
-    sys.path.insert(0, str(Path(root).resolve() / "src"))
-    try:
-        with tempfile.TemporaryDirectory() as temp:
-            runtime = Runtime(
-                temp,
-                session="fixture",
-                manifest=source_digest(root),
-                key=b"f" * 32,
-                message=message,
-                definition=Definition(spec.model_dump(), Path(temp) / "workspace"),
-            )
-            position = runtime.tape.empty(runtime.workspace.capture())
-            try:
-                for _ in range(65):
-                    command = {
-                        "binding": {"session": "fixture"},
-                        "position": position.model_dump(),
-                        "pending": None,
-                    }
-                    advanced = await runtime.handle(runtime.authority.sign("advance", command))
-                    if advanced["status"] == "done":
-                        return {
-                            "status": "SUCCEEDED",
-                            "result": advanced["result"],
-                            "files": [
-                                p.relative_to(runtime.workdir).as_posix()
-                                for p in runtime.workdir.rglob("*")
-                                if p.is_file()
-                            ],
-                        }
-                    executed = await runtime.handle(
-                        runtime.authority.sign(
-                            "execute",
-                            {
-                                **command,
-                                "operation": advanced["operation"],
-                                "attempt_id": str(position.cursor),
-                            },
-                        )
-                    )
-                    position = Receipt.model_validate(executed["receipt"]).position
-                raise ValueError("fixture boundary limit")
-            finally:
-                await runtime.close()
-    finally:
-        sys.path.pop(0)
+    return await _run_in_process(root, message, agent=agent)
 
 
-async def evaluate(root, *, mode, release=None, client=None, agent=None):
-    import uuid
+async def evaluate(root, *, mode, release=None, client=None, agent=None, model_config=None):
+    from .local import LocalModelConfig, local_run
 
     root = Path(root)
     spec = load_agent(root, agent)
     source = source_digest(root)
+    if mode not in {"fixture", "local", "sandbox"}:
+        raise ValueError("unknown evaluation mode")
+    if mode == "local" and model_config is None:
+        raise ValueError("local evaluation requires explicit model configuration")
+    if mode != "local" and model_config is not None:
+        raise ValueError("model configuration is only valid for local evaluation")
+    config = LocalModelConfig.model_validate(model_config) if model_config is not None else None
+    if mode == "fixture" and spec.model != "fixture":
+        raise ValueError("fixture mode requires the fixture model; it cannot issue inference")
     if mode == "sandbox" and (
         release is None
         or client is None
@@ -90,49 +43,80 @@ async def evaluate(root, *, mode, release=None, client=None, agent=None):
         or release.source_sha256 != source
     ):
         raise ValueError("sandbox evaluation requires matching release and source")
+    cases, dataset = load_cases(root, spec.name)
     rows = []
-    seen = set()
-    dataset_path = root / "evals" / spec.name / "cases.jsonl"
-    dataset = dataset_path.read_bytes()
-    for line in dataset.decode().splitlines():
-        case = json.loads(line)
-        if set(case) != {"id", "input", "contains", "files"} or case["id"] in seen:
-            raise ValueError("invalid or duplicate evaluation case")
-        seen.add(case["id"])
-        if mode == "fixture":
-            result = await fixture_run(root, case["input"], agent=spec.name)
-        elif mode == "sandbox":
-            session = "eval-" + uuid.uuid4().hex
-            handle = await client.submit(release, session=session, message=case["input"])
-            result = await client.wait(handle)
-            if result.get("status") == "SUCCEEDED":
-                result["files"] = list(await client.read_files(handle))
-        else:
-            raise ValueError("unknown evaluation mode")
-        passed = (
-            result.get("status") == "SUCCEEDED"
-            and case["contains"] in result.get("result", {}).get("final_text", "")
-            and set(case["files"]) <= set(result.get("files", []))
-        )
+    for case in cases:
+        result = {}
+        assertions = []
+        try:
+            if mode == "fixture":
+                result = await fixture_run(root, case["input"], agent=spec.name)
+            elif mode == "local":
+                result = await local_run(
+                    root, case["input"], agent=spec.name, model_config=config.model_dump()
+                )
+            else:
+                handle = await client.submit(
+                    release, session="eval-" + uuid.uuid4().hex, message=case["input"]
+                )
+                result = await client.wait(handle)
+                if result.get("status") == "SUCCEEDED" and result.get("cleanup") == "DELETED":
+                    files = await client.read_files(handle)
+                    result["files"] = list(files)
+                    result["file_contents"] = {}
+                    for name, content in files.items():
+                        if len(content) <= 65536:
+                            try:
+                                result["file_contents"][name] = content.decode("utf-8")
+                            except UnicodeError:
+                                pass
+            successful = result.get("status") == "SUCCEEDED" and (
+                mode != "sandbox" or result.get("cleanup") == "DELETED"
+            )
+            assertions = grade(case, result)
+            outcome = (
+                "error"
+                if not successful
+                else ("passed" if all(item["passed"] for item in assertions) else "failed")
+            )
+        except Exception as exc:  # noqa: BLE001 -- record every case; never serialize provider secrets
+            result = {"status": "ERROR", "error_type": type(exc).__name__}
+            outcome = "error"
         rows.append(
             {
                 "id": case["id"],
-                "passed": passed,
+                "passed": outcome == "passed",
+                "outcome": outcome,
                 "status": result.get("status"),
                 "cleanup": result.get("cleanup"),
+                "error_type": result.get("error_type"),
+                "assertions": assertions,
+                "tools": result.get("tools", {}),
+                "metrics": result.get("metrics", {}),
+                "trajectory": result.get("trajectory", []),
             }
         )
-    if not rows:
-        raise ValueError("empty evaluation suite")
-    if dataset != dataset_path.read_bytes():
-        raise ValueError("dataset changed during evaluation")
-    if source != source_digest(root):
-        raise ValueError("source changed during evaluation")
+    integrity_errors = []
+    try:
+        if dataset != project_file(root, f"evals/{spec.name}/cases.jsonl").read_bytes():
+            integrity_errors.append("dataset_changed")
+        if source != source_digest(root):
+            integrity_errors.append("source_changed")
+    except (ValueError, OSError):
+        integrity_errors.append("inputs_unreadable")
+    counts = {
+        "planned": len(rows),
+        **{name: sum(r["outcome"] == name for r in rows) for name in ("passed", "failed", "error")},
+    }
+    effective_model = config.model_dump() if config else {"model": spec.model}
     return {
+        "schema_version": 2,
         "mode": mode,
         "agent": spec.name,
         "agent_sha256": digest(spec.model_dump()),
-        "status": "PASSED" if all(r["passed"] for r in rows) else "FAILED",
+        "status": "PASSED"
+        if counts["passed"] == counts["planned"] and not integrity_errors
+        else "FAILED",
         "source_sha256": source,
         "release": release.identity if release else None,
         "created_at": datetime.now(UTC).isoformat(),
@@ -140,8 +124,16 @@ async def evaluate(root, *, mode, release=None, client=None, agent=None):
         "sdk": "0.1.0",
         "dataset_sha256": hashlib.sha256(dataset).hexdigest(),
         "model": spec.model,
+        "model_config": effective_model,
+        "model_config_sha256": digest(effective_model),
         "policy": spec.policy,
         "profile": spec.profile,
         "cases": rows,
-        "scope": "fixture behavior" if mode == "fixture" else "durable sandbox cases",
+        "counts": counts,
+        "integrity_errors": integrity_errors,
+        "scope": {
+            "fixture": "fixture behavior",
+            "local": "trusted host model behavior",
+            "sandbox": "durable sandbox cases",
+        }[mode],
     }

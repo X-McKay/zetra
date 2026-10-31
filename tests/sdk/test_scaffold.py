@@ -91,8 +91,9 @@ async def test_fixture_runs_do_not_reuse_factories_from_other_sources(tmp_path):
         )
     )
     assert (await fixture_run(first, "Complete task"))["status"] == "SUCCEEDED"
-    with pytest.raises(Exception, match="distinct factory"):
-        await fixture_run(second, "Complete task")
+    failed = await fixture_run(second, "Complete task")
+    assert failed["status"] == "OUTCOME_UNKNOWN"
+    assert failed["error_type"] == "OutcomeUnknown"
 
 
 @pytest.mark.parametrize("name", ["my-reader", "my_reader"])

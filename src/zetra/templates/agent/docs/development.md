@@ -83,6 +83,13 @@ them relevant. A skipped or unscored case is missing evidence, not a passing cas
 Developer-defined domain criteria complement platform requirements; this starter
 does not yet implement the proposed mandatory cross-component quality contract.
 
+See [the prepared quality upgrade](quality-upgrade/README.md) for an inactive V2
+fixture case, tool-test contract and disposable candidate rehearsal. Enable
+`zetra quality` in normal CI only after a reachable published SDK revision is
+selected, the Git pin and lockfile are updated together, and rendered validation
+passes. The prepared files do not change this starter's active legacy dataset;
+local Temporal remains separate.
+
 Prefer deterministic assertions when they express the requirement. Calibrate model
 graders against reviewed labels, keep held-out data separate from prompt tuning,
 and report sample counts, failures/errors and repeat variability. Reports should
