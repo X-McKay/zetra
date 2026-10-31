@@ -421,4 +421,23 @@ def test_keyless_passes_namespace_signer_and_records_identity(cfg):
     status = release["status"]
     assert status["signatureVerified"] is True and status["ready"] is True
     assert status["verifiedSigner"]["subject"] == subject
-    assert len(status["verifiedSigner"]["attestations"]) == 4
+    assert len(status["verifiedSigner"]["attestations"]) == 5
+
+
+def test_keyless_refuses_a_certificate_from_another_agents_tag(cfg):
+    w = keyless_world(cfg, SIGNER_ANNOTATIONS)
+    other = (
+        "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/b-agent/v1"
+    )
+
+    class OtherTag(FakeVerifier):
+        def verify(self, image, m, p, signer=None):
+            return Verification(
+                True, "Verified", signer.issuer, other, signer.required_attestations
+            )
+
+    w.rec.verifier = OtherTag()
+    status = setup(w)["status"]
+    assert status["signatureVerified"] is False and status["ready"] is False
+    cond = {c["type"]: c for c in status["conditions"]}["SignatureVerified"]
+    assert cond["reason"] == "SignerAgentMismatch"

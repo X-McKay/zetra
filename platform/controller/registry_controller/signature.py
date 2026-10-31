@@ -221,15 +221,18 @@ class KeylessVerifier:
             )
             if out is None:
                 return Verification(False, "AttestationMissing", *identity)
+            # Attestations accumulate on a digest. Every one of this type must pass,
+            # so a later failing scan or eval cannot be masked by an earlier clean one
+            # (Kyverno evaluates attestation conditions the same way).
             predicates = list(predicates_of(out, predicate_type))
-            if not any(
-                not _problems(predicate_type, p, manifest_sha256, policy_sha256, signer)
-                for p in predicates
-            ):
-                first = predicates[0] if predicates else None
-                why = _problems(predicate_type, first, manifest_sha256, policy_sha256, signer)
-                log.info("attestation %s refused for %s: %s", predicate_type, image, why)
-                return Verification(False, "AttestationRejected", *identity)
+            if not predicates:
+                log.info("no %s predicate for %s", predicate_type, image)
+                return Verification(False, "AttestationMissing", *identity)
+            for predicate in predicates:
+                why = _problems(predicate_type, predicate, manifest_sha256, policy_sha256, signer)
+                if why:
+                    log.info("attestation %s refused for %s: %s", predicate_type, image, why)
+                    return Verification(False, "AttestationRejected", *identity)
         return Verification(True, "Verified", *identity, signer.required_attestations)
 
 

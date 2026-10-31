@@ -42,11 +42,18 @@ and Kyverno (`agent_platform.signing`):
 | --- | --- |
 | `agentplatform.io/signer-issuer` | OIDC issuer, normally `https://token.actions.githubusercontent.com` |
 | `agentplatform.io/signer-subject-regexp` | anchored regexp for the certificate subject (the release workflow on a tag) |
-| `agentplatform.io/required-attestations` | comma-separated predicate types; default SLSA provenance, SPDX SBOM, cosign vuln and `https://agentplatform.io/eval/v1` |
+| `agentplatform.io/required-attestations` | comma-separated predicate types; default SLSA provenance, SPDX SBOM, cosign vuln, `https://agentplatform.io/eval/v1` and the release predicate (which binds `manifestSha256` and `policySha256`) |
 | `agentplatform.io/vuln-exceptions` | comma-separated vulnerability ids allowed at high severity; critical is never waivable |
 
-`agentctl signer-annotations --repo <owner/name>` prints the annotations for a
-repo's `release.yml`. A missing or unanchored declaration fails closed. The
+`agentctl signer-annotations --repo <owner/name> [--agent <name> ...]` prints
+the annotations for a repo's `release.yml`. Pass `--agent` whenever one repo
+releases agents for more than one tenant: without it the declaration accepts
+every agent's release tag in that repo. Independently, the controller requires
+the certificate's tag (`<agent>/v<version>`) to name `AgentRelease.spec.agent`
+(`SignerAgentMismatch` otherwise). Every attestation of a required type must
+pass, so a later failing scan or eval on the same digest is never masked by an
+earlier clean one. A missing or unanchored declaration, or one with a top-level
+`|`, fails closed. The
 verified identity and attestation types are written to
 `AgentRelease.status.verifiedSigner`.
 

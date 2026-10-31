@@ -18,6 +18,7 @@ from agent_platform.signing import (
     SignerIdentity,
     eval_problems,
     subject_regexp_for,
+    tag_agent,
     vuln_problems,
 )
 from tests.conftest import FIXTURES
@@ -190,3 +191,43 @@ def test_signer_annotations(capsys):
     doc = yaml.safe_load(capsys.readouterr().out)["annotations"]
     identity = SignerIdentity.from_annotations(doc)
     assert identity.matches(GITHUB_ACTIONS_ISSUER, TAG_SUBJECT)
+
+
+def test_subject_regexp_pinned_to_agents():
+    pattern = subject_regexp_for(REPO, agents=("investigator",))
+    assert re.fullmatch(pattern, TAG_SUBJECT)
+    assert not re.fullmatch(pattern, TAG_SUBJECT.replace("investigator/", "b-agent/"))
+    two = subject_regexp_for(REPO, agents=("investigator", "b-agent"))
+    assert re.fullmatch(two, TAG_SUBJECT.replace("investigator/", "b-agent/"))
+    SignerIdentity(GITHUB_ACTIONS_ISSUER, two)  # grouped alternation is allowed
+    with pytest.raises(ValueError):
+        subject_regexp_for(REPO, agents=("Bad_Name",))
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    ["^https://github\\.com/org/a/.*|.*$", "^a$|^b$", "^x|y$"],
+)
+def test_top_level_alternation_is_refused(pattern):
+    with pytest.raises(ValueError):
+        SignerIdentity(GITHUB_ACTIONS_ISSUER, pattern)
+
+
+@pytest.mark.parametrize("pattern", ["^(?:a|b)$", "^a[|]b$", "^a\\|b$"])
+def test_grouped_or_escaped_bar_is_allowed(pattern):
+    SignerIdentity(GITHUB_ACTIONS_ISSUER, pattern)
+
+
+def test_tag_agent():
+    assert tag_agent(TAG_SUBJECT) == "investigator"
+    assert (
+        tag_agent(TAG_SUBJECT.replace("refs/tags/investigator/v1.2.0", "refs/heads/main")) is None
+    )
+
+
+def test_signer_annotations_with_agent(capsys):
+    assert agentctl(["signer-annotations", "--repo", REPO, "--agent", "investigator"]) == 0
+    doc = yaml.safe_load(capsys.readouterr().out)["annotations"]
+    identity = SignerIdentity.from_annotations(doc)
+    assert identity.matches(GITHUB_ACTIONS_ISSUER, TAG_SUBJECT)
+    assert not identity.matches(GITHUB_ACTIONS_ISSUER, TAG_SUBJECT.replace("investigator/", "x/"))

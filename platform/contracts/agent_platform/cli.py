@@ -97,6 +97,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     signer.add_argument("--repo", required=True, help="owner/name of the agent repo")
     signer.add_argument("--workflow", default="release.yml")
+    signer.add_argument(
+        "--agent",
+        action="append",
+        default=[],
+        help="pin to this agent's release tags (repeatable); needed when a repo serves "
+        "more than one tenant",
+    )
     signer.add_argument("--issuer", default=GITHUB_ACTIONS_ISSUER)
 
     args = parser.parse_args(argv)
@@ -110,7 +117,9 @@ def main(argv: list[str] | None = None) -> int:
             print("OK")
         return 1 if problems else 0
     if args.command == "signer-annotations":
-        identity = SignerIdentity(args.issuer, subject_regexp_for(args.repo, args.workflow))
+        identity = SignerIdentity(
+            args.issuer, subject_regexp_for(args.repo, args.workflow, tuple(args.agent))
+        )
         print(yaml.safe_dump({"annotations": identity.annotations()}, sort_keys=False), end="")
         return 0
     if args.command == "policy-digest":

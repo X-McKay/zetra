@@ -26,29 +26,54 @@ PREDICATE_SPDX = "https://spdx.dev/Document"
 PREDICATE_VULN = "https://cosign.sigstore.dev/attestation/vuln/v1"
 PREDICATE_EVAL = "https://agentplatform.io/eval/v1"
 PREDICATE_RELEASE = "https://agentplatform.io/attestations/release/v1"
-DEFAULT_REQUIRED_ATTESTATIONS = (PREDICATE_SLSA, PREDICATE_SPDX, PREDICATE_VULN, PREDICATE_EVAL)
-KNOWN_PREDICATES = (*DEFAULT_REQUIRED_ATTESTATIONS, PREDICATE_RELEASE)
+# The release predicate binds manifestSha256 and policySha256 to the signer; nothing
+# else recomputes manifestSha256, so it is part of the default set.
+DEFAULT_REQUIRED_ATTESTATIONS = (
+    PREDICATE_SLSA,
+    PREDICATE_SPDX,
+    PREDICATE_VULN,
+    PREDICATE_EVAL,
+    PREDICATE_RELEASE,
+)
+KNOWN_PREDICATES = DEFAULT_REQUIRED_ATTESTATIONS
+# Release tags are `<agent>/v<version>`; the controller requires <agent> == spec.agent.
+TAG_SUBJECT = re.compile(r"@refs/tags/([a-z0-9-]+)/v[0-9][A-Za-z0-9.+-]*$")
+_AGENT_NAME = re.compile(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?")
 
 _SHA1 = re.compile(r"^[a-f0-9]{40}$")
 _CVE_ID = re.compile(r"^[A-Za-z0-9.:_-]+$")
 
 
-def subject_regexp_for(repository: str, workflow: str = "release.yml") -> str:
-    """The identity a repo's release workflow gets from Fulcio on an `<agent>/v*` tag."""
+def subject_regexp_for(
+    repository: str, workflow: str = "release.yml", agents: tuple[str, ...] = ()
+) -> str:
+    """The identity a repo's release workflow gets from Fulcio on an `<agent>/v*` tag.
+
+    With `agents`, only those agents' tags match. Use it whenever one repo releases
+    agents for more than one tenant, or a tenant could accept another tenant's image.
+    """
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("repository must be owner/name")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+\.ya?ml", workflow):
         raise ValueError("workflow must be a file name under .github/workflows")
 
+    bad = [a for a in agents if not _AGENT_NAME.fullmatch(a)]
+    if bad:
+        raise ValueError(f"bad agent names: {', '.join(bad)}")
+
     def lit(text: str) -> str:  # only "." needs escaping in these charsets; RE2 and re agree
         return text.replace(".", "\\.")
+
+    tag = "(?:" + "|".join(sorted(set(agents))) + ")" if agents else "[a-z0-9-]+"
 
     return (
         "^https://github\\.com/"
         + lit(repository)
         + "/\\.github/workflows/"
         + lit(workflow)
-        + "@refs/tags/[a-z0-9-]+/v[0-9][A-Za-z0-9.+-]*$"
+        + "@refs/tags/"
+        + tag
+        + "/v[0-9][A-Za-z0-9.+-]*$"
     )
 
 
@@ -65,6 +90,12 @@ class SignerIdentity:
         if not (self.subject_regexp.startswith("^") and self.subject_regexp.endswith("$")):
             # An unanchored pattern would accept any repo whose URL contains the text.
             raise ValueError(f"{ANNOTATION_SIGNER_SUBJECT_REGEXP} must be anchored with ^ and $")
+        if _top_level_alternation(self.subject_regexp[1:-1]):
+            # `^a|b$` is anchored only on one side per branch, and Python's fullmatch
+            # and Go's MatchString disagree about it. Group alternatives instead.
+            raise ValueError(
+                f"{ANNOTATION_SIGNER_SUBJECT_REGEXP} has a top-level '|'; use ^(?:a|b)$"
+            )
         try:
             re.compile(self.subject_regexp)
         except re.error as exc:
@@ -106,6 +137,33 @@ class SignerIdentity:
         if self.vuln_exceptions:
             out[ANNOTATION_VULN_EXCEPTIONS] = ",".join(self.vuln_exceptions)
         return out
+
+
+def _top_level_alternation(pattern: str) -> bool:
+    depth, in_class, i = 0, False, 0
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\":
+            i += 2
+            continue
+        if in_class:
+            in_class = c != "]"
+        elif c == "[":
+            in_class = True
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+        elif c == "|" and depth == 0:
+            return True
+        i += 1
+    return False
+
+
+def tag_agent(subject: str) -> str | None:
+    """The `<agent>` of a release-tag certificate subject, or None."""
+    m = TAG_SUBJECT.search(subject)
+    return m.group(1) if m else None
 
 
 def _split(value: str | None) -> tuple[str, ...]:

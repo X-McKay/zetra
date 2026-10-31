@@ -22,7 +22,7 @@ from agent_platform.constants import (
     TENANT_NETWORK_POLICIES,
 )
 from agent_platform.podtemplate import render_pod_template
-from agent_platform.signing import SignerIdentity
+from agent_platform.signing import SignerIdentity, tag_agent
 from registry_controller import desired
 from registry_controller.config import ControllerConfig
 from registry_controller.idp import AgentClientSpec, IdpAdapter
@@ -371,6 +371,16 @@ class Reconciler:
             )
             return Verification(False, "VerificationError")
         if isinstance(result, Verification):
+            if signer is not None and result.ok and tag_agent(result.subject) != spec["agent"]:
+                # The certificate was cut from another agent's release tag.
+                log.warning(
+                    "release %s/%s for agent %s is signed from tag of agent %s",
+                    tenant,
+                    name,
+                    spec["agent"],
+                    tag_agent(result.subject),
+                )
+                return Verification(False, "SignerAgentMismatch", result.issuer, result.subject)
             return result
         return Verification(bool(result), "Verified" if result else "VerificationFailed")
 

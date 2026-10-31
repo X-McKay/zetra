@@ -6,7 +6,9 @@ import subprocess
 
 from agent_platform.signing import (
     PREDICATE_EVAL,
+    PREDICATE_RELEASE,
     PREDICATE_SLSA,
+    PREDICATE_SPDX,
     PREDICATE_VULN,
     SignerIdentity,
     subject_regexp_for,
@@ -196,3 +198,45 @@ def test_signing_identity_needs_one_consistent_identity():
     assert signing_identity(two) is None
     assert signing_identity("[{}]") is None
     assert signing_identity("nope") is None
+
+
+def test_keyless_every_predicate_of_a_type_must_pass():
+    # A later rescan that found a critical CVE is not masked by the earlier clean scan.
+    critical = {
+        "scanner": {
+            "result": {"matches": [{"vulnerability": {"id": "CVE-9", "severity": "Critical"}}]}
+        }
+    }
+    results = all_good()
+    results[2] = (0, statement(PREDICATE_VULN, VULN_OK) + statement(PREDICATE_VULN, critical))
+    v, _ = keyless(results)
+    assert v.verify(IMAGE, M, P, SIGNER).reason == "AttestationRejected"
+    results = all_good()
+    results[3] = (
+        0,
+        statement(PREDICATE_EVAL, EVAL_OK) + statement(PREDICATE_EVAL, dict(EVAL_OK, failed=1)),
+    )
+    v, _ = keyless(results)
+    assert v.verify(IMAGE, M, P, SIGNER).reason == "AttestationRejected"
+
+
+def test_keyless_default_declaration_binds_manifest_digest():
+    default = SignerIdentity(ISSUER, subject_regexp_for("X-McKay/zetra-agents"))
+    assert PREDICATE_RELEASE in default.required_attestations
+
+    def run_with(manifest):
+        results = [(0, signed_by())]
+        for t in default.required_attestations:
+            body = {
+                PREDICATE_SLSA: {"buildDefinition": {}},
+                PREDICATE_SPDX: {"spdxVersion": "SPDX-2.3"},
+                PREDICATE_VULN: VULN_OK,
+                PREDICATE_EVAL: EVAL_OK,
+                PREDICATE_RELEASE: {"manifestSha256": manifest, "policySha256": P},
+            }[t]
+            results.append((0, statement(t, body)))
+        v, _ = keyless(results)
+        return v.verify(IMAGE, M, P, default)
+
+    assert run_with(M).ok
+    assert run_with("00" * 32).reason == "AttestationRejected"
