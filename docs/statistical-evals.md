@@ -67,6 +67,15 @@ New graders are `text_equals`, `file_equals`, `file_absent`, `file_not_contains`
 `arguments` subset and counts rejected/unknown attempts too. Existing text/file,
 required-call and partial-order graders remain supported. Missing or malformed
 observations fail; absent-file assertions need an observed file inventory.
+`text_equals` is exact by default. For human-readable acknowledgements, an explicit
+`"whitespace": "trim"` option ignores only surrounding ASCII spaces, tabs, CR and LF
+on the expected and observed text. It does not ignore case, internal whitespace,
+additional words, Unicode spacing or invisible characters. File equality remains
+exact, and recorded outputs are never rewritten. A whitespace-policy change alters
+the case/dataset identity: preserve the previous failures and start a new study;
+reports from the two policies are not comparable as an agent improvement.
+See the [first live-smoke investigation](evidence/statistical-live-fixes-2026-11-01.md)
+for the observed failures and the explicit contract correction.
 For forbidden-argument checks, redacted or truncated compared fields cannot prove
 that a call was allowed. They fail conservatively unless another observed field
 proves the forbidden subset did not match. Use non-sensitive observable identifiers

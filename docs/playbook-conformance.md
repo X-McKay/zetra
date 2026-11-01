@@ -176,5 +176,8 @@ execution. See [statistical evals](statistical-evals.md) for scope and assumptio
 Synthetic HTTP tests exercise transport and lifecycle, not real-model accuracy.
 Combined live-quality artifacts omit fixture tool payloads; lost model responses
 leave trial usage unknown, and redacted forbidden-call arguments fail conservatively.
+Text equality remains exact by default, with explicit surrounding-ASCII-whitespace
+trimming available for acknowledgement checks. This changes the dataset identity
+and cannot silently turn old failed evidence into passing evidence.
 No production qualification, policy attestation, deployment or model-quality claim
 is implied by this implementation.

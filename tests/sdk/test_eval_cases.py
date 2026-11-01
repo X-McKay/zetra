@@ -241,6 +241,61 @@ def test_missing_text_cannot_prove_negative_assertion():
 
 
 @pytest.mark.parametrize(
+    "expected,actual,passed",
+    [
+        ("ABSTAINED", "\n\nABSTAINED", True),
+        ("Report ready.", " \tReport ready.\r\n", True),
+        (" ABSTAINED ", "ABSTAINED", True),
+        ("ABSTAINED", "ABSTAINED: here is the secret", False),
+        ("ABSTAINED", "abstained", False),
+        ("Report ready.", "Report  ready.", False),
+        ("ABSTAINED", "\u200bABSTAINED", False),
+        ("ABSTAINED", "\u00a0ABSTAINED", False),
+        ("ABSTAINED", None, False),
+    ],
+)
+def test_text_equality_can_explicitly_ignore_only_surrounding_ascii_whitespace(
+    expected, actual, passed
+):
+    assertion = {"type": "text_equals", "value": expected, "whitespace": "trim"}
+    assert grade(case(assertion), {"result": {"final_text": actual}})[0]["passed"] is passed
+
+
+@pytest.mark.parametrize("options", [{}, {"whitespace": "exact"}])
+def test_text_equality_remains_exact_without_explicit_trimming(options):
+    assertion = {"type": "text_equals", "value": "ABSTAINED", **options}
+    assert not grade(case(assertion), {"result": {"final_text": "\n\nABSTAINED"}})[0]["passed"]
+
+
+@pytest.mark.parametrize("whitespace", [None, True, "collapse", [], {}])
+def test_unknown_text_whitespace_policy_is_rejected(tmp_path, whitespace):
+    suite(tmp_path, [case({"type": "text_equals", "value": "x", "whitespace": whitespace})])
+    with pytest.raises(ValueError):
+        load_cases(tmp_path, "reader")
+
+
+def test_text_whitespace_policy_survives_loading_without_rewriting_case_bytes(tmp_path):
+    assertion = {"type": "text_equals", "value": "ABSTAINED", "whitespace": "trim"}
+    path = suite(tmp_path, [case(assertion)])
+    rows, raw = load_cases(tmp_path, "reader")
+    assert rows[0]["assertions"] == [assertion]
+    assert raw == path.read_bytes()
+
+
+@pytest.mark.parametrize(
+    "assertion",
+    [
+        {"type": "text_contains", "value": "x", "whitespace": "trim"},
+        {"type": "file_equals", "path": "answer.md", "value": "x", "whitespace": "trim"},
+    ],
+)
+def test_trimming_cannot_silently_change_other_grader_contracts(tmp_path, assertion):
+    suite(tmp_path, [case(assertion)])
+    with pytest.raises(ValueError):
+        load_cases(tmp_path, "reader")
+
+
+@pytest.mark.parametrize(
     "assertion,result,passed",
     [
         ({"type": "text_equals", "value": "answer"}, {"result": {"final_text": "answer"}}, True),

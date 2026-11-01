@@ -74,6 +74,10 @@ def _assertion(value):
     expected = fields[kind]
     if kind in {"tool_called", "tool_forbidden"} and "arguments" in value:
         expected = expected | {"arguments"}
+    if kind == "text_equals" and "whitespace" in value:
+        expected = expected | {"whitespace"}
+        if value["whitespace"] not in ("exact", "trim"):
+            raise ValueError("unknown text equality whitespace policy")
     if set(value) != expected:
         raise ValueError("invalid assertion fields")
     for key in ("value", "tool", "before"):
@@ -228,6 +232,8 @@ def _passes(assertion, result):
         if not isinstance(text, str):
             return False
         if kind == "text_equals":
+            if assertion.get("whitespace", "exact") == "trim":
+                return assertion["value"].strip(" \t\r\n") == text.strip(" \t\r\n")
             return assertion["value"] == text
         found = assertion["value"] in text
         return found if kind == "text_contains" else not found
