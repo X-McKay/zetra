@@ -482,7 +482,7 @@ async def dev_temporal(
                 WorkflowEnvironment.start_local(
                     dev_server_existing_path=binary,
                     dev_server_database_filename=str(state_dir / "temporal.sqlite"),
-                    dev_server_download_version="1.9.1",
+                    dev_server_download_version="v1.9.1",
                     dev_server_log_level="error",
                     dev_server_extra_args=["--output", "none"],
                 )

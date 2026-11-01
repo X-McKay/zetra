@@ -168,3 +168,14 @@ capacity, hostile native-code bypass, retained legacy retry semantics, fleet
 telemetry/optimization and zetra-ui. Those boundaries stand: their cost is that
 this increment cannot establish production readiness, model accuracy or UI delivery.
 They remain separately qualified roadmap work, not implied successes.
+
+## Fresh-machine Temporal download correction
+
+The first hosted reference-agent jobs both failed at native Temporal startup:
+`temporal.download/cli/1.9.1` returned 404. Local runs had supplied an existing CLI,
+so they did not exercise this download route. The pinned service route requires
+`v1.9.1`. A new default-start regression failed before the one-line correction and
+passed after it. An actual default invocation downloaded the CLI, ran the agent
+and returned SUCCEEDED/DELETED without an explicit binary. Complete SDK `just check`
+after this correction: **440 passed, 46 cluster tests deselected**, one existing
+ADK warning. Dependent locks are advanced together before final hosted checks.

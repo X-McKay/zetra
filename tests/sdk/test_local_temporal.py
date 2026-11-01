@@ -586,3 +586,20 @@ async def test_startup_cancellation_resolves_and_stops_owned_server(project, tmp
         await asyncio.gather(task, return_exceptions=True)
         for environment in environments:
             await environment.shutdown()
+
+
+async def test_default_temporal_download_uses_versioned_service_route(
+    project, tmp_path, monkeypatch
+):
+    from temporalio.testing import WorkflowEnvironment
+
+    from zetra.local_temporal import dev_temporal
+
+    async def start(**kwargs):
+        assert kwargs["dev_server_existing_path"] is None
+        assert kwargs["dev_server_download_version"] == "v1.9.1"
+        raise RuntimeError("checked download route before startup")
+
+    monkeypatch.setattr(WorkflowEnvironment, "start_local", start)
+    with pytest.raises(RuntimeError, match="checked download route"):
+        await dev_temporal(project, "Read the guide", state_dir=tmp_path / "default-state")
