@@ -68,6 +68,14 @@ They omit prompts, answers, tool arguments/results and reasoning, but identifier
 endpoint/model names and metrics can still be sensitive. Local execution trusts
 project Python and is not a sandbox or production qualification.
 
+Unknown model outcomes can carry a compact `diagnostic` with an allowlisted reason,
+optional HTTP status and zero-based model boundary index. Use it to distinguish
+timeouts, connection/HTTP errors, truncated responses and invalid tool calls.
+`unclassified` means the cause is not known. No exception text or provider payload
+is included. This does not resolve uncertainty, recover missing token usage, or
+permit retries. Keep the failed study intact and record any later diagnostics
+separately. Historical reports without this field still validate unchanged.
+
 The manual `Live model evaluation` workflow uses only the default branch. Before
 using it, configure a GitHub environment named `live-evaluation`, restrict its
 allowed deployment branches to the default branch, set environment variables

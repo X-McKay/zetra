@@ -40,3 +40,21 @@ Validation results and immutable dependency revisions are recorded in
 [template #6](https://github.com/X-McKay/zetra-template/pull/6).
 No external inference or new reliability study is part of these local fixes.
 The previous failures remain failures. Production qualification remains paused.
+
+The SDK's full local gate passed 590 tests with local Temporal enabled and 46
+cluster tests deselected; lint, format, lock, docs, examples and quality checks
+passed. The final classifier and compact-report suite separately passed 75 tests,
+including the additional malformed-JSON regression. All six smoke/reliability
+reports from the preceding study validated without modification. Native local
+Temporal checks passed 34 tests. Installed runtime validation passed 92 tests;
+canonical and freshly rendered starters passed 30 tests each plus quality and
+wheel checks, and renderer tests passed 13. Bundled scaffold/eval/CLI validation
+passed 68. Existing ADK experimental and LiteLLM logging warnings remain.
+Independent review found no issues in accepted-history recovery, diagnostic
+privacy, both converter-classification corrections or the scope documentation.
+
+The SDK prerequisite is `a74b3f6e042353fb9d6d5c36942af4d988c7cd47`, and runtime
+prerequisite is `eb444ea3473452042760458658df94f5abdf7d95`. Preserve these reachable
+commits when integrating the stacked drafts. Lock refresh used Nix's uv 0.12.22
+and Python 3.12.14; refreshed lock format is revision 5. CI retains its existing
+uv 0.13.1 pin. No package versions changed in this dependency refresh.

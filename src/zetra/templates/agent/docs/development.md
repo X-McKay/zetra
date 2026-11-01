@@ -15,6 +15,15 @@ editable and use its current SDK API; the starter is a Google ADK `LlmAgent` usi
 `ctx.model`, `ctx.tools`, and `ctx.instruction`. Do not mix this API with a different
 runtime merely because it also uses a `create_agent` name.
 
+Tools with prerequisites can inspect `ctx.prior_tool_results("tool_name")` inside
+their bodies. The immutable `arguments`/`result` pairs come from successful tool
+operations in the runtime's accepted history and survive cold reconstruction.
+Check business status and required evidence, including any skill activation;
+operation success alone may represent an abstention. Do not use a closure flag,
+user-supplied claim or input-workspace marker as proof of an accepted prior step.
+Direct tool tests can supply a trusted `history_binding` to `AgentContext`; the
+default is empty. This workflow guard does not replace independent sandbox policy.
+
 Run commands from the project root after `uv sync --locked`. The starter currently
 pins an exact SDK Git revision; retain that pin and the lockfile when changing an
 agent. Use `uv run --locked zetra --help` and subcommand help for version-specific
