@@ -206,3 +206,64 @@ def test_suite_and_case_bounds(tmp_path, monkeypatch):
 
 def test_missing_text_cannot_prove_negative_assertion():
     assert not grade(case({"type": "text_not_contains", "value": "secret"}), {})[0]["passed"]
+
+
+@pytest.mark.parametrize(
+    "assertion,result,passed",
+    [
+        ({"type": "text_equals", "value": "answer"}, {"result": {"final_text": "answer"}}, True),
+        (
+            {"type": "text_equals", "value": "answer"},
+            {"result": {"final_text": "answer plus fabrication"}},
+            False,
+        ),
+        (
+            {"type": "file_equals", "path": "answer.md", "value": "cited"},
+            {"file_contents": {"answer.md": "cited"}},
+            True,
+        ),
+        ({"type": "file_absent", "path": "answer.md"}, {"files": []}, True),
+        ({"type": "file_absent", "path": "answer.md"}, {}, False),
+        (
+            {"type": "max_total_tokens", "maximum": 100},
+            {"metrics": {"input_tokens": 60, "output_tokens": 40}},
+            True,
+        ),
+        (
+            {"type": "max_total_tokens", "maximum": 100},
+            {"metrics": {"input_tokens": 60, "output_tokens": None}},
+            False,
+        ),
+        ({"type": "max_input_tokens", "maximum": 100}, {"metrics": {"input_tokens": True}}, False),
+        ({"type": "max_output_tokens", "maximum": 100}, {"metrics": {"output_tokens": 101}}, False),
+    ],
+)
+def test_stronger_outcome_and_budget_assertions(assertion, result, passed):
+    case = {"schema_version": 2, "id": "case", "input": "Read", "assertions": [assertion]}
+    assert grade(case, result)[0]["passed"] is passed
+
+
+def test_skill_evidence_requires_observed_successful_tool_result():
+    case = {
+        "schema_version": 2,
+        "id": "skill",
+        "input": "Read",
+        "assertions": [
+            {"type": "tool_result", "tool": "read", "result": {"skill": {"name": "grounded"}}}
+        ],
+    }
+    result = {
+        "trajectory": [
+            {
+                "index": 1,
+                "kind": "tool",
+                "executor": "read",
+                "status": "succeeded",
+                "arguments": {},
+                "result": {"skill": {"name": "grounded", "instruction": "Quote sources"}},
+            }
+        ]
+    }
+    assert grade(case, result)[0]["passed"] is True
+    result["trajectory"][0]["status"] = "outcome_unknown"
+    assert grade(case, result)[0]["passed"] is False

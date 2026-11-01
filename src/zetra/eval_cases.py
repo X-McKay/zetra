@@ -53,13 +53,20 @@ def _assertion(value):
     fields = {
         "text_contains": {"type", "value"},
         "text_not_contains": {"type", "value"},
+        "text_equals": {"type", "value"},
         "file_contains": {"type", "path", "value"},
+        "file_equals": {"type", "path", "value"},
+        "file_absent": {"type", "path"},
         "file_exists": {"type", "path"},
         "tool_called": {"type", "tool"},
         "tool_forbidden": {"type", "tool"},
         "tool_before": {"type", "tool", "before"},
+        "tool_result": {"type", "tool", "result"},
         "max_steps": {"type", "maximum"},
         "max_duration_ms": {"type", "maximum"},
+        "max_input_tokens": {"type", "maximum"},
+        "max_output_tokens": {"type", "maximum"},
+        "max_total_tokens": {"type", "maximum"},
     }
     if not isinstance(kind, str) or kind not in fields:
         raise ValueError("unknown assertion type")
@@ -77,7 +84,11 @@ def _assertion(value):
         if type(value["arguments"]) is not dict:
             raise ValueError("tool arguments must be an object")
         _json_value(value["arguments"])
-    if "maximum" in value and not _number(value["maximum"], integer=kind == "max_steps"):
+    if "result" in value:
+        if type(value["result"]) is not dict or not value["result"]:
+            raise ValueError("tool result requires a nonempty object")
+        _json_value(value["result"])
+    if "maximum" in value and not _number(value["maximum"], integer=kind != "max_duration_ms"):
         raise ValueError("maximum must be finite and nonnegative")
     if kind == "tool_before" and value["tool"] == value["before"]:
         raise ValueError("tool_before requires distinct tools")
@@ -92,11 +103,23 @@ def _case(value):
             raise ValueError("invalid legacy files")
         assertions = [{"type": "text_contains", "value": value["contains"]}]
         assertions += [{"type": "file_exists", "path": path} for path in value["files"]]
-    elif (
-        set(value) == {"schema_version", "id", "input", "assertions"}
-        and type(value["schema_version"]) is int
-        and value["schema_version"] == 2
-    ):
+    elif type(value.get("schema_version")) is int and value["schema_version"] in (2, 3):
+        expected = {"schema_version", "id", "input", "assertions"}
+        if value["schema_version"] == 3:
+            expected |= {"tags", "cluster"}
+            tags = value.get("tags")
+            if (
+                type(tags) is not list
+                or not 1 <= len(tags) <= 32
+                or any(not isinstance(tag, str) for tag in tags)
+                or len(set(tags)) != len(tags)
+            ):
+                raise ValueError("expected unique nonempty bounded case tags")
+            for tag in tags:
+                _text(tag, maximum=64)
+            _text(value.get("cluster"), maximum=128)
+        if set(value) != expected:
+            raise ValueError("invalid evaluation case fields")
         assertions = value["assertions"]
     else:
         raise ValueError("invalid evaluation case fields or version")
@@ -104,12 +127,15 @@ def _case(value):
     _text(value["input"])
     if type(assertions) is not list or not 1 <= len(assertions) <= MAX_ASSERTIONS:
         raise ValueError("expected nonempty bounded assertions")
-    return {
-        "schema_version": 2,
+    result = {
+        "schema_version": value.get("schema_version", 2),
         "id": value["id"],
         "input": value["input"],
         "assertions": [_assertion(assertion) for assertion in assertions],
     }
+    if result["schema_version"] == 3:
+        result.update(tags=list(value["tags"]), cluster=value["cluster"])
+    return result
 
 
 def _unique_object(pairs):
@@ -121,11 +147,13 @@ def _unique_object(pairs):
     return result
 
 
-def load_cases(root, agent):
+def load_cases(root, agent, *, dataset="cases.jsonl"):
     """Read and validate the entire suite before callers execute any case."""
     if len(relative_path(agent).parts) != 1:
         raise ValueError("invalid agent name")
-    path = project_file(root, f"evals/{agent}/cases.jsonl")
+    if relative_path(dataset).suffix != ".jsonl":
+        raise ValueError("evaluation dataset must be JSONL")
+    path = project_file(root, f"evals/{agent}/{dataset}")
     if path.stat().st_size > MAX_SUITE_BYTES:
         raise ValueError("evaluation suite too large")
     with path.open("rb") as stream:
@@ -186,20 +214,31 @@ def _passes(assertion, result):
         text = output.get("final_text") if type(output) is dict else None
         if not isinstance(text, str):
             return False
+        if kind == "text_equals":
+            return assertion["value"] == text
         found = assertion["value"] in text
         return found if kind == "text_contains" else not found
-    if kind == "file_exists":
+    if kind in {"file_exists", "file_absent"}:
         names = result.get("files")
-        return type(names) is list and assertion["path"] in names
-    if kind == "file_contains":
+        return type(names) is list and (
+            (assertion["path"] in names)
+            if kind == "file_exists"
+            else (assertion["path"] not in names)
+        )
+    if kind in {"file_contains", "file_equals"}:
         contents = result.get("file_contents")
         text = contents.get(assertion["path"]) if type(contents) is dict else None
-        return isinstance(text, str) and assertion["value"] in text
+        return isinstance(text, str) and (
+            assertion["value"] == text if kind == "file_equals" else assertion["value"] in text
+        )
     if kind.startswith("max_"):
         metrics = result.get("metrics")
-        field = "steps" if kind == "max_steps" else "duration_ms"
+        field = kind.removeprefix("max_")
         value = metrics.get(field) if type(metrics) is dict else None
-        return _number(value, integer=kind == "max_steps") and value <= assertion["maximum"]
+        if field == "total_tokens" and type(metrics) is dict:
+            counts = [metrics.get(k) for k in ("input_tokens", "output_tokens")]
+            value = sum(counts) if all(_number(v, integer=True) for v in counts) else None
+        return _number(value, integer=kind != "max_duration_ms") and value <= assertion["maximum"]
     tools = _tools(result)
     if tools is None:
         return False
@@ -207,6 +246,8 @@ def _passes(assertion, result):
     if kind == "tool_forbidden":
         return not matching
     matching = [event for event in matching if event["status"] == "succeeded"]
+    if kind == "tool_result":
+        return any(_subset(assertion["result"], event.get("result")) for event in matching)
     if kind == "tool_called":
         return any(
             _subset(assertion.get("arguments", {}), event["arguments"]) for event in matching
