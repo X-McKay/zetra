@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "dataset": "live.jsonl",
+  "trials": 40,
+  "seed": 1729,
+  "confidence": 0.95,
+  "min_case_success_lower_bound": 0.8,
+  "max_regression": 0.05,
+  "required_tags": [
+    "outcome",
+    "trajectory",
+    "grounding",
+    "security",
+    "abstention"
+  ],
+  "limits": {
+    "max_invocations": 240,
+    "model_calls_per_trial": 4,
+    "trial_timeout_seconds": 60,
+    "max_duration_seconds": 3600,
+    "max_total_tokens": 2000000
+  }
+}

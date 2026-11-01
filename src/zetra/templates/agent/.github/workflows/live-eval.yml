@@ -1,0 +1,78 @@
+name: Live model evaluation
+on:
+  workflow_dispatch:
+    inputs:
+      experiment:
+        type: choice
+        options: [smoke, reliability]
+        default: smoke
+        description: Fixed experiment plan (reliability uses substantially more requests)
+permissions:
+  contents: read
+jobs:
+  evaluate:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    # Configure this environment BEFORE use: default-branch-only deployment policy,
+    # EVAL_MODEL_BASE_URL / EVAL_MODEL_NAME variables, and a dedicated model key.
+    environment: live-evaluation
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: '0.13.1'
+          python-version: '3.12.14'
+      - name: Install reviewed dependencies without model credentials
+        working-directory: .
+        run: uv sync --locked
+      - name: Show plan and run offline gate without model credentials
+        working-directory: .
+        run: |
+          .venv/bin/python -m zetra quality . --explain
+          .venv/bin/python -m zetra quality .
+      - name: Execute the selected fixed live experiment
+        env:
+          MODEL_BASE_URL: ${{ vars.EVAL_MODEL_BASE_URL }}
+          MODEL_NAME: ${{ vars.EVAL_MODEL_NAME }}
+          EVAL_MODEL_API_KEY: ${{ secrets.EVAL_MODEL_API_KEY }}
+          EXPERIMENT: ${{ inputs.experiment }}
+        run: |
+          python3 - <<'PYCODE'
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import tempfile
+
+          experiment = os.environ['EXPERIMENT']
+          if experiment not in {'smoke', 'reliability'}:
+              raise SystemExit('unknown experiment')
+          root = pathlib.Path(os.environ['GITHUB_WORKSPACE'])
+          endpoint, model = os.environ['MODEL_BASE_URL'], os.environ['MODEL_NAME']
+          if not endpoint or not model:
+              raise SystemExit('Configure the protected live-evaluation environment first')
+          private = pathlib.Path(tempfile.mkdtemp(prefix='zetra-eval-', dir=os.environ['RUNNER_TEMP']))
+          config = {'base_url': endpoint, 'model': model, 'max_tokens': 1024,
+                    'temperature': 0, 'timeout': 30}
+          if os.environ.get('EVAL_MODEL_API_KEY'):
+              config['api_key_env'] = 'EVAL_MODEL_API_KEY'
+          path = private / 'model.json'
+          path.write_text(json.dumps(config))
+          path.chmod(0o600)
+          report = pathlib.Path(os.environ['RUNNER_TEMP']) / 'zetra-evaluation.json'
+          command = [str(root / '.venv/bin/python'), '-m', 'zetra', 'quality', str(root),
+                     '--mode', 'local', '--experiment', experiment,
+                     '--model-config', str(path), '--output', str(report)]
+          raise SystemExit(subprocess.run(command, check=False).returncode)
+          PYCODE
+      - name: Retain compact evidence, including failed or incomplete runs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: live-evaluation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/zetra-evaluation.json
+          if-no-files-found: warn
+          retention-days: 7

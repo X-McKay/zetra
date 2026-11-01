@@ -45,7 +45,7 @@ def experiment_project(tmp_path):
     root = tmp_path / "project"
     scaffold(root, "experiment_reader")
     directory = root / "evals/document_reader"
-    (directory / "experiments").mkdir()
+    (directory / "experiments").mkdir(exist_ok=True)
     (directory / "live.jsonl").write_text(json.dumps(live_case()) + "\n")
     (directory / "experiments/live.json").write_text(json.dumps(plan()))
     return root

@@ -135,8 +135,9 @@ See [the quality contract reference](quality-upgrade/README.md) for the active
 starter mappings, their limits and upgrade history. Both validation and release
 workflows run `zetra quality .` before building. The current fixture contract sets
 `live_model_required` to false; set it true when live evidence becomes a gate
-requirement, then run `quality --mode local --model-config model.json` with
-appropriate live assertions. The `Completed.` marker case is not a live
+requirement, then run `quality --mode local --experiment reliability --model-config model.json`
+with appropriate live assertions. See [live evaluations](evaluation.md) for fixed
+plans, confidence bounds, token/latency comparison and evidence limits. The `Completed.` marker case is not a live
 summarization grader.
 
 Prefer deterministic assertions when they express the requirement. Calibrate model
@@ -202,3 +203,12 @@ need a new image and reviewed release; never relabel an old snapshot as core.
 The platform migration and cluster qualification remain separately reviewed work.
 This starter remains a small local-first Python project; it does not create a
 cluster, provision identities, or approve a deployment.
+
+## Statistical live experiments
+
+The schema-2 quality contract declares `smoke` and `reliability` plans under
+`evals/document_reader/experiments`. Offline validation checks both plans without
+contacting a model. Explicit live commands use a separate synthetic dataset and
+never treat the fixture `Completed.` marker as model-quality evidence. Read
+[live evaluations and optimization](evaluation.md) before selecting a plan or
+claiming an improvement. Incomplete/inconclusive evidence blocks the selected gate.

@@ -17,7 +17,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "zetra", git = "https://github.com/X-McKay/zetra.git?rev=750180967185181181c2ebc95e19e2c913756e67" }]
+requires-dist = [{ name = "zetra", git = "https://github.com/X-McKay/zetra.git?rev=2c70149d7c0472e79551ce0ce124a885dbf3eaea" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1437,7 +1437,7 @@ wheels = [
 [[package]]
 name = "zetra"
 version = "0.1.0"
-source = { git = "https://github.com/X-McKay/zetra.git?rev=750180967185181181c2ebc95e19e2c913756e67#750180967185181181c2ebc95e19e2c913756e67" }
+source = { git = "https://github.com/X-McKay/zetra.git?rev=2c70149d7c0472e79551ce0ce124a885dbf3eaea#2c70149d7c0472e79551ce0ce124a885dbf3eaea" }
 dependencies = [
     { name = "google-adk" },
     { name = "google-genai" },

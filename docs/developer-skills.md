@@ -93,7 +93,8 @@ platform core profile and two reference-agent migrations extend that same
 factory/runtime contract; see [platform integration](platform.md) and its
 [validation record](evidence/runtime-unification-2026-10-31.md).
 
-Statistical model evals, exact-artifact production promotion, fleet telemetry,
-continuous optimization, cluster qualification and zetra-ui remain separate
-roadmap milestones. The skill pack's behavioral observations above do not become
+The [statistical eval framework](statistical-evals.md) now provides fixed repeated
+trials, confidence bounds and comparison. Actual model evidence depends on explicit
+provider runs. Exact-artifact production promotion, fleet telemetry, continuous
+optimization, cluster qualification and zetra-ui remain separate roadmap milestones. The skill pack's behavioral observations above do not become
 claims of assistant effectiveness merely because runtime features were added.
