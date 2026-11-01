@@ -69,7 +69,7 @@
 - [x] Correct current-vs-historical status and pins, document explicit legacy migration and remaining cluster/model qualification.
 - [x] Run affected full suites, native recovery/replay, static checks and installed bundle validations; retain failed observations.
 - [x] Obtain one independent whole-change review, fix material findings with RED/GREEN regressions and appropriate suites.
-- [ ] Publish isolated feature branches and draft PRs, verify exact remote pins and final CI, record remaining milestone boundaries honestly.
+- [x] Publish isolated feature branches and draft PRs; track exact pins and hosted CI in SDK #18, agents #4, template #5 and Kubani #251, with remaining milestone boundaries recorded in their descriptions.
 
 ## Ledger
 

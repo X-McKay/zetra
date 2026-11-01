@@ -179,3 +179,21 @@ passed after it. An actual default invocation downloaded the CLI, ran the agent
 and returned SUCCEEDED/DELETED without an explicit binary. Complete SDK `just check`
 after this correction: **440 passed, 46 cluster tests deselected**, one existing
 ADK warning. Dependent locks are advanced together before final hosted checks.
+
+Final dependency graph after the hosted startup correction:
+
+- SDK prerequisite: `750180967185181181c2ebc95e19e2c913756e67`.
+- Guest runtime prerequisite: `dc406b90c7949996dac85b450347f5c9216b685b`.
+- Policy contracts: `bba8b097789e1b3b6632052ce8e954c6b8c2a669` (unchanged).
+- Canonical starter: `715d2a01d1a867f8f8d8b10dfb427bfcfa30493d`.
+
+All prerequisites remain reachable ancestors of their draft branches. The runtime
+suite at the corrected SDK pin again passed **92 tests**; starter **30 tests**,
+quality, actual default native Temporal, freshly rendered `just validate`, and
+bundle **18 tests** passed. Hosted CI results are tracked on the final draft heads; the initial failed
+agent jobs are retained in their run history.
+
+At the final pins, the runner again passed **200 tests**; agent tools **24**,
+investigator **19**, document assistant **17**, and both complete quality gates
+passed. Both reference agents also passed the exact default native-Temporal smoke
+commands used in CI with SUCCEEDED/DELETED results.
