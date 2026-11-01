@@ -297,7 +297,8 @@ async def test_multiple_cases_widen_intervals_instead_of_pooling_trials(
     assert report["summary"]["cases"][0]["interval"]["lower"] < 0.4385
 
 
-async def test_repeated_http_model_trials_use_fresh_workspaces(experiment_project):
+@pytest.mark.parametrize("lose_followup", [False, True])
+async def test_repeated_http_model_trials_use_fresh_workspaces(experiment_project, lose_followup):
     from aiohttp import web
 
     from zetra.eval_experiments import run_experiment
@@ -322,6 +323,8 @@ def create_agent(ctx):
         body = await request.json()
         requests.append(body)
         tool = next((m for m in body["messages"] if m["role"] == "tool"), None)
+        if tool and lose_followup:
+            return web.json_response({"error": {"message": "response lost"}}, status=503)
         message = (
             {"role": "assistant", "content": "answer"}
             if tool
@@ -374,6 +377,21 @@ def create_agent(ctx):
         )
     finally:
         await runner.cleanup()
+    if lose_followup:
+        assert len(requests) == 2  # no retry or later trial with unknown usage
+        assert report["status"] == "INCOMPLETE"
+        assert report["stop_reason"] == "usage_unavailable"
+        assert report["counts"] == {
+            "planned": 3,
+            "passed": 0,
+            "failed": 0,
+            "error": 1,
+            "not_run": 2,
+        }
+        for metric in ("input_tokens", "output_tokens"):
+            assert report["cases"][0]["trials"][0]["metrics"][metric] is None
+            assert report["summary"]["metrics"][metric]["total"] is None
+        return
     assert report["status"] == "PASSED", report
     assert len(requests) == 6
     results = [

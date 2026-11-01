@@ -82,6 +82,43 @@ async def test_fixture_gate_does_not_claim_live_evidence(tmp_path, monkeypatch):
     assert result["experiment"] is None
 
 
+async def test_combined_live_quality_omits_fixture_tool_payloads(experiment_project, monkeypatch):
+    from zetra.local import local_run
+
+    quality = experiment_project / "evals/document_reader/quality.json"
+    contract = json.loads(quality.read_text())
+    contract.update(schema_version=2, experiments=["live"])
+    quality.write_text(json.dumps(contract))
+    directory = experiment_project / "evals/document_reader/experiments"
+    (directory / "live.json").write_text(json.dumps(plan(threshold=0)))
+    canary = "PRIVATE_FIXTURE_DOCUMENT_CANARY"
+    original = "verify metadata, run tests, and review the result."
+    for relative in (
+        "src/experiment_reader/agents/document_reader/tools/document_read.py",
+        "tests/unit/document_reader/test_document_read.py",
+    ):
+        path = experiment_project / relative
+        path.write_text(path.read_text().replace(original, original + " " + canary))
+
+    async def run(*args, **kwargs):
+        if kwargs.get("model_config") is None:
+            return await local_run(*args, **kwargs)
+        return observation()
+
+    monkeypatch.setattr("zetra.local.local_run", run)
+    report = await run_quality(
+        experiment_project, mode="local", experiment="live", model_config=MODEL
+    )
+    assert report["status"] == "PASSED", report
+    assert report["evaluation"]["counts"]["passed"] == 1
+    row = report["evaluation"]["cases"][0]
+    assert row["tools"] == {"read_document": "workspace_read"}
+    assert all(check["passed"] for check in row["assertions"])
+    assert row["metrics"]["steps"] == 3
+    assert canary not in json.dumps(report)
+    assert "trajectory" not in row
+
+
 @pytest.mark.parametrize("status", ["INCOMPLETE", "INCONCLUSIVE", "FAILED"])
 def test_cli_nonpassing_experiment_status_is_nonzero(monkeypatch, status, capsys):
     monkeypatch.setattr(cli, "execute", AsyncMock(return_value={"status": status}))

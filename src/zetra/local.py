@@ -280,6 +280,10 @@ async def _run_in_process(
                             if model_call_limit is not None and model_calls >= model_call_limit:
                                 raise ModelCallLimit
                             model_calls += 1
+                            # A dispatched request can consume tokens even if its response is
+                            # lost. Keep incomplete usage unknown, not a partial known total.
+                            input_tokens.append(None)
+                            output_tokens.append(None)
                         event = {
                             "index": op["index"],
                             "kind": op["kind"],
@@ -312,8 +316,8 @@ async def _run_in_process(
                                 else ""
                             )
                             usage = response.usage_metadata
-                            input_tokens.append(usage.prompt_token_count if usage else None)
-                            output_tokens.append(usage.candidates_token_count if usage else None)
+                            input_tokens[-1] = usage.prompt_token_count if usage else None
+                            output_tokens[-1] = usage.candidates_token_count if usage else None
                     else:
                         raise ValueError("local boundary limit")
                 total = 0

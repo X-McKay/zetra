@@ -67,6 +67,10 @@ New graders are `text_equals`, `file_equals`, `file_absent`, `file_not_contains`
 `arguments` subset and counts rejected/unknown attempts too. Existing text/file,
 required-call and partial-order graders remain supported. Missing or malformed
 observations fail; absent-file assertions need an observed file inventory.
+For forbidden-argument checks, redacted or truncated compared fields cannot prove
+that a call was allowed. They fail conservatively unless another observed field
+proves the forbidden subset did not match. Use non-sensitive observable identifiers
+where possible; redaction can otherwise make a valid call fail its evaluation.
 
 A schema-2 quality contract adds `"experiments": ["smoke", "reliability"]` to the
 schema-1 fields. The chosen name must be declared. Explicit local experiment quality
@@ -126,15 +130,20 @@ Plans cap invocations, per-trial model requests (before dispatch), per-trial tim
 experiment duration and optionally observed aggregate tokens. Provider configuration
 also caps output tokens per request. Token budgets are checked after each bounded
 trial: the last trial may overshoot; unavailable usage stops a token-budgeted run.
+If any dispatched model request loses its response or usage, earlier known token
+counts cannot establish the trial total. A request refused before dispatch by the
+request ceiling does not invalidate already observed usage.
 This is not a hard monetary cap. The report never invents token counts or prices.
 Metric summaries expose observed/missing counts, mean, median, maximum and nearest-
 rank p95 over executed trials including failures. Missing values are not zero;
 comparison means are withheld when coverage is incomplete.
 
-Reports contain identifiers, hashes, assertion booleans, tool inventory and metrics,
+Named experiment reports, including the fixture evidence in combined live quality,
+contain identifiers, hashes, assertion booleans, tool inventory and metrics,
 not prompts, answers, tool arguments/results or private reasoning. Metadata such as
 case IDs and endpoint names can still be sensitive. Detailed debugging remains an
-explicit `zetra dev --output` action; that output can contain sensitive data.
+explicit `zetra dev --output` action; that output and ordinary fixture evaluation
+reports can contain sensitive data.
 Protect artifacts and avoid public uploads. A graceful cancellation during live
 trials saves incomplete evidence; SIGKILL cannot promise a final report. Experiments
 execute trusted host Python, not a hostile-code sandbox. Hashes and unsigned local

@@ -60,9 +60,30 @@ experiments directory was absent: 31 setup errors. The fixture now accepts the
 shipped directory. The combined scaffold/experiment/comparison/CLI suite passed
 79 tests afterward. No product behavior or gate was weakened to resolve it.
 
-Whole-change independent review and final hosted-head checks follow this record;
-any material findings and corrections will be appended. No live inference was
-substituted with fixture results, and no qualification skip is reported as a pass.
+The final pre-review SDK `just check` passed 529 tests (46 cluster deselected) and
+all additional example/quality/documentation checks. A fresh independent reviewer
+then found three material issues, all reproduced before changes:
+
+- The combined live-quality wrapper retained fixture tool payloads. A real fixture
+  tool-result canary leaked from the serialized wrapper. Combined evidence now
+  retains gate identities/counts/assertion booleans/inventory/metrics without those
+  payloads; ordinary fixture debugging evidence remains compatible.
+- A later model response failure left earlier token usage looking complete. The
+  synthetic HTTP regression returned usage on a tool-call response and HTTP 503 on
+  the follow-up. Before the fix it issued six requests across all three trials;
+  now it issues two, records the error and unknown usage, and stops the remaining
+  trials. The pre-dispatch call-limit test still preserves known usage.
+- Redacted/truncated arguments could make a forbidden-call assertion falsely pass.
+  Nested/list/long-string regressions now fail conservatively on unknown compared
+  fields; independently observed nonmatching fields can still establish absence.
+
+Targeted regression run: seven failures and three passes before fixes. The combined
+case/experiment/local/quality/CLI suites passed 151 afterward. Full `just check`
+then passed 538 tests (46 cluster deselected, one existing ADK warning), plus lint,
+formatting, lock, docs, examples and quality checks. No second reviewer
+was used; the fix pass is verified by those regressions and the full suite.
+No live inference was substituted with fixture results, and no qualification skip
+is reported as a pass.
 
 ## Dependency integration
 
@@ -84,3 +105,18 @@ examples' confidence targets are illustrative, not production policy. Real model
 runs and independently reviewed holdouts are still needed for substantive quality
 claims. Production qualification/rollout, telemetry/continuous optimization and
 zetra-ui are explicitly outside this milestone.
+
+## Implementation decisions and review limits
+
+- preserve default eval/quality, use explicit experiment plans and conservative per-case intervals — prevents repeated prompts masquerading as independent tasks — costs wider intervals/more inconclusive comparisons.
+- retain strict all-observed-assertions-pass semantics plus confidence thresholds — protects safety failures from being averaged away — costs rejecting stochastic quality failures rather than accepting an average.
+- no model judge/price guesses in this milestone — references have deterministic outcome graders and usage — broader subjective accuracy and billing estimates remain unclaimed.
+- private experiment output uses an exclusive new-file writer — existing generic CLI _write_json actually replaces files, contrary to initial spec assumption — no existing durable export behavior changes; new report paths are preflighted before inference.
+- reference agents inherit SDK through agent-runtime, so Task 4 must advance its packaged SDK pin/lock and publish a runtime prerequisite — cannot merely pin agent dev tooling — no runtime protocol or production activation changes, existing runtime tests must pass.
+- starter instructions now explicitly distinguish supported guide use from unsupported abstention — old unconditional read instruction conflicted with intended no-tool refusal cases — behavior remains unqualified until real-model runs; deterministic baseline unchanged.
+- actual model quality/adversarial robustness/provider stability remains unjudged — endpoint/model/budget absent — no real-model claim.
+- exact coverage/unseen-task/sequential-testing guarantees remain unclaimed — documented approximate per-case Wilson method — cannot infer broader statistical readiness.
+- hostile Python isolation and authenticated provenance remain outside local unsigned reports — trusted-host scope is explicit — no production authorization.
+- production qualification/deployment/signing/release authorization remain excluded by user — stop after eval milestone — production readiness remains outstanding.
+- hosted checks will be verified after fixes; GitHub environment protections/artifact ACLs remain admin preconditions, not configured here — file guards alone are not proof of remote policy.
+- SIGKILL and cancellation before live schedule have no artifact-preservation guarantee — docs limit it to graceful cancellation during live trials — earlier-phase cancellation may leave no final evidence.

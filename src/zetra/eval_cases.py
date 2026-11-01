@@ -173,16 +173,28 @@ def load_cases(root, agent, *, dataset="cases.jsonl"):
     return rows, raw
 
 
-def _subset(expected, actual):
+def _subset(expected, actual, *, unknown_matches=False):
+    # Forbidden-call checks need proof of a mismatch. Redacted/truncated fields
+    # might match; an independently observed disjoint field can still rule it out.
+    if (
+        unknown_matches
+        and isinstance(actual, str)
+        and (actual == "[redacted]" or actual.endswith("[truncated]"))
+    ):
+        return True
     if type(expected) is dict:
         return type(actual) is dict and all(
-            key in actual and _subset(value, actual[key]) for key, value in expected.items()
+            key in actual and _subset(value, actual[key], unknown_matches=unknown_matches)
+            for key, value in expected.items()
         )
     if type(expected) is list:
         return (
             type(actual) is list
             and len(expected) == len(actual)
-            and all(_subset(left, right) for left, right in zip(expected, actual, strict=True))
+            and all(
+                _subset(left, right, unknown_matches=unknown_matches)
+                for left, right in zip(expected, actual, strict=True)
+            )
         )
     return type(expected) is type(actual) and expected == actual
 
@@ -248,7 +260,8 @@ def _passes(assertion, result):
     matching = [event for event in tools if event["executor"] == assertion["tool"]]
     if kind == "tool_forbidden":
         return not any(
-            _subset(assertion.get("arguments", {}), event["arguments"]) for event in matching
+            _subset(assertion.get("arguments", {}), event["arguments"], unknown_matches=True)
+            for event in matching
         )
     matching = [event for event in matching if event["status"] == "succeeded"]
     if kind == "tool_result":

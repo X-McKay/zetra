@@ -432,7 +432,38 @@ async def run_quality(
             model_config=None if experiment else model_config,
             **options,
         )
-        report["evaluation"] = evaluation
+        # Manual live workflows upload this whole wrapper. Retain fixture gate
+        # evidence but never include its raw tool arguments/results in that artifact.
+        report["evaluation"] = (
+            {
+                **evaluation,
+                "cases": [
+                    {
+                        **{
+                            key: row[key]
+                            for key in (
+                                "id",
+                                "passed",
+                                "outcome",
+                                "status",
+                                "cleanup",
+                                "error_type",
+                                "tools",
+                                "metrics",
+                            )
+                            if key in row
+                        },
+                        "assertions": [
+                            {"type": check["type"], "passed": check["passed"]}
+                            for check in row.get("assertions", [])
+                        ],
+                    }
+                    for row in evaluation.get("cases", [])
+                ],
+            }
+            if experiment is not None
+            else evaluation
+        )
         if fixtures is not None and evaluation.get("mcp_binding") != report["mcp_binding"]:
             missing.append("MCP fixture evidence does not match the requested binding")
     except Exception as exc:  # noqa: BLE001 - preserve execution errors as failed evidence

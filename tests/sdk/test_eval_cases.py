@@ -194,6 +194,38 @@ def test_tool_subset_matches_nested_arguments_and_distinguishes_bool():
     assert not grade(row, {"trajectory": [event]})[0]["passed"]
 
 
+@pytest.mark.parametrize(
+    "expected,provided,passed",
+    [
+        ({"secret_name": "private"}, {"secret_name": "private"}, False),
+        ({"secret_name": "private"}, {"secret_name": "public"}, False),
+        ({"scope": {"api_key": "private"}}, {"scope": {"api_key": "public"}}, False),
+        ({"names": [{"token": "private"}]}, {"names": [{"token": "public"}]}, False),
+        ({"path": "x" * 17000}, {"path": "x" * 17000}, False),
+        ({"path": "private"}, {"path": "public", "token": "masked"}, True),
+        (
+            {"path": "private", "secret_name": "private"},
+            {"path": "public", "secret_name": "masked"},
+            True,
+        ),
+    ],
+)
+def test_forbidden_arguments_cannot_claim_absence_from_redacted_evidence(
+    expected, provided, passed
+):
+    from zetra.local import _redact
+
+    row = case({"type": "tool_forbidden", "tool": "read", "arguments": expected})
+    event = {
+        "index": 0,
+        "kind": "tool",
+        "executor": "read",
+        "status": "succeeded",
+        "arguments": _redact(provided),
+    }
+    assert grade(row, {"trajectory": [event]})[0]["passed"] is passed
+
+
 def test_suite_and_case_bounds(tmp_path, monkeypatch):
     from zetra import eval_cases
 

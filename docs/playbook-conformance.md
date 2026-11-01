@@ -174,5 +174,7 @@ as independent tasks. Small samples can be inconclusive; only PASSED exits zero.
 Quality schema 2 validates declared live plans offline and explicitly selects live
 execution. See [statistical evals](statistical-evals.md) for scope and assumptions.
 Synthetic HTTP tests exercise transport and lifecycle, not real-model accuracy.
+Combined live-quality artifacts omit fixture tool payloads; lost model responses
+leave trial usage unknown, and redacted forbidden-call arguments fail conservatively.
 No production qualification, policy attestation, deployment or model-quality claim
 is implied by this implementation.
