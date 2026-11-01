@@ -21,11 +21,85 @@ async def _fixture_run_in_process(root, message, *, agent=None):
     return await _run_in_process(root, message, agent=agent)
 
 
+async def evaluate_case(
+    root,
+    case,
+    *,
+    mode,
+    agent,
+    model_config=None,
+    mcp_fixtures=None,
+    release=None,
+    client=None,
+    timeout=60,
+    model_call_limit=None,
+):
+    """Shared single-case execution and grading; caller owns trial accounting."""
+    from .local import local_run
+
+    result = {}
+    assertions = []
+    try:
+        if mode == "fixture":
+            options = {"mcp_fixtures": mcp_fixtures} if mcp_fixtures is not None else {}
+            result = await fixture_run(root, case["input"], agent=agent, **options)
+        elif mode == "local":
+            options = {"model_call_limit": model_call_limit} if model_call_limit is not None else {}
+            result = await local_run(
+                root,
+                case["input"],
+                agent=agent,
+                model_config=model_config,
+                mcp_fixtures=mcp_fixtures,
+                timeout=timeout,
+                **options,
+            )
+        else:
+            handle = await client.submit(
+                release, session="eval-" + uuid.uuid4().hex, message=case["input"]
+            )
+            result = await client.wait(handle)
+            if result.get("status") == "SUCCEEDED" and result.get("cleanup") == "DELETED":
+                files = await client.read_files(handle)
+                result["files"] = list(files)
+                result["file_contents"] = {}
+                for name, content in files.items():
+                    if len(content) <= 65536:
+                        try:
+                            result["file_contents"][name] = content.decode("utf-8")
+                        except UnicodeError:
+                            pass
+        successful = result.get("status") == "SUCCEEDED" and (
+            mode != "sandbox" or result.get("cleanup") == "DELETED"
+        )
+        assertions = grade(case, result)
+        outcome = (
+            "error"
+            if not successful
+            else ("passed" if all(item["passed"] for item in assertions) else "failed")
+        )
+    except Exception as exc:  # noqa: BLE001 -- never serialize provider secrets
+        result = {"status": "ERROR", "error_type": type(exc).__name__}
+        outcome = "error"
+    return {
+        "id": case["id"],
+        "passed": outcome == "passed",
+        "outcome": outcome,
+        "status": result.get("status"),
+        "cleanup": result.get("cleanup"),
+        "error_type": result.get("error_type"),
+        "assertions": assertions,
+        "tools": result.get("tools", {}),
+        "metrics": result.get("metrics", {}),
+        "trajectory": result.get("trajectory", []),
+    }
+
+
 async def evaluate(
     root, *, mode, release=None, client=None, agent=None, model_config=None, mcp_fixtures=None
 ):
     from .bindings import MCPFixtures, mcp_provenance
-    from .local import LocalModelConfig, local_run
+    from .local import LocalModelConfig
 
     root = Path(root)
     spec = load_agent(root, agent)
@@ -53,64 +127,17 @@ async def evaluate(
     cases, dataset = load_cases(root, spec.name)
     rows = []
     for case in cases:
-        result = {}
-        assertions = []
-        try:
-            if mode == "fixture":
-                if fixtures is None:
-                    result = await fixture_run(root, case["input"], agent=spec.name)
-                else:
-                    result = await fixture_run(
-                        root, case["input"], agent=spec.name, mcp_fixtures=fixture_config
-                    )
-            elif mode == "local":
-                result = await local_run(
-                    root,
-                    case["input"],
-                    agent=spec.name,
-                    model_config=config.model_dump(),
-                    mcp_fixtures=fixture_config,
-                )
-            else:
-                handle = await client.submit(
-                    release, session="eval-" + uuid.uuid4().hex, message=case["input"]
-                )
-                result = await client.wait(handle)
-                if result.get("status") == "SUCCEEDED" and result.get("cleanup") == "DELETED":
-                    files = await client.read_files(handle)
-                    result["files"] = list(files)
-                    result["file_contents"] = {}
-                    for name, content in files.items():
-                        if len(content) <= 65536:
-                            try:
-                                result["file_contents"][name] = content.decode("utf-8")
-                            except UnicodeError:
-                                pass
-            successful = result.get("status") == "SUCCEEDED" and (
-                mode != "sandbox" or result.get("cleanup") == "DELETED"
-            )
-            assertions = grade(case, result)
-            outcome = (
-                "error"
-                if not successful
-                else ("passed" if all(item["passed"] for item in assertions) else "failed")
-            )
-        except Exception as exc:  # noqa: BLE001 -- record every case; never serialize provider secrets
-            result = {"status": "ERROR", "error_type": type(exc).__name__}
-            outcome = "error"
         rows.append(
-            {
-                "id": case["id"],
-                "passed": outcome == "passed",
-                "outcome": outcome,
-                "status": result.get("status"),
-                "cleanup": result.get("cleanup"),
-                "error_type": result.get("error_type"),
-                "assertions": assertions,
-                "tools": result.get("tools", {}),
-                "metrics": result.get("metrics", {}),
-                "trajectory": result.get("trajectory", []),
-            }
+            await evaluate_case(
+                root,
+                case,
+                mode=mode,
+                agent=spec.name,
+                model_config=config.model_dump() if config else None,
+                mcp_fixtures=fixture_config,
+                release=release,
+                client=client,
+            )
         )
     integrity_errors = []
     try:

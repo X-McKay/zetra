@@ -225,3 +225,61 @@ def test_dev_cli_is_explicitly_local(project, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["status"] == "SUCCEEDED"
     assert report["mode"] == "fixture"
+
+
+async def test_model_call_limit_stops_before_second_request(project):
+    requests = []
+
+    async def handle(request):
+        requests.append(await request.json())
+        return web.json_response(
+            {
+                "id": "one",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "test-model",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "tool_calls",
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "read-one",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "read_document",
+                                        "arguments": '{"document_id":"guide"}',
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+        )
+
+    app = web.Application()
+    app.router.add_post("/v1/chat/completions", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    port = site._server.sockets[0].getsockname()[1]
+    try:
+        result = await local_run(
+            project,
+            "Read guide",
+            model_config={"base_url": f"http://127.0.0.1:{port}/v1", "model": "test-model"},
+            model_call_limit=1,
+        )
+    finally:
+        await runner.cleanup()
+    assert len(requests) == 1
+    assert result["status"] == "FAILED"
+    assert result["error_type"] == "ModelCallLimit"
+    assert result["metrics"]["input_tokens"] == 10
+    assert result["metrics"]["steps"] == 2

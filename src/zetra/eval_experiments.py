@@ -92,3 +92,164 @@ def load_experiment(root, agent, name):
     if set(plan.required_tags) - tags:
         raise ValueError("experiment dataset lacks required tags")
     return LoadedExperiment(name, plan, cases, raw, dataset)
+
+
+async def run_experiment(root, *, agent, experiment, model_config, mcp_fixtures=None):
+    """Execute a predeclared schedule; budget stops never shorten the denominator."""
+    import asyncio
+    import hashlib
+    import random
+    import time
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from .bindings import MCPFixtures, mcp_provenance
+    from .eval_reports import TrialEvidence, evaluator_digest, finalize_report
+    from .evaluation import evaluate_case
+    from .local import LocalModelConfig
+    from .manifest import digest, load_agent, source_digest
+
+    root = Path(root).resolve()
+    spec = load_agent(root, agent)
+    loaded = load_experiment(root, spec.name, experiment)
+    config = LocalModelConfig.model_validate(model_config)
+    # Resolve only credential presence, not values, before any agent execution.
+    if config.api_key_env:
+        import os
+
+        if not os.environ.get(config.api_key_env):
+            raise ValueError("configured model credential is unavailable")
+    fixtures = MCPFixtures(mcp_fixtures) if mcp_fixtures is not None else None
+    plan = loaded.plan
+    source = source_digest(root)
+    implementation = evaluator_digest()
+    evidence = {
+        "schema_version": 3,
+        "mode": "local",
+        "agent": spec.name,
+        "experiment": experiment,
+        "plan": plan.model_dump(),
+        "plan_sha256": digest(plan.model_dump()),
+        "plan_file_sha256": hashlib.sha256(loaded.plan_raw).hexdigest(),
+        "dataset_sha256": hashlib.sha256(loaded.dataset_raw).hexdigest(),
+        "source_sha256": source,
+        "agent_sha256": digest(spec.model_dump()),
+        "evaluator_sha256": implementation,
+        "model_config": config.model_dump(),
+        "model_config_sha256": digest(config.model_dump()),
+        "mcp_binding": mcp_provenance(fixtures),
+        "created_at": datetime.now(UTC).isoformat(),
+        "trust": "local-unsigned",
+        "scope": "fixed development cases on a trusted local model endpoint; not production qualification",
+        "cases": [],
+        "stop_reason": None,
+        "integrity_errors": [],
+    }
+    for case in loaded.cases:
+        evidence["cases"].append(
+            {
+                "id": case["id"],
+                "case_sha256": digest(case),
+                "tags": case["tags"],
+                "cluster": case["cluster"],
+                "assertion_types": [a["type"] for a in case["assertions"]],
+                "trials": [
+                    TrialEvidence(
+                        trial=i, outcome="not_run", assertions=[], tools={}, metrics={}
+                    ).model_dump()
+                    for i in range(plan.trials)
+                ],
+            }
+        )
+    schedule = []
+    rng = random.Random(plan.seed)
+    for trial in range(plan.trials):
+        indices = list(range(len(loaded.cases)))
+        rng.shuffle(indices)
+        schedule.extend((index, trial) for index in indices)
+    deadline = time.monotonic() + plan.limits.max_duration_seconds
+    tokens = 0
+
+    def unchanged():
+        try:
+            current = load_experiment(root, spec.name, experiment)
+            return (
+                current.plan_raw == loaded.plan_raw
+                and current.dataset_raw == loaded.dataset_raw
+                and source_digest(root) == source
+                and evaluator_digest() == implementation
+            )
+        except (ValueError, OSError):
+            return False
+
+    def changed():
+        evidence["integrity_errors"] = ["inputs_changed_or_unreadable"]
+        evidence["stop_reason"] = "inputs_changed"
+
+    for ordinal, (index, trial) in enumerate(schedule):
+        if not unchanged():
+            changed()
+            break
+        remaining = deadline - time.monotonic() - 10  # native child teardown allowance
+        if remaining < 1:
+            evidence["stop_reason"] = "duration_budget"
+            break
+        try:
+            row = await evaluate_case(
+                root,
+                loaded.cases[index],
+                mode="local",
+                agent=spec.name,
+                model_config=config.model_dump(),
+                mcp_fixtures=fixtures.config() if fixtures else None,
+                timeout=min(plan.limits.trial_timeout_seconds, remaining),
+                model_call_limit=plan.limits.model_calls_per_trial,
+            )
+            compact = TrialEvidence(
+                trial=trial,
+                outcome=row["outcome"],
+                status=row.get("status"),
+                error_type=row.get("error_type"),
+                assertions=[{"type": r["type"], "passed": r["passed"]} for r in row["assertions"]],
+                tools=row["tools"],
+                metrics=row["metrics"],
+            )
+        except asyncio.CancelledError:
+            compact = TrialEvidence(
+                trial=trial,
+                outcome="error",
+                status="CANCELED",
+                error_type="CancelledError",
+                assertions=[],
+                tools={},
+                metrics={},
+            )
+            evidence["stop_reason"] = "canceled"
+        except (ValueError, TypeError, KeyError):
+            compact = TrialEvidence(
+                trial=trial,
+                outcome="error",
+                status="ERROR",
+                error_type="InvalidEvidence",
+                assertions=[],
+                tools={},
+                metrics={},
+            )
+        evidence["cases"][index]["trials"][trial] = compact.model_dump()
+        if not unchanged():
+            changed()
+        if evidence["stop_reason"]:
+            break
+        metrics = compact.metrics
+        if plan.limits.max_total_tokens is not None:
+            if metrics.input_tokens is None or metrics.output_tokens is None:
+                evidence["stop_reason"] = "usage_unavailable"
+            else:
+                tokens += metrics.input_tokens + metrics.output_tokens
+                if tokens > plan.limits.max_total_tokens or (
+                    tokens == plan.limits.max_total_tokens and ordinal + 1 < len(schedule)
+                ):
+                    evidence["stop_reason"] = "token_budget"
+        if evidence["stop_reason"]:
+            break
+    return finalize_report(evidence)

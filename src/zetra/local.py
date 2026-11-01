@@ -16,6 +16,10 @@ from .bindings import MCPFixtures, mcp_provenance
 from .manifest import digest, load_agent, source_digest
 
 
+class ModelCallLimit(Exception):
+    """Local request-count budget exhausted before another provider call."""
+
+
 class LocalModelConfig(BaseModel):
     model_config = ConfigDict(
         extra="forbid", frozen=True, strict=True, hide_input_in_errors=True, validate_default=True
@@ -111,6 +115,7 @@ async def local_run(
     timeout=60,
     workspace=None,
     output=None,
+    model_call_limit=None,
 ):
     from ._runtime.process import run_child
 
@@ -120,6 +125,10 @@ async def local_run(
         raise ValueError("input must be nonempty text of at most 65536 bytes")
     if type(timeout) not in (int, float) or not 0 < timeout <= 600:
         raise ValueError("timeout must be between zero and 600 seconds")
+    if model_call_limit is not None and (
+        type(model_call_limit) is not int or not 1 <= model_call_limit <= 32
+    ):
+        raise ValueError("model call limit must be an integer between 1 and 32")
     config = LocalModelConfig.model_validate(model_config) if model_config is not None else None
     fixtures = MCPFixtures(mcp_fixtures) if mcp_fixtures is not None else None
     if config is None and spec.model != "fixture":
@@ -143,6 +152,7 @@ async def local_run(
         "timeout": timeout,
         "workspace": str(Path(workspace).resolve()) if workspace else None,
         "output": str(output) if output else None,
+        "model_call_limit": model_call_limit,
     }
     try:
         result = await run_child(
@@ -202,6 +212,7 @@ async def _run_in_process(
     timeout=60,
     workspace=None,
     output=None,
+    model_call_limit=None,
 ):
     from google.adk.models.llm_response import LlmResponse
 
@@ -224,6 +235,7 @@ async def _run_in_process(
     report = {"status": "FAILED", "trajectory": events, "files": [], "file_contents": {}}
     input_tokens, output_tokens = [], []
     visible_text = ""
+    model_calls = 0
     try:
         with tempfile.TemporaryDirectory(prefix="zetra-local-") as temp:
             definition = Definition(
@@ -264,6 +276,10 @@ async def _run_in_process(
                             report.update(status="SUCCEEDED", result={"final_text": visible_text})
                             break
                         op = advanced["operation"]
+                        if op["kind"] == "model":
+                            if model_call_limit is not None and model_calls >= model_call_limit:
+                                raise ModelCallLimit
+                            model_calls += 1
                         event = {
                             "index": op["index"],
                             "kind": op["kind"],
