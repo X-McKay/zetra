@@ -13,6 +13,11 @@ Supply an explicit OpenAI-compatible model configuration outside this project:
 
 Remote endpoints require HTTPS. For authentication add `api_key_env` with the name
 of a variable supplied by your secret manager; never put the key in the JSON.
+For compatible Qwen/vLLM endpoints, add `"enable_thinking": false` to request
+direct responses for these bounded tasks. Omission preserves the provider default.
+This is an explicit model configuration change and requires a new study. A thinking
+model may exhaust a short output allowance before answering; incomplete responses
+remain errors, and increasing the allowance alone may not resolve the problem.
 
 ```sh
 uv run --locked zetra eval . --mode local --experiment smoke --model-config /private/model.json --output /private/smoke.json
@@ -21,6 +26,9 @@ uv run --locked zetra quality . --mode local --experiment reliability --model-co
 
 The starter has six synthetic development cases: supported guide quotes, tool
 selection, unsupported requests, access/instruction attacks and credential refusal.
+Its baseline prompt returns the full guide text verbatim for every supported
+request. Customize the prompt and corresponding quality requirements when your
+agent should summarize or explain instead.
 They are examples to extend, not a hidden holdout or enterprise acceptance policy.
 Tool contract/security/recovery tests remain mandatory. Add domain cases and runtime
 skill tests when you add capabilities; retain meaningful graders and failure records.
@@ -64,7 +72,10 @@ The manual `Live model evaluation` workflow uses only the default branch. Before
 using it, configure a GitHub environment named `live-evaluation`, restrict its
 allowed deployment branches to the default branch, set environment variables
 `EVAL_MODEL_BASE_URL` and `EVAL_MODEL_NAME`, and optionally the dedicated environment
-secret `EVAL_MODEL_API_KEY`. Keep this key out of repository-wide secrets and keep
+secret `EVAL_MODEL_API_KEY`. Optional environment variable `EVAL_ENABLE_THINKING`
+accepts exactly `true` or `false`; leave it empty to preserve the provider default.
+For the bounded Qwen direct-response example, use `false`.
+Keep the model key out of repository-wide secrets and keep
 signing/registry credentials out of this environment. Endpoint/model settings are
 administrator-owned, not arbitrary dispatch inputs. Do not dispatch from untrusted
 code. The workflow retains only compact reports for seven days, including failures;

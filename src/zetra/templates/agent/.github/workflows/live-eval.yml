@@ -37,6 +37,7 @@ jobs:
         env:
           MODEL_BASE_URL: ${{ vars.EVAL_MODEL_BASE_URL }}
           MODEL_NAME: ${{ vars.EVAL_MODEL_NAME }}
+          ENABLE_THINKING: ${{ vars.EVAL_ENABLE_THINKING }}
           EVAL_MODEL_API_KEY: ${{ secrets.EVAL_MODEL_API_KEY }}
           EXPERIMENT: ${{ inputs.experiment }}
         run: |
@@ -57,6 +58,11 @@ jobs:
           private = pathlib.Path(tempfile.mkdtemp(prefix='zetra-eval-', dir=os.environ['RUNNER_TEMP']))
           config = {'base_url': endpoint, 'model': model, 'max_tokens': 1024,
                     'temperature': 0, 'timeout': 30}
+          thinking = os.environ.get('ENABLE_THINKING', '')
+          if thinking not in {'', 'true', 'false'}:
+              raise SystemExit('EVAL_ENABLE_THINKING must be empty, true or false')
+          if thinking:
+              config['enable_thinking'] = thinking == 'true'
           if os.environ.get('EVAL_MODEL_API_KEY'):
               config['api_key_env'] = 'EVAL_MODEL_API_KEY'
           path = private / 'model.json'
