@@ -76,10 +76,20 @@ async def test_no_redirect_or_effect_retry(agent_env, monkeypatch, failure):
     assert len(seen) == 1
 
 
-def test_model_route_drift_rejected_before_provider(agent_env, monkeypatch):
-    monkeypatch.setenv("AGENT_MODEL_ROUTE", "/models/unreviewed")
-    with pytest.raises(ValueError, match="route"):
-        core_model.GatewayModel(ModelBinding(backend="llm-main", name="test-model"))
+async def test_envelope_backend_selects_nondefault_permitted_route(agent_env, monkeypatch):
+    # The Agent permits llm-a and llm-main; the legacy default selects llm-a.
+    monkeypatch.setenv("AGENT_MODEL_ROUTE", "/models/llm-a")
+    seen = []
+
+    def handler(req):
+        seen.append((str(req.url), req.headers["host"]))
+        return httpx.Response(200, json=chat_response("ok"))
+
+    model, _ = bound(monkeypatch, handler)
+    await model(request(), {}, "test")
+    assert seen == [
+        ("https://10.43.250.10/models/llm-main/v1/chat/completions", "inference.agents.internal")
+    ]
 
 
 def test_core_transport_requires_valid_ca(agent_env, monkeypatch, tmp_path):

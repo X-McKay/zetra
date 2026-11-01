@@ -5,15 +5,15 @@ from zetra._runtime.chat_model import ChatExecutor
 from zetra._runtime.dispatch import ExecutionRefused
 
 from agent_runtime.gateway import async_client_for
-from agent_runtime.identity import BearerAuth, env, gateway_url, identity
+from agent_runtime.identity import BearerAuth, gateway_url, identity
 
 
 class GatewayModel:
     def __init__(self, binding):
         self.binding = binding
         self.name = "openai/" + binding.name
-        if env("AGENT_MODEL_ROUTE") != f"/models/{binding.backend}":
-            raise ValueError("deployed model route differs from envelope")
+        # The hash-bound envelope selects a backend; the gateway enforces its
+        # signed policy. AGENT_MODEL_ROUTE is only the legacy default backend.
         self.base_url = f"{gateway_url()}/models/{binding.backend}/v1"
 
     async def __call__(self, payload, state, key):
