@@ -81,3 +81,42 @@ New histories skip cleanup before session activation; a Temporal patch preserves
 old refusal-history cleanup on replay. Kubani's CRD receives only the optional
 immutable profile field, preserving its newer verifiedSigner schema. Local
 Kustomize rendering is not cluster admission or resource-capacity qualification.
+
+## Reference agents and canonical starter
+
+Static release admission: twelve new tests failed before implementation, then all
+**19 tools tests passed**. They cover unsupported versions/profiles, duplicate keys,
+missing/mismatched resources, tool/quality drift and symlinks without importing
+agent factories. An early synthetic Agent fixture omitted its required identity;
+fixing that fixture produced the final green run.
+
+Migrated investigator: **19 tests passed**; document assistant: **17 tests passed**.
+Both full component quality gates passed, including per-tool contract/security/
+recovery and outcome/trajectory/step-budget evidence. The document assistant also
+maps runtime-skill contract/activation/nonactivation. Its exact-excerpt tool bounds
+output mechanically; fixture success is not semantic model accuracy or adversarial
+prompt-injection qualification. Investigator's reviewed MCP capabilities did not
+change. Repository `just check` passed with the quality gates wired in.
+
+Both agents completed native local Temporal runs with `SUCCEEDED` and `DELETED`
+cleanup. Exact installed dependency metadata confirms SDK `d638678`, runtime
+`1393cf0`, and tooling contracts `bba8b09`. Both Docker images built with the repo's
+Python 3.12.14/uv 0.13.1 versions and actual installed distributions.
+
+Image fixture development first found a wrong harness property name, then a wrong
+local result comparison. The synthetic MCP server also lacked `tools/list`, which
+the actual MCP client requests during its call. These were harness errors, fixed
+without weakening the runtime. Final image parity results are recorded below.
+
+Canonical starter: **30 tests**, **13 renderer tests**, full quality gate and wheel
+resource checks passed at SDK `d638678`. A freshly rendered `runtime-starter` also
+passed `just validate` end to end. Updated bundle/provenance checks: **18 passed**.
+The final guest-runtime wheel includes the process-creation guard. Local host
+checks used Python 3.12.13/uv 0.12.7; Docker used the unchanged repository pins.
+
+Final image parity passed in read-only UID-1500 containers with external network
+disabled: investigator **9 boundaries / 3 exact MCP calls**, document assistant
+**5 boundaries / 0 MCP calls**. Installed source/resource bytes match the reviewed
+project. Cold platform commands validate receipts before advancing the test cursor;
+final tool order, workspace files and text match the offline local run. Runner
+checkpoint persistence/recovery is covered separately by its native tests.

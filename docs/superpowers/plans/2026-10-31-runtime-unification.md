@@ -58,15 +58,15 @@
 
 **Files:** isolated zetra-agents worktree: investigator factory/packaging/manifest/tests/evals; new document assistant package; tools/zetra_agents/layout.py and release.py; CI/justfile/Dockerfiles/docs. Canonical template follow-up if new SDK guidance/pins required.
 **Interfaces:** schema-2 platform envelope references a packaged SDK AgentSpec; project index targets same resource. Release builder derives runtimeProfile, hashes envelope and emits unapproved artifacts. Both references own explicit quality contracts and local fixtures.
-- [ ] Write negative static/packaging/release tests before migration: missing/mismatched resources, model/tool drift, unsupported profile, imports and approval.
-- [ ] Migrate investigator without expanding MCP capabilities; add document assistant with path/abstention/security/recovery and trajectory coverage.
-- [ ] Bind published SDK/runtime/contracts revisions, regenerate locks together and verify actual installed distributions.
-- [ ] Run offline dev/quality and real local Temporal for both; platform subprocess/gateway fixture parity and image/wheel import checks.
+- [x] Write negative static/packaging/release tests before migration: missing/mismatched resources, model/tool drift, unsupported profile, imports and approval.
+- [x] Migrate investigator without expanding MCP capabilities; add document assistant with path/abstention/security/recovery and trajectory coverage.
+- [x] Bind published SDK/runtime/contracts revisions, regenerate locks together and verify actual installed distributions.
+- [x] Run offline dev/quality and real local Temporal for both; platform subprocess/gateway fixture parity and image/wheel import checks.
 
 ### Task 5: Documentation, review and delivery
 
 **Files:** SDK docs/platform.md, developer-skills.md, local-development.md, architecture/conformance, evidence; agent README; canonical guidance and provenance; PR descriptions.
-- [ ] Correct current-vs-historical status and pins, document explicit legacy migration and remaining cluster/model qualification.
+- [x] Correct current-vs-historical status and pins, document explicit legacy migration and remaining cluster/model qualification.
 - [ ] Run affected full suites, native recovery/replay, static checks and installed bundle validations; retain failed observations.
 - [ ] Obtain one independent whole-change review, fix material findings with RED/GREEN regressions and appropriate suites.
 - [ ] Publish isolated feature branches and draft PRs, verify exact remote pins and final CI, record remaining milestone boundaries honestly.

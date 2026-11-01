@@ -178,3 +178,27 @@ assistant, with and without relevant skills, and record actual actions and outpu
 Use repeated trials before claiming effectiveness or cost improvements. These
 scenarios are not the deployed agent's eval dataset and do not run paid assistants
 as part of ordinary `just validate`.
+
+## Offline MCP and the shared platform profile
+
+The pinned SDK supplies `await ctx.mcp(backend, tool, arguments)` only within an
+active registered `remote_read` tool. Calls from factory construction, a workspace
+tool or an unmanaged background task fail. There is no implicit live endpoint.
+
+For local tools, add a reviewed JSON fixture file with `schema_version: 1` and a
+`calls` array. Each entry has `backend`, `tool`, exact `arguments`, and JSON `result`.
+Pass that file explicitly to `zetra dev`, `zetra eval`, or `zetra quality` using
+`--mcp-fixtures evals/<agent>/mcp.json`. The same option works with `dev --temporal`.
+Unknown calls fail; reports identify the fixture digest independently of the model.
+Synthetic MCP evidence does not establish live authorization or tool reliability.
+
+The `zetra-agents` infrastructure investigator and document assistant demonstrate
+schema-2 platform envelopes referencing the same packaged SDK definition indexed
+in `pyproject.toml`. New core releases select `zetra-core-v1`; the platform supplies
+model and MCP bindings and verifies the exact tool inventory. Keep development
+fixtures separate from that explicit release profile. Existing legacy releases
+need a new image and reviewed release; never relabel an old snapshot as core.
+
+The platform migration and cluster qualification remain separately reviewed work.
+This starter remains a small local-first Python project; it does not create a
+cluster, provision identities, or approve a deployment.
