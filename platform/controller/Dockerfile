@@ -3,7 +3,8 @@
 FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
 FROM python:3.12.14-slim AS build
 COPY --from=uv /uv /usr/local/bin/uv
-ENV UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy
+# The venv's scripts hardcode its path in their shebangs, so build it where it runs.
+ENV UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/app/.venv
 WORKDIR /src
 COPY contracts ./contracts
 COPY controller/pyproject.toml controller/uv.lock ./controller/
@@ -21,7 +22,7 @@ RUN test -n "$COSIGN_SHA256" && echo "$COSIGN_SHA256  /cosign" | sha256sum -c - 
 
 FROM python:3.12.14-slim
 RUN groupadd --gid 65532 nonroot && useradd --uid 65532 --gid nonroot --no-create-home nonroot
-COPY --from=build /src/controller/.venv /app/.venv
+COPY --from=build /app/.venv /app/.venv
 COPY --from=cosign /cosign /usr/local/bin/cosign
 ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 USER 65532:65532
