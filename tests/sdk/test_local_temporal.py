@@ -59,6 +59,26 @@ async def test_real_local_temporal_boundaries_and_history(environment, project, 
     await Replayer(workflows=[SessionWorkflow]).replay_workflow(history)
 
 
+async def test_temporal_mcp_fixture_binding_survives_cold_boundaries(environment, tmp_path):
+    from tests.sdk.test_bindings import fixtures, mcp_project
+    from zetra.local_temporal import LocalTemporal
+
+    project = mcp_project(tmp_path / "agent")
+    runtime = LocalTemporal(project, state_dir=tmp_path / "state", mcp_fixtures=fixtures())
+    queue = "mcp-" + uuid.uuid4().hex
+    async with runtime.worker(environment.client, task_queue=queue):
+        handle = await runtime.submit(environment.client, "Read guide", task_queue=queue)
+        result = await runtime.result(environment.client, handle)
+    assert result["status"] == "SUCCEEDED", result
+    assert result["cleanup"] == "DELETED"
+    assert result["trajectory"][1]["result"] == {"text": "Approved guide."}
+    assert result["mcp_binding"]["mode"] == "fixture"
+    changed = fixtures()
+    changed["calls"][0]["result"]["text"] = "Changed."
+    with pytest.raises(ValueError, match="identity"):
+        LocalTemporal(project, state_dir=tmp_path / "state", mcp_fixtures=changed)
+
+
 def test_local_temporal_state_rejects_changed_source_and_unowned_directory(project, tmp_path):
     from zetra.local_temporal import LocalTemporal
 
@@ -566,3 +586,20 @@ async def test_startup_cancellation_resolves_and_stops_owned_server(project, tmp
         await asyncio.gather(task, return_exceptions=True)
         for environment in environments:
             await environment.shutdown()
+
+
+async def test_default_temporal_download_uses_versioned_service_route(
+    project, tmp_path, monkeypatch
+):
+    from temporalio.testing import WorkflowEnvironment
+
+    from zetra.local_temporal import dev_temporal
+
+    async def start(**kwargs):
+        assert kwargs["dev_server_existing_path"] is None
+        assert kwargs["dev_server_download_version"] == "v1.9.1"
+        raise RuntimeError("checked download route before startup")
+
+    monkeypatch.setattr(WorkflowEnvironment, "start_local", start)
+    with pytest.raises(RuntimeError, match="checked download route"):
+        await dev_temporal(project, "Read the guide", state_dir=tmp_path / "default-state")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime, timedelta
 
 from temporalio import workflow
@@ -11,11 +12,13 @@ from temporalio.exceptions import ActivityError, ApplicationError, TimeoutError
 
 with workflow.unsafe.imports_passed_through():
     from runner import activities as act
+    from runner import core
     from runner import records
     from runner.types import (
         BoundaryIn,
         BoundaryOut,
         ClosedSession,
+        CoreSessionResult,
         GenIn,
         OrphanPod,
         SessionInput,
@@ -56,15 +59,28 @@ class SessionWorkflow:
         self.state = "SUBMITTED"
         self.cleanup: dict[str, str] = {}
         self.tokens = 0
+        self.core_config = None
+        self.core_binding = None
+        self.core_position = None
+        self.core_reason = None
+        self.core_text = None
 
     @workflow.query
     def status(self) -> dict:
-        return {
+        result = {
             "state": self.state,
             "generation": self.generation,
             "boundaries": len(self.committed),
             "cleanup": self.cleanup,
         }
+        if self.core_config is not None:
+            result.update(
+                runtime_profile="zetra-core-v1",
+                position=self.core_position,
+                reason=self.core_reason,
+                final_text=self.core_text,
+            )
+        return result
 
     @workflow.run
     async def run(self, inp: SessionInput) -> SessionResult:
@@ -93,7 +109,13 @@ class SessionWorkflow:
         except asyncio.CancelledError as e:
             cancelled, outcome = e, "CANCELLED"
             await _settle(session)
-        await self._cleanup(inp)
+        if workflow.patched("cleanup-after-session-activation-v1") and self.generation == 0:
+            # A refused original-run guard or preflight has not acquired this session.
+            # Old histories keep their recorded cleanup commands via the patch marker.
+            self.cleanup = {"stop": "NOT_STARTED", "delete": "DELETED", "grant": "NOT_STARTED"}
+            self.state = "CLEANED"
+        else:
+            await self._cleanup(inp)
         _record(
             "session_finished",
             session_id=inp.session_id,
@@ -104,18 +126,34 @@ class SessionWorkflow:
         )
         if cancelled is not None:
             raise cancelled  # the workflow closes as cancelled
-        return SessionResult(
+        result = dict(
             outcome=outcome,
             cleanup=self.cleanup,
             generation=self.generation,
             boundaries=len(self.committed),
             snapshot=self.snapshot,
         )
+        if self.core_config is not None:
+            return CoreSessionResult(
+                **result,
+                position=self.core_position,
+                reason=self.core_reason,
+                final_text=self.core_text,
+            )
+        return SessionResult(**result)
 
     async def _session(self, inp: SessionInput) -> str:
-        await workflow.execute_activity(
+        configuration = await workflow.execute_activity(
             act.preflight, inp, start_to_close_timeout=timedelta(seconds=60), retry_policy=THREE
         )
+        if configuration is not None:
+            self.core_config = configuration
+            try:
+                self.core_binding = core.binding_for(inp, configuration, workflow.info(), 1)
+            except (ValueError, KeyError, TypeError):
+                self.core_reason = "invalid_execution_binding"
+                return "REJECTED"
+            return await self._core_session(inp)
         await self._provision(inp)
         boundary = len(self.committed)
         while boundary < inp.max_boundaries:
@@ -169,9 +207,107 @@ class SessionWorkflow:
             boundary += 1
         return "FAILED"  # boundary limit reached
 
+    async def _core_session(self, inp: SessionInput) -> str:
+        await self._provision(inp)
+        maximum = min(inp.max_boundaries, self.core_config["max_boundaries"])
+        while True:
+            self.state = "RUNNING"
+            request = {
+                "schema_version": 1,
+                "binding": self.core_binding,
+                "task": core.task_text(inp),
+                "action": "prepare",
+                "position": self.core_position,
+                "operation": None,
+            }
+            try:
+                prepared = await workflow.execute_activity(
+                    core.prepare_core,
+                    request,
+                    start_to_close_timeout=timedelta(seconds=300),
+                    heartbeat_timeout=timedelta(seconds=30),
+                    retry_policy=ONE_ATTEMPT,
+                )
+            except ActivityError as exc:
+                if _reason(exc) == "CorePrepareLost" and self.generation < MAX_GENERATIONS:
+                    await self._replace(inp)
+                    continue
+                raise
+            if prepared["position"] != (self.core_position or core.EMPTY_POSITION.model_dump()):
+                raise ApplicationError(
+                    "prepare changed accepted progress", type="CoreIntegrityError"
+                )
+            self.core_position = prepared["position"]
+            if prepared["status"] == "done":
+                self.core_text = prepared["text"]
+                return "COMPLETED"
+            if len(self.committed) >= maximum:
+                self.core_reason = "boundary_limit"
+                return "FAILED"
+            request = {
+                **request,
+                "action": "execute",
+                "position": self.core_position,
+                "operation": prepared["operation"],
+            }
+            try:
+                executed = await workflow.execute_activity(
+                    core.execute_core,
+                    request,
+                    start_to_close_timeout=timedelta(seconds=300),
+                    heartbeat_timeout=timedelta(seconds=30),
+                    retry_policy=ONE_ATTEMPT,
+                )
+            except ActivityError:
+                self.core_reason = "execute_unavailable"
+                return "OUTCOME_UNKNOWN"
+            if executed["status"] != "candidate":
+                self.core_reason = executed.get("reason", "execution_unknown")
+                if executed["status"] == "refused" and request["operation"]["kind"] == "model":
+                    return "DENIED" if self.core_reason == "policy" else "BUDGET_EXCEEDED"
+                return "OUTCOME_UNKNOWN"
+            try:
+                checkpoint = await workflow.execute_activity(
+                    core.snapshot_core,
+                    {"command": request, "receipt": executed["receipt"]},
+                    start_to_close_timeout=timedelta(seconds=120),
+                    heartbeat_timeout=timedelta(seconds=30),
+                    retry_policy=THREE,
+                )
+                out = BoundaryOut.parse_strict(checkpoint["boundary"])
+                if (
+                    checkpoint["position"] != executed["receipt"]["position"]
+                    or out.boundary != len(self.committed)
+                    or out.done
+                    or out.kind != request["operation"]["kind"]
+                    or checkpoint["position"]["cursor"] != len(self.committed) + 1
+                    or not re.fullmatch(r"[a-f0-9]{64}", checkpoint["snapshot"])
+                ):
+                    raise ValueError("checkpoint differs from candidate")
+            except (ActivityError, ValueError, KeyError, TypeError):
+                self.core_reason = "checkpoint_unavailable"
+                return "OUTCOME_UNKNOWN"
+            self.snapshot = checkpoint["snapshot"]
+            self.core_position = checkpoint["position"]
+            self.committed.append(out)
+            self.tokens += out.tokens
+            _record(
+                "boundary_accepted",
+                session_id=inp.session_id,
+                generation=self.generation,
+                boundary=out.boundary,
+                kind=out.kind,
+                tool=out.tool,
+                cumulative_tokens=self.tokens,
+                snapshot=self.snapshot,
+                summary_sha256=records.summary_hash(out.summary),
+            )
+
     async def _provision(self, inp: SessionInput) -> None:
         self.generation += 1
         self.state = "PROVISIONING"
+        if self.core_binding is not None:
+            self.core_binding = {**self.core_binding, "generation": self.generation}
         # Fence first: from now on only this generation is authorized, even if an older pod
         # lingers.
         await workflow.execute_activity(
@@ -180,6 +316,28 @@ class SessionWorkflow:
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=FEW,
         )
+        if self.core_binding is not None:
+            payload = {
+                "binding": self.core_binding,
+                "restore": self.snapshot,
+                "position": self.core_position,
+            }
+            await workflow.execute_activity(
+                core.create_core_sandbox,
+                payload,
+                schedule_to_close_timeout=timedelta(seconds=600),
+                start_to_close_timeout=timedelta(seconds=120),
+                retry_policy=TRANSIENT,
+            )
+            await workflow.execute_activity(
+                core.wait_core_ready,
+                payload,
+                start_to_close_timeout=timedelta(seconds=180),
+                heartbeat_timeout=timedelta(seconds=30),
+                retry_policy=THREE,
+            )
+            self.state = "READY"
+            return
         await workflow.execute_activity(
             act.create_sandbox,
             GenIn(inp, self.generation, self.snapshot),
@@ -206,6 +364,17 @@ class SessionWorkflow:
         await self._provision(inp)
 
     async def _delete(self, inp: SessionInput, generation: int) -> str:
+        if self.core_binding is not None:
+            return await asyncio.shield(
+                workflow.execute_activity(
+                    core.delete_core_sandbox,
+                    {**self.core_binding, "generation": generation},
+                    schedule_to_close_timeout=timedelta(seconds=600),
+                    start_to_close_timeout=timedelta(seconds=120),
+                    heartbeat_timeout=timedelta(seconds=30),
+                    retry_policy=TRANSIENT,
+                )
+            )
         return await asyncio.shield(
             workflow.execute_activity(
                 act.delete_sandbox,

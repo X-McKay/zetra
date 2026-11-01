@@ -51,8 +51,30 @@ never to production AgentSpec or Release settings.
 Models must support the admitted serial tool-calling profile. Parallel calls,
 unknown tools and incomplete responses fail. Dependency installation and remote
 models may need network access; fully offline inference requires a running local
-model with downloaded weights. MCP tools still need their configured transport
-and development credentials.
+model with downloaded weights. MCP tools can use explicit offline fixtures;
+live remote MCP access requires its separately configured transport and credentials.
+
+## Offline MCP fixtures
+
+A registered `remote_read` tool can call
+`await ctx.mcp("documents", "read", {"id": document_id})`. The binding is available
+only during that tool's execution, not factory construction or replay. Without a
+binding the call fails; the SDK never selects a live endpoint implicitly.
+
+Use `--mcp-fixtures /path/to/mcp.json` with `dev`, `eval`, or `quality`, including
+`dev --temporal`. The fixture file uses exact backend/tool/argument matching:
+
+```json
+{"schema_version":1,"calls":[{"backend":"documents","tool":"read","arguments":{"id":"guide"},"result":{"text":"Approved guide"}}]}
+```
+
+Unknown calls fail, duplicate entries are rejected, and each response is copied.
+The file is limited to 1 MiB and 256 entries, arguments to 32 KiB, and each result
+to 64 KiB. Reports record the canonical fixture digest in `mcp_binding`, separately
+from model provenance. Changing fixtures changes the execution identity; retained
+Temporal state cannot silently pick up changed fixtures. Fixture MCP proves local
+integration behavior, not live authorization or remote-tool correctness. Sandbox
+evaluation does not accept local MCP fixture overrides.
 
 `--workspace INPUT_DIR` copies a bounded, link-free snapshot into disposable state.
 `--output NEW_DIR` exports the final workspace and private `report.json` outside
@@ -149,7 +171,8 @@ uv run --locked zetra dev /path/to/agent --input 'Read the guide.' --temporal-ad
 mode; otherwise the SDK downloads pinned CLI 1.9.1 on first use. No cluster or
 OpenShell is needed. Downloading the CLI/dependencies and remote model inference
 can require network access; an installed CLI and local model support offline use.
-`--model-config`, `--workspace`, `--timeout` and private `--output` export also work.
+`--model-config`, `--mcp-fixtures`, `--workspace`, `--timeout` and private `--output`
+export also work.
 The local Temporal model request timeout is capped at 30 seconds within the
 shared Workflow's 45-second effect Activity deadline.
 

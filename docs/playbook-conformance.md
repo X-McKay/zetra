@@ -143,3 +143,24 @@ The [starter rollout and local Temporal record](evidence/local-temporal-2026-10-
 separately documents native history/replay, worker/server restart, lost completion,
 supervised cancellation and publication checks. These observations do not qualify
 the production sandbox or the separate platform runtime.
+
+### Shared binding prerequisites
+
+Registered remote-read tools now have a scoped, injected MCP binding. Explicit,
+exact-match offline fixtures flow through local CLI, evaluation, quality reports
+and cold local Temporal boundaries, with independent fixture provenance. Deployed
+definitions can require an exact tool/effect inventory. The shared model converter
+accepts an internal authenticated-client factory, and receipt validation is reused
+by the SDK Activity facade. These are integration prerequisites; they do not by
+themselves migrate or qualify the separate platform runtime. Typed model refusals
+are definitive; refusals inside tools preserve unknown outcomes because earlier
+tool work may already have happened.
+
+## Shared core platform profile
+
+The explicitly selected `zetra-core-v1` profile now uses the shared SDK runtime
+through the platform guest and runner. Full tape/workspace validation and persisted
+archive verification precede acceptance; unknown execute outcomes are terminal.
+Legacy releases and recorded histories retain their protocol. See
+[evidence](evidence/runtime-unification-2026-10-31.md) for native tests and remaining
+cluster/model qualification. This branch has not activated a cluster release.

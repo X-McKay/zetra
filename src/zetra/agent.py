@@ -1,7 +1,9 @@
 """Agent definitions share one registration for capture and execution."""
 
+import asyncio
 import inspect
 from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,7 +26,9 @@ class Tool:
 
 
 class AgentContext:
-    def __init__(self, bridge, *, workspace: Path, model: str, instruction: str = ""):
+    def __init__(
+        self, bridge, *, workspace: Path, model: str, instruction: str = "", mcp_binding=None
+    ):
         from ._runtime.capture import BridgeModel
 
         self.workspace = Path(workspace)
@@ -34,6 +38,19 @@ class AgentContext:
         self._specs = {}
         self._wrappers = []
         self._sealed = False
+        self._mcp_binding = mcp_binding
+        self._mcp_scope = ContextVar("zetra_mcp_scope", default=None)
+
+    async def mcp(self, backend: str, tool: str, arguments: dict):
+        from .bindings import mcp_request
+
+        scope = self._mcp_scope.get()
+        if scope is None or not scope["active"] or scope["task"] is not asyncio.current_task():
+            raise ValueError("MCP requires an active registered remote_read tool")
+        if self._mcp_binding is None:
+            raise ValueError("MCP transport is not explicitly bound")
+        mcp_request(backend, tool, arguments)
+        return await self._mcp_binding(backend, tool, arguments)
 
     def tools(self, *specs: Tool):
         from ._runtime.capture import BridgeTool
@@ -82,8 +99,14 @@ class AgentContext:
         result = {}
         for name, spec in self._specs.items():
 
-            async def execute(args, state, key, function=spec.function):
-                return await function(**dict(args))
+            async def execute(args, state, key, function=spec.function, effect=spec.effect):
+                scope = {"active": effect == "remote_read", "task": asyncio.current_task()}
+                token = self._mcp_scope.set(scope)
+                try:
+                    return await function(**dict(args))
+                finally:
+                    scope["active"] = False
+                    self._mcp_scope.reset(token)
 
             result[name] = execute
         return result

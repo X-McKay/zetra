@@ -282,9 +282,12 @@ def _test_passed(selector, evidence):
     return True
 
 
-async def run_quality(root, *, agent=None, mode="fixture", model_config=None):
+async def run_quality(root, *, agent=None, mode="fixture", model_config=None, mcp_fixtures=None):
     """Run fresh mapped tests and evaluations; evidence is never production approval."""
+    from .bindings import MCPFixtures, mcp_provenance
     from .evaluation import evaluate
+
+    fixtures = MCPFixtures(mcp_fixtures) if mcp_fixtures is not None else None
 
     root = Path(root).resolve()
     explanation = explain_quality(root, agent=agent)
@@ -295,6 +298,7 @@ async def run_quality(root, *, agent=None, mode="fixture", model_config=None):
         "scope": "local executed evidence; not production authorization",
         "pytest": None,
         "evaluation": None,
+        "mcp_binding": mcp_provenance(fixtures),
     }
     if explanation["status"] != "PASSED":
         return report
@@ -343,8 +347,13 @@ async def run_quality(root, *, agent=None, mode="fixture", model_config=None):
     if tests["returncode"] != 0:
         missing.append("pytest execution failed or evidence unavailable")
     try:
-        evaluation = await evaluate(root, mode=mode, agent=spec.name, model_config=model_config)
+        options = {"mcp_fixtures": fixtures.config()} if fixtures is not None else {}
+        evaluation = await evaluate(
+            root, mode=mode, agent=spec.name, model_config=model_config, **options
+        )
         report["evaluation"] = evaluation
+        if fixtures is not None and evaluation.get("mcp_binding") != report["mcp_binding"]:
+            missing.append("MCP fixture evidence does not match the requested binding")
     except Exception as exc:  # noqa: BLE001 - preserve execution errors as failed evidence
         evaluation = {"status": "FAILED", "cases": []}
         missing.append(f"evaluation error: {type(exc).__name__}")

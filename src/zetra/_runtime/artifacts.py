@@ -158,6 +158,31 @@ class Tape:
             for entry in self.records(position)
         ]
 
+    def validate_receipt(self, previous, operation, value):
+        from .workspace import validate_snapshot
+
+        previous = Position.model_validate(previous)
+        receipt = Receipt.model_validate(value)
+        operation = verify_operation(operation, manifest=self.manifest, index=previous.cursor)
+        self.records(previous)
+        entries = self.records(receipt.position)
+        if (
+            receipt.previous != previous.head
+            or receipt.operation_id != operation["operation_id"]
+            or receipt.request_digest != operation["request_digest"]
+            or receipt.position.cursor != previous.cursor + 1
+            or not entries
+            or entries[-1]["operation"] != operation
+            or receipt.position.head is None
+            or receipt.position.workspace is None
+        ):
+            raise IntegrityError("candidate receipt does not match the accepted operation")
+        node = json.loads(self.store.get(receipt.position.head))
+        if node["previous"] != (previous.head.model_dump() if previous.head else None):
+            raise IntegrityError("candidate does not extend the accepted head")
+        validate_snapshot(self.store.get(receipt.position.workspace))
+        return receipt
+
     def records(self, position):
         """Verified accepted records retaining definitive outcome status for diagnostics."""
         position = Position.model_validate(position)

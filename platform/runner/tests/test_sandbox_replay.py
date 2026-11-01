@@ -74,3 +74,14 @@ async def test_reconciler_first_task_runs_in_sandbox():
         _history("CleanupReconcilerWorkflow", "cleanup-tenant-a", payload)
     )
     assert result.replay_failure is None
+
+
+async def test_complete_legacy_histories_replay_without_new_core_commands():
+    import json
+    from pathlib import Path
+
+    for path in sorted((Path(__file__).parent / "histories").glob("legacy-*.json")):
+        document = json.loads(path.read_text())
+        history = WorkflowHistory.from_json(document["workflow_id"], document["history"])
+        result = await Replayer(workflows=[SessionWorkflow]).replay_workflow(history)
+        assert result.replay_failure is None, path.name

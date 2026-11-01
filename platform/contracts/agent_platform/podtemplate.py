@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any
 
 from agent_platform import naming
+from agent_platform.bundle import canonical_json
 from agent_platform.constants import (
     AGENT_COMMAND,
     AGENT_TOKEN_PATH,
@@ -101,6 +102,24 @@ def render_pod_template(
         {"name": "AGENT_TOKENS_PER_SESSION", "value": str(bundle["budgets"]["tokens_per_session"])},
         {"name": "AGENT_SESSION_ID", "value": ""},
     ]
+    if "runtimeProfile" in release["spec"]:
+        profile = release["spec"]["runtimeProfile"]
+        if (
+            profile != "zetra-core-v1"
+            or bundle["runtime"].get("execution_profile") != profile
+            or policy_digest != "sha256:" + release["spec"]["policySha256"]
+        ):
+            raise ValueError("core profile must match the signed release policy")
+        binding = {
+            "profile": profile,
+            "tenant": tenant,
+            "agent": name,
+            "release": release_name,
+            "image": release["spec"]["image"],
+            "manifest_sha256": release["spec"]["manifestSha256"],
+            "policy_sha256": release["spec"]["policySha256"],
+        }
+        env.append({"name": "AGENT_RELEASE_BINDING", "value": canonical_json(binding).decode()})
 
     hardened = {
         "allowPrivilegeEscalation": False,

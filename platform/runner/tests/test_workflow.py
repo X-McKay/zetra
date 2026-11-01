@@ -158,7 +158,8 @@ async def test_t9a_preflight_refusal_creates_nothing(go):
     assert r.outcome == "FAILED" and r.result.generation == 0
     assert "create_sandbox" not in fake.names() and "set_generation" not in fake.names()
     assert "delete_sandbox" not in fake.names()
-    assert r.result.cleanup == {"stop": "OK", "delete": "DELETED", "grant": "OK"}
+    assert "stop_session" not in fake.names() and "delete_grant" not in fake.names()
+    assert r.result.cleanup == {"stop": "NOT_STARTED", "delete": "DELETED", "grant": "NOT_STARTED"}
 
 
 async def test_boundary_limit_fails(go):

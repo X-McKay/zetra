@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "agent-package"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["zetra @ git+https://github.com/X-McKay/zetra.git@c128bb199c64386e2fbda224e500ef40451eadcb"]
+dependencies = ["zetra @ git+https://github.com/X-McKay/zetra.git@750180967185181181c2ebc95e19e2c913756e67"]
 
 [dependency-groups]
 dev = ["pytest>=8,<9", "ruff>=0.11,<1"]

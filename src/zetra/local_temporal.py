@@ -65,7 +65,9 @@ class LocalTemporal:
     Agent code runs only in supervised children, with cooperative in-process tools.
     """
 
-    def __init__(self, root, *, state_dir, agent=None, model_config=None):
+    def __init__(self, root, *, state_dir, agent=None, model_config=None, mcp_fixtures=None):
+        from .bindings import MCPFixtures
+
         if sys.platform != "linux":
             raise ValueError("local Temporal currently requires Linux process supervision")
         self.root = _real_path(root)
@@ -81,6 +83,9 @@ class LocalTemporal:
             "agent": self.spec.model_dump(),
             "model_config": config.model_dump() if config else None,
         }
+        self.mcp_fixtures = MCPFixtures(mcp_fixtures) if mcp_fixtures is not None else None
+        if self.mcp_fixtures is not None:
+            self.settings["mcp_fixtures"] = self.mcp_fixtures.config()
         self.identity = digest(self.settings)
         self.state_dir = _real_path(state_dir)
         if (
@@ -251,6 +256,7 @@ class LocalTemporal:
         from google.adk.models.llm_response import LlmResponse
 
         from ._runtime.records import decode_model
+        from .bindings import mcp_provenance
 
         trajectory, inputs, outputs = [], [], []
         text = ""
@@ -307,6 +313,7 @@ class LocalTemporal:
             "source_sha256": self.settings["source_sha256"],
             "model_config": model,
             "model_config_sha256": digest(model),
+            "mcp_binding": mcp_provenance(self.mcp_fixtures),
             "handle": handle.model_dump(),
             "position": position.model_dump(),
             "tools": tools,
@@ -425,6 +432,7 @@ async def dev_temporal(
     *,
     agent=None,
     model_config=None,
+    mcp_fixtures=None,
     timeout=60,
     workspace=None,
     output=None,
@@ -451,7 +459,13 @@ async def dev_temporal(
     )
     destination = _output_path(root, workspace, output)
     _output_path(root, state_dir, output)
-    runtime = LocalTemporal(root, state_dir=state_dir, agent=agent, model_config=model_config)
+    runtime = LocalTemporal(
+        root,
+        state_dir=state_dir,
+        agent=agent,
+        model_config=model_config,
+        mcp_fixtures=mcp_fixtures,
+    )
     queue = "zetra-local-" + uuid.uuid4().hex
     print(f"zetra: local Temporal state: {state_dir}", file=sys.stderr)
 
@@ -468,7 +482,7 @@ async def dev_temporal(
                 WorkflowEnvironment.start_local(
                     dev_server_existing_path=binary,
                     dev_server_database_filename=str(state_dir / "temporal.sqlite"),
-                    dev_server_download_version="1.9.1",
+                    dev_server_download_version="v1.9.1",
                     dev_server_log_level="error",
                     dev_server_extra_args=["--output", "none"],
                 )

@@ -20,6 +20,7 @@ class ChatExecutor:
         timeout: float = 20,
         temperature: float = 0,
         extra_body: dict | None = None,
+        client_factory=None,
     ):
         self.base_url = base_url
         self.model = model
@@ -28,6 +29,7 @@ class ChatExecutor:
         self.timeout = timeout
         self.temperature = temperature
         self.extra_body = extra_body
+        self.client_factory = client_factory
 
     async def __call__(self, payload, state, key):
         os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
@@ -70,9 +72,14 @@ class ChatExecutor:
                     canonical_bytes(args)  # Reject non-finite values before ADK can repair JSON.
                 return raw
 
-        async with AsyncOpenAI(
-            base_url=self.base_url, api_key=self.api_key, max_retries=0, timeout=self.timeout
-        ) as client:
+        client_context = (
+            self.client_factory()
+            if self.client_factory is not None
+            else AsyncOpenAI(
+                base_url=self.base_url, api_key=self.api_key, max_retries=0, timeout=self.timeout
+            )
+        )
+        async with client_context as client:
             model = LiteLlm(
                 model=self.model,
                 llm_client=StrictClient(),

@@ -85,10 +85,15 @@ and Codex harnesses, automatic discovery tests, calibrated scoring, and comparat
 time/token measurements remain future validation. No paid assistant benchmark,
 live model evaluation, cluster qualification or production deployment ran here.
 
-## Next milestone
+## Current integration and remaining milestones
 
-Unify the starter and active platform agent contracts, then deliver the shared
-local runner and machine-readable quality requirements. The broader design covers
-no-Temporal/default local execution, optional local Temporal, tool/skill/trajectory
-evals, exact-artifact release evidence, continuous improvement and zetra-ui. This
-skill pack does not implement or claim those future runtime/platform capabilities.
+The local runner, optional local Temporal, explicit offline MCP bindings and
+machine-readable component quality gates are now implemented. The versioned
+platform core profile and two reference-agent migrations extend that same
+factory/runtime contract; see [platform integration](platform.md) and its
+[validation record](evidence/runtime-unification-2026-10-31.md).
+
+Statistical model evals, exact-artifact production promotion, fleet telemetry,
+continuous optimization, cluster qualification and zetra-ui remain separate
+roadmap milestones. The skill pack's behavioral observations above do not become
+claims of assistant effectiveness merely because runtime features were added.

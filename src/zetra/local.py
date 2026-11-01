@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
 
+from .bindings import MCPFixtures, mcp_provenance
 from .manifest import digest, load_agent, source_digest
 
 
@@ -101,7 +102,15 @@ def _output_path(root, workspace, output):
 
 
 async def local_run(
-    root, message, *, agent=None, model_config=None, timeout=60, workspace=None, output=None
+    root,
+    message,
+    *,
+    agent=None,
+    model_config=None,
+    mcp_fixtures=None,
+    timeout=60,
+    workspace=None,
+    output=None,
 ):
     from ._runtime.process import run_child
 
@@ -112,6 +121,7 @@ async def local_run(
     if type(timeout) not in (int, float) or not 0 < timeout <= 600:
         raise ValueError("timeout must be between zero and 600 seconds")
     config = LocalModelConfig.model_validate(model_config) if model_config is not None else None
+    fixtures = MCPFixtures(mcp_fixtures) if mcp_fixtures is not None else None
     if config is None and spec.model != "fixture":
         raise ValueError("local inference requires an explicit model configuration")
     if workspace is not None:
@@ -129,6 +139,7 @@ async def local_run(
         "message": message,
         "agent": spec.name,
         "model_config": config.model_dump() if config else None,
+        "mcp_fixtures": fixtures.config() if fixtures else None,
         "timeout": timeout,
         "workspace": str(Path(workspace).resolve()) if workspace else None,
         "output": str(output) if output else None,
@@ -169,6 +180,7 @@ async def local_run(
         trust="local-unsigned",
         model_config=config.model_dump() if config else {"model": "fixture"},
         model_config_sha256=digest(config.model_dump() if config else {"model": "fixture"}),
+        mcp_binding=mcp_provenance(fixtures),
         scope="trusted host development; not isolation or production authorization",
     )
     if output:
@@ -181,7 +193,15 @@ async def local_run(
 
 
 async def _run_in_process(
-    root, message, *, agent=None, model_config=None, timeout=60, workspace=None, output=None
+    root,
+    message,
+    *,
+    agent=None,
+    model_config=None,
+    mcp_fixtures=None,
+    timeout=60,
+    workspace=None,
+    output=None,
 ):
     from google.adk.models.llm_response import LlmResponse
 
@@ -194,6 +214,7 @@ async def _run_in_process(
 
     spec = load_agent(root, agent)
     config = LocalModelConfig.model_validate(model_config) if model_config is not None else None
+    fixtures = MCPFixtures(mcp_fixtures) if mcp_fixtures is not None else None
     if config is None and spec.model != "fixture":
         raise ValueError("local inference requires an explicit model configuration")
     binding = (f"openai/{config.model}", config.executor()) if config else None
@@ -206,7 +227,10 @@ async def _run_in_process(
     try:
         with tempfile.TemporaryDirectory(prefix="zetra-local-") as temp:
             definition = Definition(
-                spec.model_dump(), Path(temp) / "workspace", model_binding=binding
+                spec.model_dump(),
+                Path(temp) / "workspace",
+                model_binding=binding,
+                mcp_binding=fixtures.call if fixtures else None,
             )
             report["tools"] = definition.tools
             runtime = Runtime(
@@ -216,6 +240,7 @@ async def _run_in_process(
                     {
                         "source": source_digest(root),
                         "model": config.model_dump() if config else "fixture",
+                        "mcp_binding": mcp_provenance(fixtures),
                     }
                 ),
                 key=os.urandom(32),

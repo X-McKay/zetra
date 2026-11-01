@@ -47,3 +47,25 @@ async def test_failure_after_effect_is_unknown_and_not_retried():
         with pytest.raises(OutcomeUnknown):
             await dispatcher.execute(operation, "attempt-a")
     assert effects == ["probe-invocation:00000000"]
+
+
+@pytest.mark.parametrize("kind", ["model", "tool"])
+async def test_definitive_model_refusal_does_not_erase_possible_prior_tool_effects(kind):
+    from zetra._runtime.dispatch import ExecutionRefused
+
+    calls = []
+
+    async def body(arguments, state, operation_id):
+        calls.append(operation_id)
+        raise ExecutionRefused("policy")
+
+    dispatcher = Dispatcher({"denied": body}, manifest="probe-v1")
+    operation = describe(kind, "denied", {"arguments": {}, "state": {}}, index=0)
+    expected = ExecutionRefused if kind == "model" else OutcomeUnknown
+    try:
+        for _ in range(2):
+            with pytest.raises(expected):
+                await dispatcher.execute(operation, "same-attempt")
+        assert calls == ["probe-invocation:00000000"]
+    finally:
+        await dispatcher.close()

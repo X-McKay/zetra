@@ -9,10 +9,10 @@ from .eval_cases import grade, load_cases
 from .manifest import digest, load_agent, project_file, source_digest
 
 
-async def fixture_run(root, message, *, agent=None):
+async def fixture_run(root, message, *, agent=None, mcp_fixtures=None):
     from .local import local_run
 
-    return await local_run(root, message, agent=agent)
+    return await local_run(root, message, agent=agent, mcp_fixtures=mcp_fixtures)
 
 
 async def _fixture_run_in_process(root, message, *, agent=None):
@@ -21,12 +21,19 @@ async def _fixture_run_in_process(root, message, *, agent=None):
     return await _run_in_process(root, message, agent=agent)
 
 
-async def evaluate(root, *, mode, release=None, client=None, agent=None, model_config=None):
+async def evaluate(
+    root, *, mode, release=None, client=None, agent=None, model_config=None, mcp_fixtures=None
+):
+    from .bindings import MCPFixtures, mcp_provenance
     from .local import LocalModelConfig, local_run
 
     root = Path(root)
     spec = load_agent(root, agent)
     source = source_digest(root)
+    if mode == "sandbox" and mcp_fixtures is not None:
+        raise ValueError("MCP fixture overrides cannot be used in sandbox evaluation")
+    fixtures = MCPFixtures(mcp_fixtures) if mcp_fixtures is not None else None
+    fixture_config = fixtures.config() if fixtures else None
     if mode not in {"fixture", "local", "sandbox"}:
         raise ValueError("unknown evaluation mode")
     if mode == "local" and model_config is None:
@@ -50,10 +57,19 @@ async def evaluate(root, *, mode, release=None, client=None, agent=None, model_c
         assertions = []
         try:
             if mode == "fixture":
-                result = await fixture_run(root, case["input"], agent=spec.name)
+                if fixtures is None:
+                    result = await fixture_run(root, case["input"], agent=spec.name)
+                else:
+                    result = await fixture_run(
+                        root, case["input"], agent=spec.name, mcp_fixtures=fixture_config
+                    )
             elif mode == "local":
                 result = await local_run(
-                    root, case["input"], agent=spec.name, model_config=config.model_dump()
+                    root,
+                    case["input"],
+                    agent=spec.name,
+                    model_config=config.model_dump(),
+                    mcp_fixtures=fixture_config,
                 )
             else:
                 handle = await client.submit(
@@ -126,6 +142,7 @@ async def evaluate(root, *, mode, release=None, client=None, agent=None, model_c
         "model": spec.model,
         "model_config": effective_model,
         "model_config_sha256": digest(effective_model),
+        "mcp_binding": mcp_provenance(fixtures),
         "policy": spec.policy,
         "profile": spec.profile,
         "cases": rows,

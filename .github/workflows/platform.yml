@@ -23,6 +23,17 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest -m 'not cluster' -q
+  runner-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: docker build -t session-runner:ci platform/runner
+      - run: >-
+          docker run --rm --read-only --network none --tmpfs /tmp
+          --entrypoint /app/.venv/bin/python session-runner:ci
+          -c "import runner.worker, runner.core, agent_runtime.core_protocol; import shutil; assert shutil.which('git') is None"
   aps:
     runs-on: ubuntu-latest
     defaults:
