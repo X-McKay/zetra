@@ -51,3 +51,11 @@ TLS/Host/route/auth refresh, no redirects/retries, and 403/429 handling. Ruff an
 format checks passed; the runtime wheel built successfully. The reference factory
 in these protocol tests is a synthetic subprocess fixture; installed production
 agent package checks belong to the later migration step.
+
+During host checkpoint implementation, a further native probe demonstrated that
+unmanaged subprocess creation was still permitted by the new guest adapter. The
+adapter now applies the same standard process-creation audit guard as local
+Temporal before importing agent code. The probe failed before the guard, then
+passed with no child created. Complete runtime verification after this correction:
+**92 passed** (72.83 seconds), with Ruff/format checks passing. The guard covers
+cooperative Python APIs, not hostile native code; it is not a sandbox claim.

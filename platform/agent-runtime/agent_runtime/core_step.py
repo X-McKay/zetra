@@ -29,6 +29,19 @@ from agent_runtime.identity import env, sandbox_dir
 _LEASE_FD = None
 
 
+def process_guard(event, args):
+    """Cooperative core tools cannot create writers outside the boundary lease."""
+    if event in {
+        "subprocess.Popen",
+        "os.fork",
+        "os.forkpty",
+        "os.posix_spawn",
+        "os.exec",
+        "os.system",
+    }:
+        raise RuntimeError("process creation is outside the core tool profile")
+
+
 def durable_new(path, data):
     fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "wb") as stream:
@@ -231,6 +244,7 @@ def main():
         trusted = CoreBinding.model_validate(strict_json(env("AGENT_CORE_BINDING").encode()))
         if command.binding != trusted:
             raise ValueError("command differs from trusted pod binding")
+        sys.addaudithook(process_guard)
         confine.apply()
         code, reply = asyncio.run(run(command))
     except ExecutionRefused as exc:

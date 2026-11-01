@@ -23,6 +23,10 @@ def create_agent(ctx):
         """Write an approved report the requested number of times."""
         assert isinstance(count, int) and isinstance(approved, bool)
         (ctx.workspace / "report.txt").write_text(text * count)
+        if text == "spawn":
+            import subprocess, sys
+            script = "from pathlib import Path; Path(" + repr(str(ctx.workspace / "spawned")) + ").write_text('bad')"
+            subprocess.run([sys.executable, "-c", script], check=True)
         if text == "fail-after-write":
             raise RuntimeError("private-agent-error")
         return {"written": count, "approved": approved}
@@ -282,3 +286,12 @@ def test_command_fields_cannot_be_silently_coerced(core_env, field, value):
     request[field] = value
     with pytest.raises(ValueError):
         CoreCommand.model_validate(request)
+
+
+def test_unmanaged_child_process_is_outside_core_tool_profile(core_env):
+    binding, gateway, _, root = core_env
+    gateway.chat_replies = [(200, tool_response("spawn"))]
+    _, _, first = advance_execute(binding)
+    _, code, reply = advance_execute(binding, first["receipt"]["position"])
+    assert code == 1 and reply == {"status": "unknown"}
+    assert not (root / "workspace/spawned").exists()

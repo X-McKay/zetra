@@ -53,6 +53,9 @@ The client fixes gateway Host, verifies the CA and refuses redirects.
 
 The runtime trusts cooperative registered agent code. Landlock remains defense in
 depth; the VM, platform identity and network controls are the production boundary.
+Standard process-creation APIs are rejected, matching local Temporal, so tools
+cannot launch unmanaged writers beyond the boundary lease. This audit guard does
+not isolate hostile Python or native syscall bypasses.
 Local TLS/subprocess tests do not establish live cluster isolation. The OpenAI pin
 is aligned with the shared SDK's required converter dependency; the complete legacy
 runtime suite remains part of validation.
