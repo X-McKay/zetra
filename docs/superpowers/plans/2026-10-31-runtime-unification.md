@@ -39,10 +39,10 @@
 
 **Files:** platform/agent-runtime/agent_runtime/core_protocol.py (strict protocol primitives); platform/agent-runtime/agent_runtime/core_step.py and core_model.py; gateway.py; pyproject/lock; tests/test_core_step.py and test_core_model.py.
 **Interfaces:** versioned release identity and prepare/execute commands; `core_step` length-prefixed subprocess; replies carry operation/done or candidate Receipt. Objects live under state/core/objects, lease and immutable attempt admission under state/core.
-- [ ] Write failing real subprocess tests for model/tool/model, cold reconstruction, wrong identity/operation, duplicate attempts and arbitrary tool failure.
-- [ ] Implement strict packaged definition envelope loader, trusted pod binding, shared Runtime adapter and bounded sanitized output.
-- [ ] Inject authenticated async gateway transport into ChatExecutor; test Host, route, auth refresh, redirect refusal, CA settings, 403/429 and transport loss.
-- [ ] Verify no candidate is passed as accepted, no unknown effect repeats, and legacy step tests remain unchanged.
+- [x] Write failing real subprocess tests for model/tool/model, cold reconstruction, wrong identity/operation, duplicate attempts and arbitrary tool failure.
+- [x] Implement strict packaged definition envelope loader, trusted pod binding, shared Runtime adapter and bounded sanitized output.
+- [x] Inject authenticated async gateway transport into ChatExecutor; test Host, route, auth refresh, redirect refusal, CA settings, 403/429 and transport loss.
+- [x] Verify no candidate is passed as accepted, no unknown effect repeats, and legacy step tests remain unchanged.
 
 ### Task 3: Versioned platform runner and checkpoint validation
 

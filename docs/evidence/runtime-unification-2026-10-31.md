@@ -27,3 +27,27 @@ runner **125 passed**, with the installed native Temporal test server enabled.
 The eleven new core subprocess/protocol tests failed before implementation because
 the core protocol was not present. Subsequent integration results are recorded below
 when actually observed.
+
+## Platform guest adapter
+
+The adapter installs SDK commit `d63867833bf64efda9c77b6f9625905b38d8cf02`
+from Git into its own site-packages. The resolver rejected the old OpenAI 1.109.1
+pin because the SDK's LiteLLM 1.95.0 requires OpenAI >=2.20,<3. The runtime now pins
+2.54.0, matching the SDK lock; old immutable images retain their dependencies.
+
+Initial integration: 12 passed, 5 failed. Fixture corrections fixed tuple-shaped
+gateway replies and mutable request-header capture. Refusal tests also exposed
+buffered library output after a framed response. Keeping stdout/stderr isolated
+through interpreter exit fixed that actual protocol defect; finalizer-output
+coverage was added. The focused suite then passed 17 and the expanded full suite
+passed 89. Two further RED probes caught coercion of boolean protocol versions and
+incomplete/string-valued Positions; strict validation fixed both.
+
+Final complete runtime suite: **91 passed** (67.72 seconds), including all legacy
+tests, fresh-process model/tool/model execution, typed tool schemas, completion,
+wrong execution identities, operation mismatch, attempt fences, late output,
+accepted-prefix reconstruction in a new generation, malformed provider replies,
+TLS/Host/route/auth refresh, no redirects/retries, and 403/429 handling. Ruff and
+format checks passed; the runtime wheel built successfully. The reference factory
+in these protocol tests is a synthetic subprocess fixture; installed production
+agent package checks belong to the later migration step.

@@ -39,3 +39,18 @@ def inference() -> httpx.Client:
     if _INFERENCE is None:
         _INFERENCE = client_for("AGENT_INFERENCE_HOST", timeout=120.0)
     return _INFERENCE
+
+
+def async_client_for(host_env, timeout, *, auth, transport=None):
+    """Core transport: fixed route, verified TLS and no connection/application retries."""
+    verify = tls_verify()
+    return httpx.AsyncClient(
+        base_url=gateway_url(),
+        headers={"Host": env(host_env), "User-Agent": "agent-runtime/core-v1"},
+        auth=auth,
+        verify=verify,
+        timeout=timeout,
+        follow_redirects=False,
+        trust_env=False,
+        transport=transport or httpx.AsyncHTTPTransport(retries=0, verify=verify),
+    )
