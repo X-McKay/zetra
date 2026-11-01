@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-zetra = { git = "https://github.com/X-McKay/zetra.git", rev = "750180967185181181c2ebc95e19e2c913756e67" }
+zetra = { git = "https://github.com/X-McKay/zetra.git", rev = "a74b3f6e042353fb9d6d5c36942af4d988c7cd47" }
 
 [project.optional-dependencies]
 landlock = ["landlock==1.0.0.dev5"]

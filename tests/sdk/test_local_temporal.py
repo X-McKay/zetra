@@ -366,6 +366,7 @@ async def test_temporal_real_http_model_and_credentials_stay_out_of_history(
                 "base_url": f"http://127.0.0.1:{port}/v1",
                 "model": "test-model",
                 "api_key_env": "TEMPORAL_MODEL_TEST_KEY",
+                "enable_thinking": False,
             },
         )
         queue = "model-" + uuid.uuid4().hex
@@ -374,6 +375,9 @@ async def test_temporal_real_http_model_and_credentials_stay_out_of_history(
             result = await runtime.result(environment.client, execution)
         assert result["status"] == "SUCCEEDED", result
         assert result["mode"] == "temporal-local"
+        assert result["model_config"]["enable_thinking"] is False
+        assert len(calls) == 2
+        assert all(call["chat_template_kwargs"] == {"enable_thinking": False} for call in calls)
         assert result["metrics"]["input_tokens"] == 20
         assert result["metrics"]["output_tokens"] == 10
         assert any(

@@ -1,6 +1,6 @@
 import httpx
 import pytest
-from litellm import APIConnectionError, APIError, InternalServerError
+from zetra._runtime.model_diagnostics import ModelCallError
 
 from agent_runtime import core_model, gateway, identity
 from agent_runtime.core_protocol import ModelBinding
@@ -58,8 +58,15 @@ async def test_one_401_refresh_preserves_fixed_route_and_identity(agent_env, mon
     assert seen[0][2] != seen[1][2]
 
 
-@pytest.mark.parametrize("failure", ["redirect", "disconnect", 500])
-async def test_no_redirect_or_effect_retry(agent_env, monkeypatch, failure):
+@pytest.mark.parametrize(
+    "failure,reason,status",
+    [
+        ("redirect", "http_error", 307),
+        ("disconnect", "connection_error", None),
+        (500, "http_error", 500),
+    ],
+)
+async def test_no_redirect_or_effect_retry(agent_env, monkeypatch, failure, reason, status):
     seen = []
 
     def handler(req):
@@ -71,8 +78,9 @@ async def test_no_redirect_or_effect_retry(agent_env, monkeypatch, failure):
         return httpx.Response(500, json={"error": {"message": "failed"}})
 
     model, _ = bound(monkeypatch, handler)
-    with pytest.raises((APIConnectionError, APIError, InternalServerError)):
+    with pytest.raises(ModelCallError) as caught:
         await model(request(), {}, "test")
+    assert caught.value.diagnostic.model_dump() == {"reason": reason, "http_status": status}
     assert len(seen) == 1
 
 

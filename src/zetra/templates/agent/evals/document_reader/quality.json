@@ -1,15 +1,63 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "agent": "document_reader",
-  "tools": {"read_document": "workspace_read"},
+  "tools": {
+    "read_document": "workspace_read"
+  },
   "skills": {},
   "live_model_required": false,
   "requirements": [
-    {"id": "fixture-final-marker", "component": "agent", "kind": "outcome", "cases": ["fixture-guide-boundaries"]},
-    {"id": "approved-guide-call", "component": "agent", "kind": "trajectory", "cases": ["fixture-guide-boundaries"]},
-    {"id": "three-boundary-budget", "component": "agent", "kind": "performance", "cases": ["fixture-guide-boundaries"]},
-    {"id": "guide-read-contract", "component": "tool:read_document", "kind": "contract", "tests": ["tests/unit/document_reader/test_document_read.py::test_reads_approved_guide"]},
-    {"id": "reject-unapproved-identifiers", "component": "tool:read_document", "kind": "security", "tests": ["tests/unit/document_reader/test_document_read.py::test_rejects_other_documents"]},
-    {"id": "read-after-rejected-request", "component": "tool:read_document", "kind": "recovery", "tests": ["tests/unit/document_reader/test_document_read.py::test_invalid_request_does_not_prevent_later_approved_read"]}
+    {
+      "id": "fixture-final-marker",
+      "component": "agent",
+      "kind": "outcome",
+      "cases": [
+        "fixture-guide-boundaries"
+      ]
+    },
+    {
+      "id": "approved-guide-call",
+      "component": "agent",
+      "kind": "trajectory",
+      "cases": [
+        "fixture-guide-boundaries"
+      ]
+    },
+    {
+      "id": "three-boundary-budget",
+      "component": "agent",
+      "kind": "performance",
+      "cases": [
+        "fixture-guide-boundaries"
+      ]
+    },
+    {
+      "id": "guide-read-contract",
+      "component": "tool:read_document",
+      "kind": "contract",
+      "tests": [
+        "tests/unit/document_reader/test_document_read.py::test_reads_approved_guide"
+      ]
+    },
+    {
+      "id": "reject-unapproved-identifiers",
+      "component": "tool:read_document",
+      "kind": "security",
+      "tests": [
+        "tests/unit/document_reader/test_document_read.py::test_rejects_other_documents"
+      ]
+    },
+    {
+      "id": "read-after-rejected-request",
+      "component": "tool:read_document",
+      "kind": "recovery",
+      "tests": [
+        "tests/unit/document_reader/test_document_read.py::test_invalid_request_does_not_prevent_later_approved_read"
+      ]
+    }
+  ],
+  "experiments": [
+    "smoke",
+    "reliability"
   ]
 }

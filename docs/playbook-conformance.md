@@ -164,3 +164,32 @@ archive verification precede acceptance; unknown execute outcomes are terminal.
 Legacy releases and recorded histories retain their protocol. See
 [evidence](evidence/runtime-unification-2026-10-31.md) for native tests and remaining
 cluster/model qualification. This branch has not activated a cluster release.
+
+## Statistical development evaluations
+
+Named local experiments use the shared runtime with fixed repeat schedules, complete
+error/not-run accounting, request/time/observed-token bounds, per-case Wilson score
+intervals and conservative baseline comparisons. They do not pool repeated prompts
+as independent tasks. Small samples can be inconclusive; only PASSED exits zero.
+Quality schema 2 validates declared live plans offline and explicitly selects live
+execution. See [statistical evals](statistical-evals.md) for scope and assumptions.
+Synthetic HTTP tests exercise transport and lifecycle, not real-model accuracy.
+Combined live-quality artifacts omit fixture tool payloads; lost model responses
+leave trial usage unknown, and redacted forbidden-call arguments fail conservatively.
+Text equality remains exact by default, with explicit surrounding-ASCII-whitespace
+trimming available for acknowledgement checks. This changes the dataset identity
+and cannot silently turn old failed evidence into passing evidence.
+Local model configuration supports an explicit strict `enable_thinking` option for
+compatible chat-template endpoints. Omission preserves historical config digests;
+setting it changes the requested model identity and does not attest provider behavior.
+Incomplete model responses remain errors with unknown usage; no retry or budget
+exception is introduced.
+No production qualification, policy attestation, deployment or model-quality claim
+is implied by this implementation.
+
+The reliability follow-up adds immutable accepted tool history to `AgentContext`
+for prerequisites that survive cold reconstruction. The document assistant uses
+it to require an approved document and grounding skill before writing. Local
+model failures retain allowlisted diagnostics in compact experiment evidence;
+uncertainty, one-attempt execution, usage stops and prior report validation remain
+unchanged. See the [follow-up record](evidence/reliability-followups-2026-11-01.md).

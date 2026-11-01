@@ -10,10 +10,14 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_serializer
 
 from .bindings import MCPFixtures, mcp_provenance
 from .manifest import digest, load_agent, source_digest
+
+
+class ModelCallLimit(Exception):
+    """Local request-count budget exhausted before another provider call."""
 
 
 class LocalModelConfig(BaseModel):
@@ -26,6 +30,15 @@ class LocalModelConfig(BaseModel):
     max_tokens: int = Field(default=512, ge=1, le=32768)
     timeout: FiniteFloat = Field(default=20, gt=0, le=120)
     temperature: FiniteFloat = Field(default=0, ge=0, le=2)
+    enable_thinking: bool | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_configuration(self, handler):
+        data = handler(self)
+        # Omission preserves the identity of reports written before this option.
+        if self.enable_thinking is None:
+            data.pop("enable_thinking", None)
+        return data
 
     @field_validator("base_url")
     @classmethod
@@ -63,6 +76,9 @@ class LocalModelConfig(BaseModel):
             max_tokens=self.max_tokens,
             timeout=self.timeout,
             temperature=self.temperature,
+            extra_body={"chat_template_kwargs": {"enable_thinking": self.enable_thinking}}
+            if self.enable_thinking is not None
+            else None,
         )
 
 
@@ -111,6 +127,7 @@ async def local_run(
     timeout=60,
     workspace=None,
     output=None,
+    model_call_limit=None,
 ):
     from ._runtime.process import run_child
 
@@ -120,6 +137,10 @@ async def local_run(
         raise ValueError("input must be nonempty text of at most 65536 bytes")
     if type(timeout) not in (int, float) or not 0 < timeout <= 600:
         raise ValueError("timeout must be between zero and 600 seconds")
+    if model_call_limit is not None and (
+        type(model_call_limit) is not int or not 1 <= model_call_limit <= 32
+    ):
+        raise ValueError("model call limit must be an integer between 1 and 32")
     config = LocalModelConfig.model_validate(model_config) if model_config is not None else None
     fixtures = MCPFixtures(mcp_fixtures) if mcp_fixtures is not None else None
     if config is None and spec.model != "fixture":
@@ -143,6 +164,7 @@ async def local_run(
         "timeout": timeout,
         "workspace": str(Path(workspace).resolve()) if workspace else None,
         "output": str(output) if output else None,
+        "model_call_limit": model_call_limit,
     }
     try:
         result = await run_child(
@@ -202,6 +224,7 @@ async def _run_in_process(
     timeout=60,
     workspace=None,
     output=None,
+    model_call_limit=None,
 ):
     from google.adk.models.llm_response import LlmResponse
 
@@ -224,6 +247,7 @@ async def _run_in_process(
     report = {"status": "FAILED", "trajectory": events, "files": [], "file_contents": {}}
     input_tokens, output_tokens = [], []
     visible_text = ""
+    model_calls = 0
     try:
         with tempfile.TemporaryDirectory(prefix="zetra-local-") as temp:
             definition = Definition(
@@ -264,6 +288,14 @@ async def _run_in_process(
                             report.update(status="SUCCEEDED", result={"final_text": visible_text})
                             break
                         op = advanced["operation"]
+                        if op["kind"] == "model":
+                            if model_call_limit is not None and model_calls >= model_call_limit:
+                                raise ModelCallLimit
+                            model_calls += 1
+                            # A dispatched request can consume tokens even if its response is
+                            # lost. Keep incomplete usage unknown, not a partial known total.
+                            input_tokens.append(None)
+                            output_tokens.append(None)
                         event = {
                             "index": op["index"],
                             "kind": op["kind"],
@@ -296,8 +328,8 @@ async def _run_in_process(
                                 else ""
                             )
                             usage = response.usage_metadata
-                            input_tokens.append(usage.prompt_token_count if usage else None)
-                            output_tokens.append(usage.candidates_token_count if usage else None)
+                            input_tokens[-1] = usage.prompt_token_count if usage else None
+                            output_tokens[-1] = usage.candidates_token_count if usage else None
                     else:
                         raise ValueError("local boundary limit")
                 total = 0
@@ -318,6 +350,10 @@ async def _run_in_process(
                     Workspace(destination, runtime.store).restore(runtime.workspace.capture())
             except (OutcomeUnknown, TimeoutError) as exc:
                 report.update(status="OUTCOME_UNKNOWN", error_type=type(exc).__name__)
+                if events and events[-1]["kind"] == "model":
+                    from ._runtime.model_diagnostics import model_failure_evidence
+
+                    report["diagnostic"] = model_failure_evidence(exc, events[-1]["index"])
             except Exception as exc:  # noqa: BLE001 -- execution boundary, never serialize secrets
                 report.update(status="FAILED", error_type=type(exc).__name__)
             finally:

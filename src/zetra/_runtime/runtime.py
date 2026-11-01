@@ -65,6 +65,9 @@ class Runtime:
         self.closing = False
         self.pending = None
         self.position = None
+        # Reconstructed from the caller-selected accepted Position, never a local
+        # candidate or the dispatcher's volatile execution cache.
+        definition.history = lambda: self.tape.records(self.position) if self.position else ()
         self.effects = []
         self.candidate = None
         self.warm = WarmRunner(

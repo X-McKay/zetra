@@ -25,9 +25,24 @@ KINDS = {
 }
 TEST_KINDS = {"contract", "security", "recovery", "activation", "nonactivation"}
 SUITABLE = {
-    "outcome": {"text_contains", "text_not_contains", "file_contains", "file_exists"},
-    "trajectory": {"tool_called", "tool_forbidden", "tool_before"},
-    "performance": {"max_steps", "max_duration_ms"},
+    "outcome": {
+        "text_contains",
+        "text_not_contains",
+        "text_equals",
+        "file_contains",
+        "file_not_contains",
+        "file_exists",
+        "file_equals",
+        "file_absent",
+    },
+    "trajectory": {"tool_called", "tool_forbidden", "tool_before", "tool_result"},
+    "performance": {
+        "max_steps",
+        "max_duration_ms",
+        "max_input_tokens",
+        "max_output_tokens",
+        "max_total_tokens",
+    },
 }
 NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]{0,127}$")
 
@@ -68,16 +83,31 @@ def _load(root, agent):
         raise ValueError("quality contract too large")
     raw = path.read_bytes()
     contract = json.loads(raw, object_pairs_hook=_unique)
+    fields = {"schema_version", "agent", "tools", "skills", "live_model_required", "requirements"}
+    if type(contract) is dict and contract.get("schema_version") == 2:
+        fields.add("experiments")
     if (
         type(contract) is not dict
-        or set(contract)
-        != {"schema_version", "agent", "tools", "skills", "live_model_required", "requirements"}
+        or set(contract) != fields
         or type(contract["schema_version"]) is not int
-        or contract["schema_version"] != 1
+        or contract["schema_version"] not in (1, 2)
         or contract["agent"] != spec.name
         or type(contract["live_model_required"]) is not bool
     ):
         raise ValueError("invalid quality contract fields, version or agent")
+    if contract["schema_version"] == 2:
+        from .eval_experiments import load_experiment
+
+        names = contract["experiments"]
+        if (
+            type(names) is not list
+            or not 1 <= len(names) <= 16
+            or any(not isinstance(name, str) for name in names)
+            or len(set(names)) != len(names)
+        ):
+            raise ValueError("expected unique nonempty experiment names")
+        for name in names:
+            load_experiment(root, spec.name, name)
     for field in ("tools", "skills"):
         entries = contract[field]
         if type(entries) is not dict or len(entries) > 100:
@@ -179,6 +209,7 @@ def explain_quality(root, *, agent=None):
             "contract_sha256": hashlib.sha256(raw).hexdigest(),
             "tools": contract["tools"],
             "skills": contract["skills"],
+            "experiments": _explain_experiments(root, spec, contract),
             "scope": "static local requirements; labels do not prove test semantics",
         }
     except (ValueError, OSError, TypeError, RecursionError) as exc:
@@ -190,8 +221,42 @@ def explain_quality(root, *, agent=None):
         }
 
 
-def _inputs(root, spec):
+def _explain_experiments(root, spec, contract):
+    from .eval_experiments import load_experiment
+    from .eval_statistics import wilson
+
+    rows = []
+    for name in contract.get("experiments", []):
+        loaded = load_experiment(root, spec.name, name)
+        plan = loaded.plan
+        confidence = 1 - (1 - plan.confidence) / len(loaded.cases)
+        lower = wilson(plan.trials, plan.trials, confidence)["lower"]
+        invocations = len(loaded.cases) * plan.trials
+        rows.append(
+            {
+                "name": name,
+                "dataset": plan.dataset,
+                "trials_per_case": plan.trials,
+                "planned_invocations": invocations,
+                "model_request_ceiling": invocations * plan.limits.model_calls_per_trial,
+                "all_pass_lower_bound": lower,
+                "target_lower_bound": plan.min_case_success_lower_bound,
+                "sufficient_if_all_pass": lower >= plan.min_case_success_lower_bound,
+                "purpose": "reliability" if plan.min_case_success_lower_bound else "smoke",
+            }
+        )
+    return rows
+
+
+def _inputs(root, spec, contract):
     names = {f"evals/{spec.name}/quality.json", f"evals/{spec.name}/cases.jsonl"}
+    if contract.get("experiments"):
+        from .eval_experiments import load_experiment
+
+        for name in contract["experiments"]:
+            loaded = load_experiment(root, spec.name, name)
+            names.add(f"evals/{spec.name}/experiments/{name}.json")
+            names.add(f"evals/{spec.name}/{loaded.plan.dataset}")
     names.update(path.relative_to(root).as_posix() for path in (root / "tests").rglob("*.py"))
     names.update(path.relative_to(root).as_posix() for path in root.glob("conftest.py"))
     names.update(
@@ -282,7 +347,9 @@ def _test_passed(selector, evidence):
     return True
 
 
-async def run_quality(root, *, agent=None, mode="fixture", model_config=None, mcp_fixtures=None):
+async def run_quality(
+    root, *, agent=None, mode="fixture", model_config=None, mcp_fixtures=None, experiment=None
+):
     """Run fresh mapped tests and evaluations; evidence is never production approval."""
     from .bindings import MCPFixtures, mcp_provenance
     from .evaluation import evaluate
@@ -298,12 +365,22 @@ async def run_quality(root, *, agent=None, mode="fixture", model_config=None, mc
         "scope": "local executed evidence; not production authorization",
         "pytest": None,
         "evaluation": None,
+        "experiment": None,
         "mcp_binding": mcp_provenance(fixtures),
     }
     if explanation["status"] != "PASSED":
         return report
     spec, contract, raw, cases, dataset = _load(root, agent)
     missing = report["missing"]
+    if experiment is not None:
+        if mode != "local" or experiment not in contract.get("experiments", []):
+            missing.append("live quality requires local mode and a declared experiment")
+        if spec.model != "fixture":
+            missing.append(
+                "experiment quality requires a fixture baseline; use standalone eval for model-only projects"
+            )
+    elif contract["schema_version"] == 2 and mode == "local":
+        missing.append("local quality requires an explicit declared experiment")
     if mode not in {"fixture", "local"}:
         missing.append("quality supports only explicit fixture or local model modes")
     if mode == "local" and model_config is None:
@@ -325,7 +402,7 @@ async def run_quality(root, *, agent=None, mode="fixture", model_config=None, mc
         report["status"] = "FAILED"
         return report
     try:
-        before = _inputs(root, spec)
+        before = _inputs(root, spec, contract)
     except (ValueError, OSError) as exc:
         missing.append(f"quality inputs unavailable: {type(exc).__name__}")
         report["status"] = "FAILED"
@@ -349,9 +426,45 @@ async def run_quality(root, *, agent=None, mode="fixture", model_config=None, mc
     try:
         options = {"mcp_fixtures": fixtures.config()} if fixtures is not None else {}
         evaluation = await evaluate(
-            root, mode=mode, agent=spec.name, model_config=model_config, **options
+            root,
+            mode="fixture" if experiment else mode,
+            agent=spec.name,
+            model_config=None if experiment else model_config,
+            **options,
         )
-        report["evaluation"] = evaluation
+        # Manual live workflows upload this whole wrapper. Retain fixture gate
+        # evidence but never include its raw tool arguments/results in that artifact.
+        report["evaluation"] = (
+            {
+                **evaluation,
+                "cases": [
+                    {
+                        **{
+                            key: row[key]
+                            for key in (
+                                "id",
+                                "passed",
+                                "outcome",
+                                "status",
+                                "cleanup",
+                                "error_type",
+                                "diagnostic",
+                                "tools",
+                                "metrics",
+                            )
+                            if key in row
+                        },
+                        "assertions": [
+                            {"type": check["type"], "passed": check["passed"]}
+                            for check in row.get("assertions", [])
+                        ],
+                    }
+                    for row in evaluation.get("cases", [])
+                ],
+            }
+            if experiment is not None
+            else evaluation
+        )
         if fixtures is not None and evaluation.get("mcp_binding") != report["mcp_binding"]:
             missing.append("MCP fixture evidence does not match the requested binding")
     except Exception as exc:  # noqa: BLE001 - preserve execution errors as failed evidence
@@ -399,9 +512,34 @@ async def run_quality(root, *, agent=None, mode="fixture", model_config=None, mc
             missing.append(f"unsatisfied requirement: {requirement['id']}")
     report["requirements"] = requirement_rows
     try:
-        if before != _inputs(root, spec):
+        if before != _inputs(root, spec, contract):
             missing.append("source or quality inputs changed during execution")
     except (ValueError, OSError) as exc:
         missing.append(f"quality inputs changed or unavailable: {type(exc).__name__}")
+    if experiment is not None and not missing:
+        from .eval_experiments import run_experiment
+
+        live = await run_experiment(
+            root,
+            agent=spec.name,
+            experiment=experiment,
+            model_config=model_config,
+            mcp_fixtures=fixtures.config() if fixtures else None,
+        )
+        report["experiment"] = live
+        if live["status"] != "PASSED":
+            missing.append(f"live experiment {experiment}: {live['status']}")
+        if any(
+            trial["tools"] != contract["tools"]
+            for case in live["cases"]
+            for trial in case["trials"]
+            if trial["outcome"] in {"passed", "failed"}
+        ):
+            missing.append("live experiment tool inventory differs from contract")
+        try:
+            if before != _inputs(root, spec, contract):
+                missing.append("source or quality inputs changed during live execution")
+        except (ValueError, OSError):
+            missing.append("quality inputs unavailable after live execution")
     report["status"] = "FAILED" if missing else "PASSED"
     return report

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "pack_version": "0.1.1",
+  "pack_version": "0.1.2",
   "files": {
     "zetra-author-skill/SKILL.md": "c311359feb5f15ed1f470f8dcf3d24d71f520223b59e5497786fa2e3d0eb3012",
     "zetra-author-tool/SKILL.md": "dabcab975d281ad35e84bacb7eb2e8d508e00a86b91bc453adce60ea631aa91b",
     "zetra-debug/SKILL.md": "574c0354ba1448fe59066a1abcd0aa7e6a90c674eda693e3c305c35687cc591a",
     "zetra-develop-agent/SKILL.md": "d37b0595f1ee3b6e361d3b1cfcdcda68c69b49ab37a574d4b8e277dfe74e43b6",
-    "zetra-evaluate/SKILL.md": "97cf98a6190bc1e939b16f9ac4322e721fafda2d2c549a28bcfc34ccf7147368",
-    "zetra-optimize/SKILL.md": "3a0c2ef8b9e73a5efbfcfe54715d0b680adb41d55137f5dba1bee32fffb29746",
+    "zetra-evaluate/SKILL.md": "2b20b77060178d0c0e60f2c1545e2392f4dcc812041d6f74041ec5477a97f4c9",
+    "zetra-optimize/SKILL.md": "f945583de80a8c843ab2b6cdac2dad08554cb89a8857573e61de852e65d8e9fd",
     "zetra-release-review/SKILL.md": "bb3f57f4d847ae232145d3554253f80732c961b6586040adfcbad5481845c59c"
   }
 }

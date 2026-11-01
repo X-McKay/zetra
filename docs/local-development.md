@@ -48,6 +48,21 @@ remote endpoints require HTTPS. Endpoint and model names appear in reports: do
 not put secrets in URL paths or model identifiers. Overrides apply only locally,
 never to production AgentSpec or Release settings.
 
+For a compatible vLLM/Qwen endpoint, set `"enable_thinking": false` to request
+direct responses, or `true` to request thinking mode. This strict optional boolean
+maps only to `chat_template_kwargs.enable_thinking`; arbitrary provider parameters
+are not accepted. Omission sends no override and preserves existing configuration
+identities. The requested mode is recorded in reports and survives local Temporal
+serialization. Provider support is required; this is not a generic reasoning-effort
+control and does not attest that a server honored it.
+
+Choose the mode and output budget before an experiment. Some thinking models can
+consume a short output allowance before producing an answer; truncated responses
+remain errors. Raising the allowance alone may not solve that problem. The
+[Qwen3.6 model card](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)
+documents its default thinking mode and supported non-thinking setting. Changing
+mode requires fresh evidence; do not resume a failed study with different settings.
+
 Models must support the admitted serial tool-calling profile. Parallel calls,
 unknown tools and incomplete responses fail. Dependency installation and remote
 models may need network access; fully offline inference requires a running local
@@ -135,9 +150,10 @@ assertions; the whole dataset is validated before executing any case:
 {"schema_version":2,"id":"guide","input":"Read the guide.","assertions":[{"type":"text_contains","value":"Completed."},{"type":"tool_called","tool":"read_document","arguments":{"document_id":"guide"}},{"type":"max_steps","maximum":3}]}
 ```
 
-Supported assertions are `text_contains`, `text_not_contains`, `file_contains`,
+Supported assertions include `text_contains`, `text_not_contains`, `file_contains`,
 `file_exists`, `tool_called`, `tool_forbidden`, `tool_before`, `max_steps` and
-`max_duration_ms`. Text uses `value`; files use `path` and optionally `value`;
+`max_duration_ms`. Exact/negative-file, tool-result and token assertions are described
+in [statistical evals](statistical-evals.md). Text uses `value`; files use `path` and optionally `value`;
 tools use `tool`; calls optionally use an `arguments` subset; order uses `tool`
 and `before`; limits use `maximum`. Required calls/order need successful outcomes.
 Forbidden-call checks include failed attempts. Missing evidence fails.
@@ -149,8 +165,9 @@ fail if the client does not expose the necessary evidence.
 
 Fixture cases prove deterministic plumbing only. Model-quality claims require
 provider-backed cases, meaningful criteria, held-out data and repeated trials.
-Judge calibration, token/cost budget assertions, trial aggregation and statistical
-regression decisions remain future work.
+Named [statistical experiments](statistical-evals.md) now add fixed repeated trials,
+per-case confidence bounds, token budgets and baseline comparisons. Calibrated model
+judges and billing estimates remain separate work.
 
 ## Optional local Temporal
 

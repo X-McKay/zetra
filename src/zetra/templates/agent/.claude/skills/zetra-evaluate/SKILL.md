@@ -7,7 +7,7 @@ Read [current evaluation commands and evidence limits](../../../docs/development
 Inspect the changed capabilities, existing tests/datasets, and installed evaluator
 before selecting a grader. Use `zetra quality . --explain` to inspect requirement
 coverage, then `zetra quality .` to execute mapped tests and fixture evaluation.
-V2 JSONL assertions grade final text, tool calls and bounded steps; use supported
+JSONL assertions grade final text/files, tool trajectories/results and budgets; use supported
 assertions rather than inventing flags. Keep `quality.json` mappings current when
 changing tools, runtime skills or required evidence.
 
@@ -30,3 +30,10 @@ Run supported checks and report the actual scope with source/dataset/model/grade
 identities and sample counts. A fixture `PASSED` means deterministic fixture cases
 passed, not 100% model accuracy. If tooling cannot measure a required property,
 report the missing test/evaluator and release implication instead of weakening it.
+
+Named live experiments use the version-3 case dataset, separately from fixture
+markers. Run `quality --explain` before inference to inspect the fixed plan and
+request ceiling. Preserve errors/not-run trials; INCONCLUSIVE and INCOMPLETE do not
+satisfy the selected gate. Do not pool repeated prompts as independent tasks or
+append samples until a threshold passes. A smoke success does not establish model
+reliability, and these starter cases are development examples, not a holdout.
