@@ -40,6 +40,11 @@ The live command uses an OpenAI-compatible endpoint from `--model-config`. See
 named environment variable. No implicit provider or fixture fallback exists. Pin
 provider model revisions where available; reports identify the requested model,
 not an independently verified provider build. Temperature zero is not determinism.
+Compatible Qwen/vLLM endpoints can explicitly select `"enable_thinking": false`
+for bounded direct-response tasks. Omission keeps the provider default. The mode
+is part of the model configuration identity; changing it starts a new configuration,
+not a continuation of an interrupted study. Truncated responses remain errors and
+unknown usage still stops a token-budgeted study.
 
 ## Fixed plans and coverage
 

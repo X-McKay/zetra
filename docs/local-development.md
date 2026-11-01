@@ -48,6 +48,21 @@ remote endpoints require HTTPS. Endpoint and model names appear in reports: do
 not put secrets in URL paths or model identifiers. Overrides apply only locally,
 never to production AgentSpec or Release settings.
 
+For a compatible vLLM/Qwen endpoint, set `"enable_thinking": false` to request
+direct responses, or `true` to request thinking mode. This strict optional boolean
+maps only to `chat_template_kwargs.enable_thinking`; arbitrary provider parameters
+are not accepted. Omission sends no override and preserves existing configuration
+identities. The requested mode is recorded in reports and survives local Temporal
+serialization. Provider support is required; this is not a generic reasoning-effort
+control and does not attest that a server honored it.
+
+Choose the mode and output budget before an experiment. Some thinking models can
+consume a short output allowance before producing an answer; truncated responses
+remain errors. Raising the allowance alone may not solve that problem. The
+[Qwen3.6 model card](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)
+documents its default thinking mode and supported non-thinking setting. Changing
+mode requires fresh evidence; do not resume a failed study with different settings.
+
 Models must support the admitted serial tool-calling profile. Parallel calls,
 unknown tools and incomplete responses fail. Dependency installation and remote
 models may need network access; fully offline inference requires a running local

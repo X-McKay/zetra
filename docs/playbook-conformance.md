@@ -179,5 +179,10 @@ leave trial usage unknown, and redacted forbidden-call arguments fail conservati
 Text equality remains exact by default, with explicit surrounding-ASCII-whitespace
 trimming available for acknowledgement checks. This changes the dataset identity
 and cannot silently turn old failed evidence into passing evidence.
+Local model configuration supports an explicit strict `enable_thinking` option for
+compatible chat-template endpoints. Omission preserves historical config digests;
+setting it changes the requested model identity and does not attest provider behavior.
+Incomplete model responses remain errors with unknown usage; no retry or budget
+exception is introduced.
 No production qualification, policy attestation, deployment or model-quality claim
 is implied by this implementation.

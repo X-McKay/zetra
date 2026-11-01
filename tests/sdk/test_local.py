@@ -16,6 +16,37 @@ def test_model_configuration_identity_survives_process_serialization():
     )
     restored = LocalModelConfig.model_validate(config.model_dump())
     assert digest(config.model_dump()) == digest(restored.model_dump())
+    # Existing report/config digests must remain valid when this option is absent.
+    assert config.model_dump() == {
+        "base_url": "http://localhost:8000/v1",
+        "model": "test",
+        "api_key_env": None,
+        "max_tokens": 512,
+        "timeout": 20.0,
+        "temperature": 0.0,
+    }
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_thinking_mode_is_explicit_and_part_of_configuration_identity(enabled):
+    from zetra.manifest import digest
+
+    original = LocalModelConfig(base_url="http://localhost:8000/v1", model="test")
+    configured = LocalModelConfig.model_validate(
+        {**original.model_dump(), "enable_thinking": enabled}
+    )
+    restored = LocalModelConfig.model_validate_json(configured.model_dump_json())
+    assert restored.enable_thinking is enabled
+    assert restored.model_dump() == configured.model_dump()
+    assert digest(configured.model_dump()) != digest(original.model_dump())
+
+
+@pytest.mark.parametrize("value", [0, 1, "false", {}, []])
+def test_thinking_mode_rejects_ambiguous_values(value):
+    with pytest.raises(ValueError):
+        LocalModelConfig.model_validate(
+            {"base_url": "http://localhost:8000/v1", "model": "test", "enable_thinking": value}
+        )
 
 
 @pytest.fixture
@@ -145,7 +176,10 @@ async def test_source_mutation_does_not_erase_unknown_local_effect(project):
     assert result["trajectory"][-1]["status"] == "outcome_unknown"
 
 
-async def test_configured_local_http_model_uses_real_tool_and_records_usage(project, monkeypatch):
+@pytest.mark.parametrize("enable_thinking", [None, True, False])
+async def test_configured_local_http_model_uses_real_tool_and_records_usage(
+    project, monkeypatch, enable_thinking
+):
     monkeypatch.setenv("TEMPORAL_ADDRESS", "unreachable.invalid:7233")
     monkeypatch.setenv("LOCAL_MODEL_TEST_KEY", "test-private-token")
     requests = []
@@ -204,6 +238,7 @@ async def test_configured_local_http_model_uses_real_tool_and_records_usage(proj
                 "base_url": f"http://127.0.0.1:{port}/v1",
                 "model": "test-model",
                 "api_key_env": "LOCAL_MODEL_TEST_KEY",
+                **({"enable_thinking": enable_thinking} if enable_thinking is not None else {}),
             },
         )
     finally:
@@ -211,6 +246,11 @@ async def test_configured_local_http_model_uses_real_tool_and_records_usage(proj
     assert result["status"] == "SUCCEEDED", result
     assert result["mode"] == "local"
     assert len(requests) == 2
+    for sent in requests:
+        if enable_thinking is None:
+            assert "chat_template_kwargs" not in sent
+        else:
+            assert sent["chat_template_kwargs"] == {"enable_thinking": enable_thinking}
     assert any("verify metadata" in str(m) for m in requests[-1]["messages"] if m["role"] == "tool")
     assert [e["kind"] for e in result["trajectory"]] == ["model", "tool", "model"]
     assert result["metrics"]["input_tokens"] == 20

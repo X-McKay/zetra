@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_serializer
 
 from .bindings import MCPFixtures, mcp_provenance
 from .manifest import digest, load_agent, source_digest
@@ -30,6 +30,15 @@ class LocalModelConfig(BaseModel):
     max_tokens: int = Field(default=512, ge=1, le=32768)
     timeout: FiniteFloat = Field(default=20, gt=0, le=120)
     temperature: FiniteFloat = Field(default=0, ge=0, le=2)
+    enable_thinking: bool | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_configuration(self, handler):
+        data = handler(self)
+        # Omission preserves the identity of reports written before this option.
+        if self.enable_thinking is None:
+            data.pop("enable_thinking", None)
+        return data
 
     @field_validator("base_url")
     @classmethod
@@ -67,6 +76,9 @@ class LocalModelConfig(BaseModel):
             max_tokens=self.max_tokens,
             timeout=self.timeout,
             temperature=self.temperature,
+            extra_body={"chat_template_kwargs": {"enable_thinking": self.enable_thinking}}
+            if self.enable_thinking is not None
+            else None,
         )
 
 
