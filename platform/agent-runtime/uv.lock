@@ -33,7 +33,7 @@ requires-dist = [
     { name = "mcp", specifier = "==1.30.0" },
     { name = "openai", specifier = "==2.54.0" },
     { name = "pyyaml", specifier = "==6.0.3" },
-    { name = "zetra", git = "https://github.com/X-McKay/zetra.git?rev=ee8870bea7a6a7445faa75e923129e8e3b3e975d" },
+    { name = "zetra", git = "https://github.com/X-McKay/zetra.git?rev=a147cd10898fcb99f218e6596fbf8f5da49ff540" },
 ]
 provides-extras = ["landlock"]
 
@@ -1564,7 +1564,7 @@ wheels = [
 [[package]]
 name = "zetra"
 version = "0.1.0"
-source = { git = "https://github.com/X-McKay/zetra.git?rev=ee8870bea7a6a7445faa75e923129e8e3b3e975d#ee8870bea7a6a7445faa75e923129e8e3b3e975d" }
+source = { git = "https://github.com/X-McKay/zetra.git?rev=a147cd10898fcb99f218e6596fbf8f5da49ff540#a147cd10898fcb99f218e6596fbf8f5da49ff540" }
 dependencies = [
     { name = "google-adk" },
     { name = "google-genai" },
