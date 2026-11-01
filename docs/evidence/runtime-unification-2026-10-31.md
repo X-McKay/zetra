@@ -120,3 +120,51 @@ disabled: investigator **9 boundaries / 3 exact MCP calls**, document assistant
 project. Cold platform commands validate receipts before advancing the test cursor;
 final tool order, workspace files and text match the offline local run. Runner
 checkpoint persistence/recovery is covered separately by its native tests.
+
+## Independent review and correction pass
+
+One fresh read-only reviewer found five material issues. All were accepted and
+fixed in one regression-driven pass; no minor findings were deferred.
+
+1. Release quality checks inherited the signing host's environment and could read
+   its credential files. A host-execution regression failed first. Checks now run
+   in a read-only UID-1500 container with no host mounts or external network;
+   signing variables are not forwarded and caches live in tmpfs. Release build and
+   parity contexts come from `git archive` of the selected revision, excluding
+   ignored/uncommitted credentials. Both container gates and native sentinel tests
+   passed: synthetic signing variables and host credential files were inaccessible.
+2. Core restore used legacy unfenced extraction. Three native regressions failed
+   first; the core-only restore now verifies bytes, holds the execution lease, and
+   records durable started/completed admission outside the archived tree. It never
+   replaces the lease inode. A late request after a successful retry cannot rewrite
+   subsequent tool output; an incomplete attempt refuses replay. Two host Activity
+   probes also exposed an initial result-field/heartbeat mistake in the correction;
+   those failed then passed. Final runner suite: **200 passed**, with native replay.
+3. Runner Git dependencies lacked a build-time Git executable. A populated shared
+   cache masked the first Docker build; disabling that cache reproduced the failure.
+   A multi-stage build now installs Git only in the builder. The actual final image
+   builds and imports runner/core/runtime successfully with Git absent at runtime.
+   CI now builds and smoke-tests this image.
+4. Changing a core envelope to schema 1 bypassed static admission. Four downgrade/
+   malformed-legacy regressions failed first. New artifact generation now requires
+   schema 2 / `zetra-core-v1`; existing immutable legacy images/histories still run.
+   Final agent tooling suite: **24 passed**.
+5. The legacy minimum-backend environment default rejected another allowed core
+   backend. A non-default backend regression failed first. Core routing now derives
+   from the hash-bound envelope, with policy enforcement at the fixed gateway. Full
+   runtime: **92 passed**. One pinned LiteLLM asynchronous logging teardown warning
+   was observed; it did not fail an assertion or alter control output.
+
+Runtime dependency pin is now `e7804ac21020fe23eddc047044bde31256676b13`; the
+root SDK prerequisite stays `d638678` and contracts stay `bba8b09`. Locks and actual
+installed metadata were refreshed. Both final runtime images again passed local/
+core TLS parity (9/3 investigator, 5/0 document assistant) after the pin update.
+Final SDK `just check`: **439 passed, 46 cluster tests deselected**, one existing
+ADK warning, plus documentation/examples/quality checks. No deselected case is
+counted as qualification.
+
+The reviewer explicitly set aside statistical model quality, cluster enforcement/
+capacity, hostile native-code bypass, retained legacy retry semantics, fleet
+telemetry/optimization and zetra-ui. Those boundaries stand: their cost is that
+this increment cannot establish production readiness, model accuracy or UI delivery.
+They remain separately qualified roadmap work, not implied successes.

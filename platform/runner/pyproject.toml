@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-agent-runtime = { git = "https://github.com/X-McKay/zetra.git", rev = "1393cf0286f16245219d9446b6e1b677ade92ff4", subdirectory = "platform/agent-runtime" }
+agent-runtime = { git = "https://github.com/X-McKay/zetra.git", rev = "e7804ac21020fe23eddc047044bde31256676b13", subdirectory = "platform/agent-runtime" }
 
 [project.scripts]
 agent-session-runner = "runner.worker:main"

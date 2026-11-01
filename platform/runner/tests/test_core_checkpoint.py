@@ -219,3 +219,90 @@ def test_restore_rejects_other_execution_and_position(checkpoint):
             validate_restore(data, bad, receipt.position.model_dump())
     with pytest.raises(ValueError):
         validate_restore(data, request.binding, request.position.model_dump())
+
+
+def restore_command(root, data):
+    import sys
+    from runner.core import core_restore_command
+
+    cmd = core_restore_command(binding(), hashlib.sha256(data).hexdigest(), len(data))
+    return [sys.executable, cmd[1], cmd[2].replace('"/sandbox"', repr(str(root))), *cmd[3:]]
+
+
+def test_core_restore_refuses_active_execution_lease(checkpoint, tmp_path):
+    import fcntl
+    import os
+    import subprocess
+
+    files, dirs, _, _ = checkpoint
+    data = tar_bytes(files, dirs)
+    root = tmp_path / "target"
+    (root / "state/core").mkdir(parents=True)
+    (root / "workspace").mkdir()
+    report = root / "workspace/report.txt"
+    report.write_text("current tool output")
+    with (root / "state/core/lease").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = subprocess.run(
+            restore_command(root, data),
+            input=data,
+            capture_output=True,
+            timeout=10,
+            env={**os.environ, "AGENT_CORE_BINDING": binding().model_dump_json()},
+            check=False,
+        )
+    assert result.returncode != 0
+    assert report.read_text() == "current tool output"
+
+
+def test_late_restore_after_retry_cannot_overwrite_tool_output(checkpoint, tmp_path):
+    import os
+    import subprocess
+
+    files, dirs, _, _ = checkpoint
+    data = tar_bytes(files, dirs)
+    root = tmp_path / "target"
+    env = {**os.environ, "AGENT_CORE_BINDING": binding().model_dump_json()}
+    cmd = restore_command(root, data)
+    # The first exec loses its transport halfway through stdin and arrives late.
+    first = subprocess.Popen(
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
+    )
+    try:
+        first.stdin.write(data[:100])
+        first.stdin.flush()
+        second = subprocess.run(
+            cmd, input=data, capture_output=True, timeout=10, env=env, check=False
+        )
+        assert second.returncode == 0, second.stderr
+        report = root / "workspace/report.txt"
+        assert report.read_text() == "hello"
+        report.write_text("new tool output")
+        first.communicate(data[100:], timeout=10)
+        assert first.returncode == 0
+        assert report.read_text() == "new tool output"
+    finally:
+        if first.poll() is None:
+            first.kill()
+            first.communicate()
+
+
+def test_incomplete_restore_admission_never_reexecutes(checkpoint, tmp_path):
+    import os
+    import subprocess
+
+    files, dirs, _, _ = checkpoint
+    data = tar_bytes(files, dirs)
+    root = tmp_path / "target"
+    root.mkdir()
+    (root / ".core-restore.json").write_text(json.dumps({"status": "started"}))
+    result = subprocess.run(
+        restore_command(root, data),
+        input=data,
+        capture_output=True,
+        timeout=10,
+        env={**os.environ, "AGENT_CORE_BINDING": binding().model_dump_json()},
+        check=False,
+    )
+    assert result.returncode != 0
+    assert not (root / "workspace/report.txt").exists()

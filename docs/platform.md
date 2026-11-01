@@ -49,7 +49,9 @@ its full tape/workspace and persists and rechecks the bounded archive before
 accepting the new Position. Only a later prepare reports completion. Execute
 loss or exhausted post-effect checkpoint retries terminates `OUTCOME_UNKNOWN`;
 a local candidate never authorizes another effect. Recovery from preparation loss
-requires confirmed deletion and the last accepted checkpoint.
+requires confirmed deletion and the last accepted checkpoint. Core restoration
+holds the execution lease and uses a durable per-pod admission/completion fence;
+a lost restore response can never authorize a late overwrite of newer tool work.
 
 Core workflows reject resets/retries/continuations and noncanonical execution IDs
 before activation. A Temporal patch preserves legacy refusal-history cleanup while

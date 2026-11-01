@@ -626,6 +626,104 @@ def create_core_sandbox(payload: dict) -> str:
     return _pod(binding).metadata.uid
 
 
+# Runner-owned bootstrap: no shell/tar children and no writes outside this lease.
+# The fence is outside workspace/state so snapshots cannot replace it or the lock.
+CORE_RESTORE_PY = r"""
+import fcntl, hashlib, io, json, os, stat, sys, tarfile
+from pathlib import Path
+expected, key, size = json.loads(sys.argv[1]), sys.argv[2], int(sys.argv[3])
+if json.loads(os.environ['AGENT_CORE_BINDING']) != expected or not 0 < size <= 67108864:
+    raise ValueError('restore identity or size differs')
+data = sys.stdin.buffer.read(size)
+if len(data) != size or hashlib.sha256(data).hexdigest() != key:
+    raise ValueError('restore bytes differ')
+root = Path("/sandbox")
+def directory(path):
+    if path.is_symlink():
+        raise ValueError('restore directory is a link')
+    path.mkdir(mode=0o700, exist_ok=True)
+    if not path.is_dir():
+        raise ValueError('restore directory differs')
+for path in (root, root/'state', root/'state/core'):
+    directory(path)
+fd = os.open(root/'state/core/lease', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+with os.fdopen(fd, 'r+b') as lease:
+    if not stat.S_ISREG(os.fstat(fd).st_mode) or os.fstat(fd).st_nlink != 1:
+        raise ValueError('restore lease differs')
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    fence = root/'.core-restore.json'
+    identity = {'binding':expected, 'snapshot':key, 'size':size}
+    if fence.exists() or fence.is_symlink():
+        if fence.is_symlink() or json.loads(fence.read_bytes()) != {**identity, 'status':'complete'}:
+            raise ValueError('restore already admitted with uncertain outcome')
+        sys.exit(0)
+    def sync_root():
+        d = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try: os.fsync(d)
+        finally: os.close(d)
+    with fence.open('xb') as marker:
+        marker.write(json.dumps({**identity, 'status':'started'}, sort_keys=True).encode())
+        marker.flush(); os.fsync(marker.fileno())
+    sync_root()
+    with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as archive:
+        for member in archive:
+            parts = member.name.rstrip('/').split('/')
+            if not parts or parts[0] not in {'workspace','state'} or any(p in {'','.', '..'} for p in parts):
+                raise ValueError('restore path differs')
+            if member.name == 'state/core/lease':
+                continue
+            target = root.joinpath(*parts)
+            for parent in list(target.parents)[:-1][::-1]:
+                if parent == root or root in parent.parents:
+                    directory(parent)
+            if member.isdir():
+                directory(target)
+            elif member.isfile():
+                output = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(output, 'wb') as stream, archive.extractfile(member) as source:
+                    while chunk := source.read(1048576): stream.write(chunk)
+                    stream.flush(); os.fsync(stream.fileno())
+            else:
+                raise ValueError('restore member differs')
+    completed = root/'.core-restore-complete.json'
+    with completed.open('xb') as marker:
+        marker.write(json.dumps({**identity, 'status':'complete'}, sort_keys=True).encode())
+        marker.flush(); os.fsync(marker.fileno())
+    os.replace(completed, fence)
+    sync_root()
+"""
+
+
+def core_restore_command(binding, key, size):
+    return [
+        "/app/.venv/bin/python",
+        "-c",
+        CORE_RESTORE_PY,
+        canonical_bytes(binding.model_dump()).decode(),
+        key,
+        str(size),
+    ]
+
+
+def _restore_core(binding, pod, key, data):
+    from runner import activities as act
+
+    try:
+        result = act.deps().run_exec(
+            binding.tenant,
+            pod,
+            core_restore_command(binding, key, len(data)),
+            stdin=io.BytesIO(data),
+            max_output=4096,
+            deadline=act.SNAPSHOT_DEADLINE,
+            heartbeat=activity.heartbeat,
+        )
+        if result.rc != 0 or result.timed_out or result.truncated:
+            raise ValueError("restore command failed")
+    except Exception:
+        raise ApplicationError("core restore not confirmed", type="CoreRestoreFailed") from None
+
+
 @activity.defn
 def wait_core_ready(payload: dict) -> None:
     import time
@@ -659,7 +757,7 @@ def wait_core_ready(payload: dict) -> None:
                             type="CoreIntegrityError",
                             non_retryable=True,
                         ) from None
-                    act._restore(act.deps(), binding.tenant, pod.metadata.name, key)
+                    _restore_core(binding, pod.metadata.name, key, data)
             elif payload.get("position") not in (None, EMPTY_POSITION.model_dump()):
                 raise ApplicationError(
                     "accepted state has no checkpoint",

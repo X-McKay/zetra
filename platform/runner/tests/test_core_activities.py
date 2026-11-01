@@ -217,3 +217,31 @@ def test_concurrent_snapshots_do_not_buffer_multiple_archives(tmp_path, checkpoi
         finally:
             release_first.set()
         assert first.result()["position"] == second.result()["position"]
+
+
+@pytest.mark.parametrize("timed_out", [False, True])
+def test_ready_restores_through_fenced_core_command(tmp_path, checkpoint, timed_out):
+    import io
+    from kubernetes.client import V1PodStatus
+
+    files, dirs, _, receipt = checkpoint
+    data = tar_bytes(files, dirs)
+    key = hashlib.sha256(data).hexdigest()
+    deps, calls = transport(tmp_path, act.ExecResult(0, b"", "", False, timed_out=timed_out))
+    pod = next(iter(deps.core.pods.values()))
+    pod.status = V1PodStatus(phase="Running")
+    deps.store.put(key, io.BytesIO(data))
+    payload = {
+        "binding": binding().model_dump(),
+        "restore": key,
+        "position": receipt.position.model_dump(),
+    }
+    if timed_out:
+        with pytest.raises(ApplicationError, match="restore not confirmed"):
+            run(core.wait_core_ready, payload)
+    else:
+        run(core.wait_core_ready, payload)
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args[2] == core.core_restore_command(binding(), key, len(data))
+    assert callable(kwargs["heartbeat"])
