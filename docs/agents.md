@@ -53,6 +53,18 @@ Registered tools receive model-supplied arguments only. ADK-injected parameters
 `input_stream`) are rejected during tool registration, before any model or tool
 execution. Close over the supplied `AgentContext` for workspace access instead.
 
+When a tool requires earlier evidence, use `ctx.prior_tool_results("tool_name")`
+inside its body. It returns immutable `arguments`/`result` pairs from successful
+tool operations in the caller's accepted tape. Check the result's business status
+and required content: a successful operation can still return an abstention.
+Pending candidates, failed operations and previous sessions are excluded. The
+runtime reconstructs this view after a cold restart; a Python closure flag or a
+file supplied in the input workspace is not proof of a prior accepted operation.
+Factories must not branch on this history. Direct unit tests can supply a trusted
+`history_binding` when constructing `AgentContext`; without a binding it is empty.
+This helps cooperative agent code enforce its workflow, and does not grant tools
+additional permissions or replace sandbox enforcement.
+
 Reviewed read-only integrations may register tools with `effect="remote_read"`.
 They use the existing single-attempt tool Activity; accepted responses replay from
 Temporal-selected artifacts. This does not admit remote writes or authorize any

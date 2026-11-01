@@ -61,6 +61,7 @@ class Definition:
         self.spec = AgentSpec.model_validate(spec).validate_policy()
         self.workspace = Path(workspace)
         self.mcp_binding = mcp_binding
+        self.history = lambda: ()
         self.instruction = ""
         if self.spec.instructions:
             package, resource = resource_parts(self.spec.instructions)
@@ -111,4 +112,5 @@ class Definition:
             model=self.model,
             instruction=self.instruction,
             mcp_binding=self.mcp_binding,
+            history_binding=lambda: self.history(),
         )

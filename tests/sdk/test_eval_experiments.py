@@ -391,6 +391,12 @@ def create_agent(ctx):
         for metric in ("input_tokens", "output_tokens"):
             assert report["cases"][0]["trials"][0]["metrics"][metric] is None
             assert report["summary"]["metrics"][metric]["total"] is None
+        assert report["cases"][0]["trials"][0]["diagnostic"] == {
+            "reason": "http_error",
+            "http_status": 503,
+            "boundary_index": 2,
+        }
+        assert "response lost" not in json.dumps(report)
         return
     assert report["status"] == "PASSED", report
     assert len(requests) == 6

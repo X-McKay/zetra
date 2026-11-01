@@ -7,8 +7,9 @@ from pathlib import Path
 from statistics import mean
 from typing import Annotated, Literal
 
-from pydantic import Field, FiniteFloat, model_validator
+from pydantic import Field, FiniteFloat, model_serializer, model_validator
 
+from ._runtime.model_diagnostics import ModelFailureEvidence
 from .eval_experiments import ExperimentPlan, Strict
 from .eval_statistics import metric_summary, wilson
 from .local import LocalModelConfig
@@ -41,9 +42,21 @@ class TrialEvidence(Strict):
         max_length=100
     )
     metrics: Metrics
+    diagnostic: ModelFailureEvidence | None = None
+
+    @model_serializer(mode="wrap")
+    def omit_absent_diagnostic(self, handler):
+        data = handler(self)
+        if self.diagnostic is None:
+            data.pop("diagnostic", None)
+        return data
 
     @model_validator(mode="after")
     def coherent_outcome(self):
+        if self.diagnostic is not None and (
+            self.outcome != "error" or self.status != "OUTCOME_UNKNOWN"
+        ):
+            raise ValueError("model diagnostic requires an unknown error outcome")
         if self.outcome in {"passed", "failed"}:
             if self.status != "SUCCEEDED" or not self.assertions or self.error_type is not None:
                 raise ValueError("inconsistent completed trial")
@@ -151,6 +164,7 @@ def evaluator_digest():
         "eval_comparison.py",
         "evaluation.py",
         "local.py",
+        "agent.py",
         "bindings.py",
         "manifest.py",
         "testing/local.py",

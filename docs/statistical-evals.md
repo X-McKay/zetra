@@ -5,6 +5,20 @@ cluster. Ordinary `zetra quality .` remains the fast deterministic gate. Version
 quality contracts also validate their declared live plans and datasets in offline
 CI, without contacting a model or satisfying live requirements.
 
+Unknown local model outcomes can include a compact `diagnostic`: an allowlisted
+reason, an optional integer HTTP status, and the zero-based model boundary index.
+Reasons distinguish provider timeout/connection/HTTP failures, truncated or
+filtered responses, parallel calls, unknown tools, invalid arguments, and other
+protocol failures. `unclassified` means the available exception chain did not
+identify a supported cause. Messages, URLs, headers, request IDs, credentials,
+prompts, tool arguments, provider bodies and reasoning are not diagnostic fields.
+This metadata survives the combined quality report and experiment compaction;
+historical reports without it still validate unchanged. It neither makes an
+unknown outcome definitive nor permits retry or replacement of a failed trial.
+Usage stays unknown and the existing usage-budget stop still applies. This
+diagnostic path covers the no-Temporal runner used by local experiments; it does
+not add diagnostic persistence to Temporal or deployed transport protocols.
+
 ## Run and compare
 
 Use the canonical starter or either reference agent with an explicit model config:

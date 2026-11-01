@@ -210,6 +210,7 @@ async def run_experiment(root, *, agent, experiment, model_config, mcp_fixtures=
                 outcome=row["outcome"],
                 status=row.get("status"),
                 error_type=row.get("error_type"),
+                diagnostic=row.get("diagnostic"),
                 assertions=[{"type": r["type"], "passed": r["passed"]} for r in row["assertions"]],
                 tools=row["tools"],
                 metrics=row["metrics"],

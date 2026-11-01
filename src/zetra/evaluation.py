@@ -88,6 +88,7 @@ async def evaluate_case(
         "status": result.get("status"),
         "cleanup": result.get("cleanup"),
         "error_type": result.get("error_type"),
+        **({"diagnostic": result["diagnostic"]} if result.get("diagnostic") is not None else {}),
         "assertions": assertions,
         "tools": result.get("tools", {}),
         "metrics": result.get("metrics", {}),

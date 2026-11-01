@@ -27,7 +27,14 @@ class Tool:
 
 class AgentContext:
     def __init__(
-        self, bridge, *, workspace: Path, model: str, instruction: str = "", mcp_binding=None
+        self,
+        bridge,
+        *,
+        workspace: Path,
+        model: str,
+        instruction: str = "",
+        mcp_binding=None,
+        history_binding=None,
     ):
         from ._runtime.capture import BridgeModel
 
@@ -39,7 +46,30 @@ class AgentContext:
         self._wrappers = []
         self._sealed = False
         self._mcp_binding = mcp_binding
+        self._history_binding = history_binding
         self._mcp_scope = ContextVar("zetra_mcp_scope", default=None)
+
+    def prior_tool_results(self, name: str) -> tuple:
+        """Immutable successful tool results from the caller's accepted tape only.
+
+        Empty outside a runtime unless a trusted test supplies a history binding.
+        Tool-specific business success (for example, abstention) must still be checked.
+        """
+        from ._runtime.dispatch import freeze
+
+        history = self._history_binding() if self._history_binding else ()
+        return tuple(
+            freeze(
+                {
+                    "arguments": entry["operation"]["request"]["arguments"],
+                    "result": entry["outcome"]["value"],
+                }
+            )
+            for entry in history
+            if entry["operation"]["kind"] == "tool"
+            and entry["operation"]["executor"] == name
+            and entry["outcome"]["status"] == "succeeded"
+        )
 
     async def mcp(self, backend: str, tool: str, arguments: dict):
         from .bindings import mcp_request

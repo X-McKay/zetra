@@ -111,10 +111,11 @@ async def test_http_failure_sends_exactly_one_request(endpoint, status):
     settings.update(
         status=status, response={"error": {"message": "injected failure", "type": "server_error"}}
     )
-    from litellm import InternalServerError, RateLimitError
+    from zetra._runtime.model_diagnostics import ModelCallError
 
-    with pytest.raises((InternalServerError, RateLimitError)):
+    with pytest.raises(ModelCallError) as caught:
         await executor(encode_model(request()), {}, "operation-1")
+    assert caught.value.diagnostic.model_dump() == {"reason": "http_error", "http_status": status}
     assert len(sent) == 1
 
 

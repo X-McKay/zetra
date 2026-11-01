@@ -186,3 +186,10 @@ Incomplete model responses remain errors with unknown usage; no retry or budget
 exception is introduced.
 No production qualification, policy attestation, deployment or model-quality claim
 is implied by this implementation.
+
+The reliability follow-up adds immutable accepted tool history to `AgentContext`
+for prerequisites that survive cold reconstruction. The document assistant uses
+it to require an approved document and grounding skill before writing. Local
+model failures retain allowlisted diagnostics in compact experiment evidence;
+uncertainty, one-attempt execution, usage stops and prior report validation remain
+unchanged. See the [follow-up record](evidence/reliability-followups-2026-11-01.md).

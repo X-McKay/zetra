@@ -350,6 +350,10 @@ async def _run_in_process(
                     Workspace(destination, runtime.store).restore(runtime.workspace.capture())
             except (OutcomeUnknown, TimeoutError) as exc:
                 report.update(status="OUTCOME_UNKNOWN", error_type=type(exc).__name__)
+                if events and events[-1]["kind"] == "model":
+                    from ._runtime.model_diagnostics import model_failure_evidence
+
+                    report["diagnostic"] = model_failure_evidence(exc, events[-1]["index"])
             except Exception as exc:  # noqa: BLE001 -- execution boundary, never serialize secrets
                 report.update(status="FAILED", error_type=type(exc).__name__)
             finally:

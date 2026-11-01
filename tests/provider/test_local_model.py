@@ -26,6 +26,8 @@ async def local_endpoint():
                 "body": await req.json(),
             }
         )
+        if "raw_body" in settings:
+            return web.Response(text=settings["raw_body"], content_type="application/json")
         return web.json_response(settings["response"], status=settings["status"])
 
     app = web.Application()
@@ -162,3 +164,89 @@ async def test_local_request_cannot_override_binding(local_endpoint, alteration)
     with pytest.raises(ValueError):
         await executor(encode_model(value), {}, "local-operation")
     assert sent == []
+
+
+@pytest.mark.parametrize(
+    "failure,reason,status",
+    [
+        (429, "http_error", 429),
+        (503, "http_error", 503),
+        ("length", "response_truncated", None),
+        ("content_filter", "response_filtered", None),
+        ("parallel", "parallel_tool_calls", None),
+        ("unknown_tool", "unknown_tool", None),
+        ("bad_json", "invalid_tool_arguments", None),
+        ("array_args", "invalid_tool_arguments", None),
+        ("empty", "empty_response", None),
+        ("malformed_body", "invalid_provider_response", None),
+    ],
+)
+async def test_model_failures_have_bounded_private_diagnostics(
+    local_endpoint, failure, reason, status
+):
+    from zetra._runtime.chat_model import ChatExecutor
+
+    base_url, sent, settings = local_endpoint
+    secret = "private-provider-payload-and-credential"
+    choice = settings["response"]["choices"][0]
+    calls = choice["message"]["tool_calls"]
+    if isinstance(failure, int):
+        settings.update(
+            status=failure, response={"error": {"message": secret, "type": "server_error"}}
+        )
+    elif failure in {"length", "content_filter"}:
+        choice["finish_reason"] = failure
+    elif failure == "parallel":
+        calls.append(copy.deepcopy(calls[0]))
+    elif failure == "unknown_tool":
+        calls[0]["function"]["name"] = secret
+    elif failure in {"bad_json", "array_args"}:
+        calls[0]["function"]["arguments"] = (
+            secret if failure == "bad_json" else '["' + secret + '"]'
+        )
+    elif failure == "empty":
+        choice.update(finish_reason="stop", message={"role": "assistant", "content": None})
+    elif failure == "malformed_body":
+        settings["raw_body"] = "{" + secret
+    with pytest.raises(Exception) as caught:
+        await ChatExecutor(base_url=base_url, model=MODEL, api_key=KEY)(
+            model_request(), {}, "operation"
+        )
+    diagnostic = caught.value.diagnostic.model_dump()
+    assert diagnostic == {"reason": reason, "http_status": status}
+    assert secret not in json.dumps(diagnostic)
+    assert KEY not in json.dumps(diagnostic)
+    assert len(sent) == 1
+
+
+@pytest.mark.parametrize(
+    "failure,reason", [("timeout", "provider_timeout"), ("connection", "connection_error")]
+)
+async def test_transport_failures_keep_reason_without_request_details(failure, reason):
+    import httpx
+    from openai import AsyncOpenAI
+
+    from zetra._runtime.chat_model import ChatExecutor
+
+    calls = []
+
+    async def fail(request):
+        calls.append(request.method)
+        error = httpx.ReadTimeout if failure == "timeout" else httpx.ConnectError
+        raise error("sensitive-request-details", request=request)
+
+    def client():
+        return AsyncOpenAI(
+            base_url="http://localhost/v1",
+            api_key=KEY,
+            max_retries=0,
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(fail)),
+        )
+
+    with pytest.raises(ValueError) as caught:
+        await ChatExecutor(
+            base_url="http://localhost/v1", model=MODEL, api_key=KEY, client_factory=client
+        )(model_request(), {}, "operation")
+    assert caught.value.diagnostic.model_dump() == {"reason": reason, "http_status": None}
+    assert str(caught.value) == reason
+    assert calls == ["POST"]

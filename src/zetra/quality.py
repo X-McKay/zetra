@@ -448,6 +448,7 @@ async def run_quality(
                                 "status",
                                 "cleanup",
                                 "error_type",
+                                "diagnostic",
                                 "tools",
                                 "metrics",
                             )
