@@ -85,11 +85,24 @@ was used; the fix pass is verified by those regressions and the full suite.
 No live inference was substituted with fixture results, and no qualification skip
 is reported as a pass.
 
+After the fixes, the published SDK pin again passed the runtime's 92 tests (same
+existing LiteLLM warning), canonical validation (30 tests, quality and wheel),
+renderer tests (13), and a fresh rendered project's full validation. Rebundling the
+exact canonical commit passed 81 scaffold/experiment/comparison/CLI tests. The
+canonical template's hosted push and pull-request validation both passed at
+`4aeb75b15b4bbc6fd94bb8c66aab940a4bbc6117`.
+
+Final hosted status is available on the stacked draft PRs:
+[SDK #19](https://github.com/X-McKay/zetra/pull/19),
+[agents #5](https://github.com/X-McKay/zetra-agents/pull/5), and
+[template #6](https://github.com/X-McKay/zetra-template/pull/6).
+These are review branches; nothing has been merged or qualified.
+
 ## Dependency integration
 
-Published SDK prerequisite: `2c70149d7c0472e79551ce0ce124a885dbf3eaea`.
-Published runtime package prerequisite: `1b7e7733f43d0d5487dc4e3b023eecbd2b33cbdb`.
-Canonical template: `93bf512deba78ef223bb2a37ce84203753f6dd8c`.
+Published SDK prerequisite: `c38db511a8ec2fdaea04455b8ed446c1e74b087f`.
+Published runtime package prerequisite: `083967c1c1e91918d76405c5fa3da06150c60a25`.
+Canonical template: `4aeb75b15b4bbc6fd94bb8c66aab940a4bbc6117`.
 References and canonical starter consume the published prerequisites, not local
 editable overrides. SDK bundle provenance records the exact canonical tree.
 Preserve these commits as reachable ancestors when integrating the stacked PRs.
