@@ -70,3 +70,10 @@ administrator-owned, not arbitrary dispatch inputs. Do not dispatch from untrust
 code. The workflow retains only compact reports for seven days, including failures;
 review your repository's artifact access policy. It never deploys or qualifies an
 agent against a cluster.
+
+Acknowledgement cases explicitly use `"whitespace": "trim"` on `text_equals` to
+ignore surrounding ASCII space, tab, CR and LF. Extra words, changed case and
+internal whitespace still fail. Equality is exact by default; quote content and
+file checks are unchanged. Changing this policy changes the dataset identity: keep
+old failures and begin a new study instead of presenting a grader change as agent
+improvement.

@@ -65,5 +65,30 @@ minor issues. Dependency refresh and actual reliability were explicitly left for
 subsequent verification; the reviewer did not rerun tests or independently audit
 private diagnostics. Those limits stand and no production-readiness claim follows.
 
-Installed-dependency, template, reference-agent and live-study results will be
-recorded when complete. Production qualification remains paused.
+Installed runtime validation passed 92 tests at SDK
+`ee8870bea7a6a7445faa75e923129e8e3b3e975d` (same existing LiteLLM logging warning).
+The canonical starter passed 30 tests, required offline quality and wheel checks;
+renderer tests passed 13, and a fresh rendered repository passed full validation.
+The reference repository passed its tooling 24, document-assistant 17 and
+investigator 19 tests plus both required quality gates. The canonical SDK bundle
+passed 81 scaffold/experiment/comparison/CLI tests and matched provenance.
+
+The runtime prerequisite is `b1ecb6206f25c760354b80f878751dad7b329f21`, canonical
+starter `7449ea970c859a9a7c97125a6953ca5e21592120`, and reference agents
+`e646c37042e2d85a7dc860fb699f1119d9ba2e53`. Preserve these reachable dependency
+commits when integrating the existing stacked draft PRs.
+
+Fresh installed smoke observations at this point: starter 6/6 and document
+assistant 8/8 passed; investigator is pending. The subsequent live-study results
+and exact artifact hashes are retained in the draft review records:
+[SDK #19](https://github.com/X-McKay/zetra/pull/19),
+[agents #5](https://github.com/X-McKay/zetra-agents/pull/5), and
+[template #6](https://github.com/X-McKay/zetra-template/pull/6).
+
+The optional local observer delegates unchanged case execution and CLI handling,
+then logs only case IDs/outcomes/counts. Its driver hash is retained with the
+private run manifest. Larger studies use one sequential trial stream per suite,
+up to three suites concurrently on the same model endpoint. Latencies therefore
+include shared inference load and are not production benchmarks. Reports remain
+unsigned development evidence; no provider-revision or hostile-code attestation
+is claimed. Production qualification remains paused.
