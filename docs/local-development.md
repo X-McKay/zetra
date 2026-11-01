@@ -135,9 +135,10 @@ assertions; the whole dataset is validated before executing any case:
 {"schema_version":2,"id":"guide","input":"Read the guide.","assertions":[{"type":"text_contains","value":"Completed."},{"type":"tool_called","tool":"read_document","arguments":{"document_id":"guide"}},{"type":"max_steps","maximum":3}]}
 ```
 
-Supported assertions are `text_contains`, `text_not_contains`, `file_contains`,
+Supported assertions include `text_contains`, `text_not_contains`, `file_contains`,
 `file_exists`, `tool_called`, `tool_forbidden`, `tool_before`, `max_steps` and
-`max_duration_ms`. Text uses `value`; files use `path` and optionally `value`;
+`max_duration_ms`. Exact/negative-file, tool-result and token assertions are described
+in [statistical evals](statistical-evals.md). Text uses `value`; files use `path` and optionally `value`;
 tools use `tool`; calls optionally use an `arguments` subset; order uses `tool`
 and `before`; limits use `maximum`. Required calls/order need successful outcomes.
 Forbidden-call checks include failed attempts. Missing evidence fails.
@@ -149,8 +150,9 @@ fail if the client does not expose the necessary evidence.
 
 Fixture cases prove deterministic plumbing only. Model-quality claims require
 provider-backed cases, meaningful criteria, held-out data and repeated trials.
-Judge calibration, token/cost budget assertions, trial aggregation and statistical
-regression decisions remain future work.
+Named [statistical experiments](statistical-evals.md) now add fixed repeated trials,
+per-case confidence bounds, token budgets and baseline comparisons. Calibrated model
+judges and billing estimates remain separate work.
 
 ## Optional local Temporal
 

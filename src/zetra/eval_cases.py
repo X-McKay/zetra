@@ -55,6 +55,7 @@ def _assertion(value):
         "text_not_contains": {"type", "value"},
         "text_equals": {"type", "value"},
         "file_contains": {"type", "path", "value"},
+        "file_not_contains": {"type", "path", "value"},
         "file_equals": {"type", "path", "value"},
         "file_absent": {"type", "path"},
         "file_exists": {"type", "path"},
@@ -71,7 +72,7 @@ def _assertion(value):
     if not isinstance(kind, str) or kind not in fields:
         raise ValueError("unknown assertion type")
     expected = fields[kind]
-    if kind == "tool_called" and "arguments" in value:
+    if kind in {"tool_called", "tool_forbidden"} and "arguments" in value:
         expected = expected | {"arguments"}
     if set(value) != expected:
         raise ValueError("invalid assertion fields")
@@ -225,9 +226,11 @@ def _passes(assertion, result):
             if kind == "file_exists"
             else (assertion["path"] not in names)
         )
-    if kind in {"file_contains", "file_equals"}:
+    if kind in {"file_contains", "file_not_contains", "file_equals"}:
         contents = result.get("file_contents")
         text = contents.get(assertion["path"]) if type(contents) is dict else None
+        if kind == "file_not_contains":
+            return isinstance(text, str) and assertion["value"] not in text
         return isinstance(text, str) and (
             assertion["value"] == text if kind == "file_equals" else assertion["value"] in text
         )
@@ -244,7 +247,9 @@ def _passes(assertion, result):
         return False
     matching = [event for event in tools if event["executor"] == assertion["tool"]]
     if kind == "tool_forbidden":
-        return not matching
+        return not any(
+            _subset(assertion.get("arguments", {}), event["arguments"]) for event in matching
+        )
     matching = [event for event in matching if event["status"] == "succeeded"]
     if kind == "tool_result":
         return any(_subset(assertion["result"], event.get("result")) for event in matching)

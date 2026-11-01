@@ -10,7 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import timedelta
 from pathlib import Path
 
@@ -38,6 +38,7 @@ def parser():
         if name in ("build", "release", "eval"):
             cmd.add_argument("--output")
         if name == "eval":
+            cmd.add_argument("--experiment", help="named fixed-sample local model experiment")
             cmd.add_argument("--mode", choices=["fixture", "local", "sandbox"], required=True)
             cmd.add_argument("--release")
             cmd.add_argument("--model-config")
@@ -63,11 +64,18 @@ def parser():
     quality = sub.add_parser("quality", help="explain or execute local quality requirements")
     quality.add_argument("path")
     quality.add_argument("--agent")
+    quality.add_argument("--experiment", help="declared live experiment, with --mode local")
     quality.add_argument("--explain", action="store_true")
     quality.add_argument("--mode", choices=["fixture", "local"], default="fixture")
     quality.add_argument("--model-config")
     quality.add_argument("--mcp-fixtures", help="explicit offline MCP fixture JSON")
     quality.add_argument("--output")
+    compare = sub.add_parser(
+        "eval-compare", help="compare compatible fixed-sample experiment reports"
+    )
+    compare.add_argument("baseline")
+    compare.add_argument("candidate")
+    compare.add_argument("--output")
     run = sub.add_parser("run")
     run.add_argument("release")
     run.add_argument("--session", required=True)
@@ -187,6 +195,19 @@ def open_gateway():
 
 
 async def execute(args, load_release):
+    if args.command == "eval" and args.experiment:
+        if args.mode != "local" or args.release:
+            raise ValueError("experiments require local mode, without a release")
+        from .eval_experiments import run_experiment
+
+        with _cancel_on_sigterm():
+            return await run_experiment(
+                args.path,
+                agent=args.agent,
+                experiment=args.experiment,
+                model_config=_model_config(args.model_config),
+                mcp_fixtures=_mcp_fixtures(args.mcp_fixtures),
+            )
     if args.command == "dev":
         if args.temporal or args.temporal_address:
             from .local_temporal import dev_temporal
@@ -222,13 +243,15 @@ async def execute(args, load_release):
     if args.command == "quality":
         from .quality import run_quality
 
-        return await run_quality(
-            args.path,
-            agent=args.agent,
-            mode=args.mode,
-            model_config=_model_config(args.model_config),
-            mcp_fixtures=_mcp_fixtures(args.mcp_fixtures),
-        )
+        with _cancel_on_sigterm() if args.experiment else nullcontext():
+            return await run_quality(
+                args.path,
+                agent=args.agent,
+                mode=args.mode,
+                model_config=_model_config(args.model_config),
+                mcp_fixtures=_mcp_fixtures(args.mcp_fixtures),
+                experiment=args.experiment,
+            )
     if args.command == "eval" and args.mode in ("fixture", "local"):
         from .evaluation import evaluate
 
@@ -344,7 +367,33 @@ async def execute(args, load_release):
 
 
 def _model_config(path):
-    return json.loads(Path(path).read_text()) if path else None
+    from .eval_cases import _unique_object
+
+    if path is None:
+        return None
+    with Path(path).open("rb") as stream:
+        raw = stream.read(65_537)
+    if len(raw) > 65_536:
+        raise ValueError("model configuration exceeds 64 KiB")
+    return json.loads(raw, object_pairs_hook=_unique_object)
+
+
+def _private_report_path(path, root=None):
+    path = Path(path).absolute()
+    if any(p.is_symlink() for p in (path, *path.parents)) or path.exists():
+        raise ValueError("report must be a new file without symlinks")
+    if not path.parent.is_dir():
+        raise ValueError("report parent directory must exist")
+    if root is not None and Path(root).resolve() in path.resolve().parents:
+        raise ValueError("experiment reports must be outside the project")
+    return path
+
+
+def _write_private_report(path, result):
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "w") as stream:
+        json.dump(result, stream, indent=2, allow_nan=False)
+        stream.write("\n")
 
 
 def _mcp_fixtures(path):
@@ -385,7 +434,14 @@ def main(argv=None):
     try:
         from .manifest import load_agent, load_release, source_digest
 
-        if args.command == "init":
+        private_output = None
+        if (getattr(args, "experiment", None) or args.command == "eval-compare") and args.output:
+            private_output = _private_report_path(args.output, getattr(args, "path", None))
+        if args.command == "eval-compare":
+            from .eval_comparison import compare_reports, read_report
+
+            result = compare_reports(read_report(args.baseline), read_report(args.candidate))
+        elif args.command == "init":
             from .scaffold import scaffold
 
             result = scaffold(args.path, args.name)
@@ -393,6 +449,10 @@ def main(argv=None):
             from .quality import explain_quality
 
             result = explain_quality(args.path, agent=args.agent)
+            if args.experiment and args.experiment not in {
+                row["name"] for row in result.get("experiments", [])
+            }:
+                raise ValueError("experiment is not declared by the quality contract")
         elif args.command == "check":
             spec = load_agent(args.path, args.agent)
             result = {
@@ -450,7 +510,9 @@ def main(argv=None):
         else:
             result = asyncio.run(execute(args, load_release))
         encoded = json.dumps(result, indent=2) + "\n"
-        if getattr(args, "output", None) and args.command not in ("run", "dev"):
+        if private_output:
+            _write_private_report(private_output, result)
+        elif getattr(args, "output", None) and args.command not in ("run", "dev"):
             _write_json(Path(args.output), result)
         else:
             print(encoded, end="")
@@ -459,7 +521,14 @@ def main(argv=None):
         return (
             1
             if result.get("status")
-            in ("FAILED", "OUTCOME_UNKNOWN", "REMEDIATION_REQUIRED", "CANCELED")
+            in (
+                "FAILED",
+                "OUTCOME_UNKNOWN",
+                "REMEDIATION_REQUIRED",
+                "CANCELED",
+                "INCONCLUSIVE",
+                "INCOMPLETE",
+            )
             else 0
         )
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as exc:

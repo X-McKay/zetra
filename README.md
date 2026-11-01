@@ -42,6 +42,8 @@ execution and `zetra quality PATH --explain` / `zetra quality PATH` to explain a
 enforce mapped test/evaluation requirements. Explicit model configuration enables
 local inference; fixtures need no services. See [local development and quality
 gates](docs/local-development.md) for examples and the activated starter workflow.
+Named [statistical/live-model experiments](docs/statistical-evals.md) add repeated
+trials, confidence bounds, token/latency summaries and baseline comparisons.
 `zetra dev PATH --temporal --input TEXT` adds a local Temporal server and real
 model/tool checkpoints; the default command keeps no Temporal dependency at runtime.
 

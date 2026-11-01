@@ -1,6 +1,8 @@
 """Compact, bounded experiment evidence and reproducible statistical decisions."""
 
 import hashlib
+import platform
+from importlib import metadata
 from pathlib import Path
 from statistics import mean
 from typing import Annotated, Literal
@@ -155,7 +157,17 @@ def evaluator_digest():
     ]
     names += [p.relative_to(root).as_posix() for p in (root / "_runtime").rglob("*.py")]
     return digest(
-        {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in sorted(names)}
+        {
+            "files": {
+                name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+                for name in sorted(names)
+            },
+            "python": platform.python_version(),
+            "dependencies": {
+                name: metadata.version(name)
+                for name in ("google-adk", "google-genai", "litellm", "openai", "pydantic", "httpx")
+            },
+        }
     )
 
 

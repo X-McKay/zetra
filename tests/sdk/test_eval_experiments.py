@@ -381,3 +381,18 @@ def create_agent(ctx):
     ]
     assert results == [{"count": 1}] * 3
     assert report["summary"]["metrics"]["input_tokens"]["total"] == 60
+
+
+def test_evaluator_identity_changes_when_converter_dependency_changes(monkeypatch):
+    from importlib import metadata
+
+    from zetra.eval_reports import evaluator_digest
+
+    original = metadata.version
+    before = evaluator_digest()
+    monkeypatch.setattr(
+        metadata,
+        "version",
+        lambda name: "different-converter" if name == "google-adk" else original(name),
+    )
+    assert evaluator_digest() != before

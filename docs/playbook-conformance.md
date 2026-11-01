@@ -164,3 +164,15 @@ archive verification precede acceptance; unknown execute outcomes are terminal.
 Legacy releases and recorded histories retain their protocol. See
 [evidence](evidence/runtime-unification-2026-10-31.md) for native tests and remaining
 cluster/model qualification. This branch has not activated a cluster release.
+
+## Statistical development evaluations
+
+Named local experiments use the shared runtime with fixed repeat schedules, complete
+error/not-run accounting, request/time/observed-token bounds, per-case Wilson score
+intervals and conservative baseline comparisons. They do not pool repeated prompts
+as independent tasks. Small samples can be inconclusive; only PASSED exits zero.
+Quality schema 2 validates declared live plans offline and explicitly selects live
+execution. See [statistical evals](statistical-evals.md) for scope and assumptions.
+Synthetic HTTP tests exercise transport and lifecycle, not real-model accuracy.
+No production qualification, policy attestation, deployment or model-quality claim
+is implied by this implementation.
