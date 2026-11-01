@@ -20,6 +20,16 @@ class OutcomeUnknown(RuntimeError):
     pass
 
 
+class ExecutionRefused(RuntimeError):
+    """A trusted model transport's definitive policy or budget refusal."""
+
+    def __init__(self, reason):
+        if reason not in {"policy", "budget"}:
+            raise ValueError("invalid refusal reason")
+        self.reason = reason
+        super().__init__(reason)
+
+
 def freeze(value):
     if isinstance(value, dict):
         return MappingProxyType({k: freeze(v) for k, v in value.items()})
@@ -68,6 +78,12 @@ class Dispatcher:
                     if self.workspace:
                         self.checkpoints[key] = self.workspace.capture()
                     return {"status": status, "value": json.loads(canonical_bytes(value))}
+                except ExecutionRefused as exc:
+                    if operation["kind"] == "model":
+                        raise
+                    # A tool may have performed earlier work before reaching the
+                    # refused request. Refusal is not evidence of rollback.
+                    raise OutcomeUnknown(f"operation outcome unknown: {key}") from exc
                 except Exception as exc:
                     # A body exception cannot establish whether an effect occurred.
                     raise OutcomeUnknown(f"operation outcome unknown: {key}") from exc

@@ -22,6 +22,7 @@ async def local_endpoint():
             {
                 "path": req.path,
                 "authorization": req.headers.get("Authorization"),
+                "host": req.headers.get("Host"),
                 "body": await req.json(),
             }
         )
@@ -82,6 +83,41 @@ async def test_explicit_extra_body_is_forwarded(local_endpoint):
     )
     await executor(model_request(), {}, "local-operation")
     assert sent[0]["body"]["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+async def test_injected_client_preserves_gateway_auth_and_host(local_endpoint):
+    import httpx
+    from openai import AsyncOpenAI
+
+    from zetra._runtime.chat_model import ChatExecutor
+
+    base_url, sent, _ = local_endpoint
+
+    class GatewayAuth(httpx.Auth):
+        def auth_flow(self, request):
+            request.headers["Authorization"] = "Bearer reviewed-gateway-identity"
+            yield request
+
+    def client_factory():
+        return AsyncOpenAI(
+            base_url=base_url,
+            api_key="placeholder",
+            max_retries=0,
+            http_client=httpx.AsyncClient(
+                auth=GatewayAuth(),
+                headers={"Host": "inference.agents.internal"},
+                follow_redirects=False,
+            ),
+        )
+
+    executor = ChatExecutor(
+        base_url=base_url, model=MODEL, api_key="placeholder", client_factory=client_factory
+    )
+    response = await executor(model_request(), {}, "gateway-operation")
+    assert len(sent) == 1
+    assert sent[0]["host"] == "inference.agents.internal"
+    assert sent[0]["authorization"] == "Bearer reviewed-gateway-identity"
+    assert decode_model(LlmResponse, response).content.parts[0].function_call.id == "call-synthetic"
 
 
 @pytest.mark.parametrize("failure", [429, 500, "unknown_tool", "parallel"])

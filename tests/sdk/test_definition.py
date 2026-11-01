@@ -10,6 +10,19 @@ from zetra._runtime.runtime import Runtime
 from zetra.manifest import load_agent
 
 
+def test_deployment_inventory_must_match_the_registered_factory(tmp_path, monkeypatch):
+    root = Path("examples/document_reader")
+    monkeypatch.syspath_prepend(str(root / "src"))
+    spec = load_agent(root)
+    definition = Definition(
+        spec.model_dump(), tmp_path, required_tools={"read_document": "workspace_read"}
+    )
+    assert definition.tools == {"read_document": "workspace_read"}
+    for inventory in ({}, {"read_document": "remote_read"}, {"unregistered": "workspace_read"}):
+        with pytest.raises(ValueError, match="inventory"):
+            Definition(spec.model_dump(), tmp_path, required_tools=inventory)
+
+
 @pytest.mark.parametrize("package,boundaries", [("workspace_reporter", 5), ("document_reader", 3)])
 async def test_two_factories_reconstruct_every_accepted_boundary(
     tmp_path, monkeypatch, package, boundaries

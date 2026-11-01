@@ -8,12 +8,13 @@ from zetra._runtime.records import describe
 
 def test_receipt_cannot_substitute_an_alternate_accepted_prefix(tmp_path):
     tape = Tape(FileStore(tmp_path), manifest="probe-v1")
+    workspace = tape.store.put(b'{"version":1,"files":[],"directories":[]}')
     first = describe("tool", "inspect", {}, index=0)
     accepted = tape.append_candidate(
-        tape.empty(), first, {"status": "succeeded", "value": "real"}
+        tape.empty(workspace), first, {"status": "succeeded", "value": "real"}
     ).position
     alternative = tape.append_candidate(
-        tape.empty(), first, {"status": "succeeded", "value": "forged"}
+        tape.empty(workspace), first, {"status": "succeeded", "value": "forged"}
     ).position
     second = describe("tool", "write", {}, index=1)
     candidate = tape.append_candidate(
@@ -22,10 +23,11 @@ def test_receipt_cannot_substitute_an_alternate_accepted_prefix(tmp_path):
     candidate["previous"] = accepted.head.model_dump()
     activities = Activities(None, None, tape)
 
-    with pytest.raises(ApplicationError, match="candidate does not extend accepted head"):
+    with pytest.raises(ApplicationError, match="invalid candidate receipt") as rejected:
         activities.validate_receipt(
             {"position": accepted.model_dump(), "operation": second}, candidate
         )
+    assert "candidate does not extend the accepted head" in str(rejected.value.__cause__)
 
 
 @pytest.mark.parametrize("corrupt", [False, True])

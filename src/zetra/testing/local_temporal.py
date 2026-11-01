@@ -69,17 +69,22 @@ async def run(request):
     sys.addaudithook(process_guard)
     from zetra._runtime.definition import Definition
     from zetra._runtime.runtime import Runtime
+    from zetra.bindings import MCPFixtures
     from zetra.local import LocalModelConfig
 
     config = settings["model_config"]
     config = LocalModelConfig.model_validate(config) if config is not None else None
     model_binding = (f"openai/{config.model}", config.executor()) if config else None
+    fixtures = MCPFixtures(settings["mcp_fixtures"]) if "mcp_fixtures" in settings else None
     work_root = safe_path(host.root / "work")
     work_root.mkdir(mode=0o700, exist_ok=True)
     sys.path.insert(0, str(Path(settings["project_root"]) / "src"))
     with tempfile.TemporaryDirectory(dir=work_root) as temporary:
         definition = Definition(
-            settings["agent"], Path(temporary) / "workspace", model_binding=model_binding
+            settings["agent"],
+            Path(temporary) / "workspace",
+            model_binding=model_binding,
+            mcp_binding=fixtures.call if fixtures else None,
         )
         inventory = host.root / "inventory.json"
         if inventory.exists():

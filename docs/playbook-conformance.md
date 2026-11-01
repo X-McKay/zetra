@@ -143,3 +143,15 @@ The [starter rollout and local Temporal record](evidence/local-temporal-2026-10-
 separately documents native history/replay, worker/server restart, lost completion,
 supervised cancellation and publication checks. These observations do not qualify
 the production sandbox or the separate platform runtime.
+
+### Shared binding prerequisites
+
+Registered remote-read tools now have a scoped, injected MCP binding. Explicit,
+exact-match offline fixtures flow through local CLI, evaluation, quality reports
+and cold local Temporal boundaries, with independent fixture provenance. Deployed
+definitions can require an exact tool/effect inventory. The shared model converter
+accepts an internal authenticated-client factory, and receipt validation is reused
+by the SDK Activity facade. These are integration prerequisites; they do not by
+themselves migrate or qualify the separate platform runtime. Typed model refusals
+are definitive; refusals inside tools preserve unknown outcomes because earlier
+tool work may already have happened.

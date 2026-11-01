@@ -41,11 +41,13 @@ def parser():
             cmd.add_argument("--mode", choices=["fixture", "local", "sandbox"], required=True)
             cmd.add_argument("--release")
             cmd.add_argument("--model-config")
+            cmd.add_argument("--mcp-fixtures")
     dev = sub.add_parser("dev", help="run trusted project code locally without Temporal")
     dev.add_argument("path")
     dev.add_argument("--agent")
     dev.add_argument("--input", required=True)
     dev.add_argument("--model-config")
+    dev.add_argument("--mcp-fixtures", help="explicit offline MCP fixture JSON")
     dev.add_argument("--timeout", type=float, default=60)
     dev.add_argument("--workspace")
     dev.add_argument("--output", help="new directory for a private report and workspace export")
@@ -64,6 +66,7 @@ def parser():
     quality.add_argument("--explain", action="store_true")
     quality.add_argument("--mode", choices=["fixture", "local"], default="fixture")
     quality.add_argument("--model-config")
+    quality.add_argument("--mcp-fixtures", help="explicit offline MCP fixture JSON")
     quality.add_argument("--output")
     run = sub.add_parser("run")
     run.add_argument("release")
@@ -194,6 +197,7 @@ async def execute(args, load_release):
                     args.input,
                     agent=args.agent,
                     model_config=_model_config(args.model_config),
+                    mcp_fixtures=_mcp_fixtures(args.mcp_fixtures),
                     timeout=args.timeout,
                     workspace=args.workspace,
                     output=args.output,
@@ -210,6 +214,7 @@ async def execute(args, load_release):
             args.input,
             agent=args.agent,
             model_config=_model_config(args.model_config),
+            mcp_fixtures=_mcp_fixtures(args.mcp_fixtures),
             timeout=args.timeout,
             workspace=args.workspace,
             output=args.output,
@@ -222,6 +227,7 @@ async def execute(args, load_release):
             agent=args.agent,
             mode=args.mode,
             model_config=_model_config(args.model_config),
+            mcp_fixtures=_mcp_fixtures(args.mcp_fixtures),
         )
     if args.command == "eval" and args.mode in ("fixture", "local"):
         from .evaluation import evaluate
@@ -231,10 +237,13 @@ async def execute(args, load_release):
             mode=args.mode,
             agent=args.agent,
             model_config=_model_config(args.model_config),
+            mcp_fixtures=_mcp_fixtures(args.mcp_fixtures),
         )
 
     if args.command == "eval" and args.model_config:
         raise ValueError("development model overrides cannot be used in sandbox mode")
+    if args.command == "eval" and args.mcp_fixtures:
+        raise ValueError("MCP fixture overrides cannot be used in sandbox mode")
 
     from temporalio.client import Client
 
@@ -336,6 +345,18 @@ async def execute(args, load_release):
 
 def _model_config(path):
     return json.loads(Path(path).read_text()) if path else None
+
+
+def _mcp_fixtures(path):
+    from .bindings import MCPFixtures
+
+    if path is None:
+        return None
+    with Path(path).open("rb") as stream:
+        data = stream.read(1_048_577)
+    if len(data) > 1_048_576:
+        raise ValueError("MCP fixtures exceed 1 MiB")
+    return MCPFixtures(json.loads(data)).config()
 
 
 @contextmanager

@@ -67,7 +67,7 @@ def write_json(path, value):
 
 
 def validate_settings(settings):
-    if not isinstance(settings, dict) or set(settings) != {
+    if not isinstance(settings, dict) or set(settings) - {"mcp_fixtures"} != {
         "project_root",
         "source_sha256",
         "agent",
@@ -90,12 +90,17 @@ def validate_settings(settings):
         config = LocalModelConfig.model_validate(config).model_dump()
     elif spec.model != "fixture":
         raise ValueError("local inference requires explicit model configuration")
-    return {
+    result = {
         "project_root": str(project),
         "source_sha256": source,
         "agent": spec.model_dump(),
         "model_config": config,
     }
+    if "mcp_fixtures" in settings:
+        from zetra.bindings import MCPFixtures
+
+        result["mcp_fixtures"] = MCPFixtures(settings["mcp_fixtures"]).config()
+    return result
 
 
 def verify_inputs(settings):

@@ -18,10 +18,10 @@ async def test_receipt_validation_runs_off_loop_under_heartbeat(monkeypatch):
     )
 
     class Tape:
-        def load(self, position):
+        def validate_receipt(self, position, operation, receipt):
             assert threading.get_ident() != thread
             assert calls
-            raise ValueError("validation reached")
+            raise RuntimeError("validation reached")
 
     class Transport:
         async def call(self, action, command):
@@ -34,7 +34,9 @@ async def test_receipt_validation_runs_off_loop_under_heartbeat(monkeypatch):
             }
 
     with pytest.raises(Exception, match="validation reached"):
-        await Activities(None, Transport(), Tape()).execute({"position": {"cursor": 0}})
+        await Activities(None, Transport(), Tape()).execute(
+            {"position": {"cursor": 0}, "operation": {}}
+        )
 
 
 @pytest.mark.parametrize("action", ["provision", "close"])

@@ -55,9 +55,12 @@ async def fixture_model(payload, state, key):
 
 
 class Definition:
-    def __init__(self, spec, workspace, *, model_binding=None):
+    def __init__(
+        self, spec, workspace, *, model_binding=None, mcp_binding=None, required_tools=None
+    ):
         self.spec = AgentSpec.model_validate(spec).validate_policy()
         self.workspace = Path(workspace)
+        self.mcp_binding = mcp_binding
         self.instruction = ""
         if self.spec.instructions:
             package, resource = resource_parts(self.spec.instructions)
@@ -80,6 +83,8 @@ class Definition:
         ]
         self.registry = context.executors()
         self.tools = {name: tool.effect for name, tool in context._specs.items()}
+        if required_tools is not None and self.tools != required_tools:
+            raise ValueError("deployed tool inventory differs from the registered factory")
         self.registry[self.model] = (
             model_binding[1]
             if model_binding is not None
@@ -101,5 +106,9 @@ class Definition:
 
     def context(self, bridge):
         return AgentContext(
-            bridge, workspace=self.workspace, model=self.model, instruction=self.instruction
+            bridge,
+            workspace=self.workspace,
+            model=self.model,
+            instruction=self.instruction,
+            mcp_binding=self.mcp_binding,
         )

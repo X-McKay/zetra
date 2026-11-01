@@ -1,17 +1,14 @@
 """Activity transport facade: heartbeat remote work and validate artifact receipts."""
 
 import asyncio
-import json
 from contextlib import suppress
 
 import grpc
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
-from .artifacts import Position, Receipt
 from .records import canonical_bytes, verify_operation
 from .transport import enforce_payload_size
-from .workspace import validate_snapshot
 
 
 class Activities:
@@ -86,27 +83,12 @@ class Activities:
         return await self.heartbeating(operation())
 
     def validate_receipt(self, command, result):
-        receipt = Receipt.model_validate(result)
-        self.tape.load(receipt.position)
-        previous = Position.model_validate(command["position"])
-        op = verify_operation(
-            command["operation"], manifest=self.tape.manifest, index=previous.cursor
-        )
-        self.tape.load(previous)
-        node = json.loads(self.tape.store.get(receipt.position.head))
-        if node["previous"] != (previous.head.model_dump() if previous.head else None):
-            raise ApplicationError("candidate does not extend accepted head", non_retryable=True)
-        entries = self.tape.load(receipt.position)
-        if (
-            receipt.previous != previous.head
-            or entries[-1]["operation"] != op
-            or receipt.position.cursor != previous.cursor + 1
-        ):
-            raise ApplicationError("invalid candidate chain", non_retryable=True)
-        if receipt.position.workspace is None:
-            raise ApplicationError("candidate has no workspace checkpoint", non_retryable=True)
-        validate_snapshot(self.tape.store.get(receipt.position.workspace))
-        return receipt.model_dump()
+        try:
+            return self.tape.validate_receipt(
+                command["position"], command["operation"], result
+            ).model_dump()
+        except ValueError as exc:
+            raise ApplicationError("invalid candidate receipt", non_retryable=True) from exc
 
     @activity.defn
     async def execute_model(self, command: dict) -> dict:

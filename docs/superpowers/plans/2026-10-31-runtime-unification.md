@@ -30,14 +30,14 @@
 
 **Files:** src/zetra/agent.py; _runtime/definition.py, chat_model.py, dispatch.py, artifacts.py, activities.py; new bindings.py; local.py, local_temporal.py, evaluation.py, quality.py, cli.py and testing/local_temporal.py; focused tests/sdk and tests/provider tests.
 **Interfaces:** Definition(..., mcp_binding=None, required_tools=None); AgentContext.mcp(backend, tool, arguments); MCPFixtures validated mapping/bind/provenance; ChatExecutor internal client_factory; shared Tape.validate_receipt(previous, operation, receipt).
-- [ ] Write failing tests for MCP scope/unbound/changed inventory, strict fixtures/provenance across local and Temporal, injected transport and receipt mismatch.
-- [ ] Implement context-scoped MCP execution, explicit fixture plumbing and strict reusable receipt validation.
-- [ ] Verify default local behavior, quality accounting, credential non-disclosure and existing provider/capture regressions.
-- [ ] Record results and commit SDK prerequisites; publish only when verified so platform dependencies can pin the exact revision.
+- [x] Write failing tests for MCP scope/unbound/changed inventory, strict fixtures/provenance across local and Temporal, injected transport and receipt mismatch.
+- [x] Implement context-scoped MCP execution, explicit fixture plumbing and strict reusable receipt validation.
+- [x] Verify default local behavior, quality accounting, credential non-disclosure and existing provider/capture regressions.
+- [x] Record results and commit SDK prerequisites; publish only when verified so platform dependencies can pin the exact revision.
 
 ### Task 2: Core guest protocol and authenticated model adapter
 
-**Files:** new src/zetra/_runtime/platform.py (strict protocol primitives); platform/agent-runtime/agent_runtime/core_step.py and core_model.py; gateway.py; pyproject/lock; tests/test_core_step.py and test_core_model.py.
+**Files:** platform/agent-runtime/agent_runtime/core_protocol.py (strict protocol primitives); platform/agent-runtime/agent_runtime/core_step.py and core_model.py; gateway.py; pyproject/lock; tests/test_core_step.py and test_core_model.py.
 **Interfaces:** versioned release identity and prepare/execute commands; `core_step` length-prefixed subprocess; replies carry operation/done or candidate Receipt. Objects live under state/core/objects, lease and immutable attempt admission under state/core.
 - [ ] Write failing real subprocess tests for model/tool/model, cold reconstruction, wrong identity/operation, duplicate attempts and arbitrary tool failure.
 - [ ] Implement strict packaged definition envelope loader, trusted pod binding, shared Runtime adapter and bounded sanitized output.
@@ -96,3 +96,8 @@ configuration and checked during adoption and guest commands, not learned from s
 Original-run guards reject resets/retries/continuations before activation. Typed model
 refusals terminate without acceptance; tool refusals preserve uncertainty and a separate
 reason. No additional user choice was needed for these safety-preserving details.
+
+Ruling: the platform wire protocol belongs in agent_runtime.core_protocol, not in
+the neutral SDK. Publish the SDK binding prerequisite first, then the adapter;
+the runner consumes the pinned adapter protocol. This avoids a self-referential
+Git pin and keeps the core independent of platform transport details.
