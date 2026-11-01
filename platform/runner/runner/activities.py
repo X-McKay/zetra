@@ -27,6 +27,7 @@ from temporalio.exceptions import ApplicationError
 
 from runner import records
 from runner.aps import APS
+from runner.core import CORE_ACTIVITIES
 from runner.types import (
     ApsSession,
     BoundaryIn,
@@ -326,7 +327,7 @@ def _forbidden(message: str) -> ApplicationError:
 
 
 @activity.defn
-def preflight(inp: SessionInput) -> None:
+def preflight(inp: SessionInput) -> dict | None:
     try:
         inp.validate()
     except InvalidInput as e:
@@ -353,6 +354,11 @@ def preflight(inp: SessionInput) -> None:
         grant = d.aps.get(f"/v1/grants/{inp.grant_handle}") if inp.grant_handle else None
         if not grant or grant.get("session_id") != inp.session_id:
             raise _forbidden("delegated session without a grant")
+    if "runtimeProfile" in (rel.get("spec") or {}):
+        from runner.core import preflight_configuration
+
+        return preflight_configuration(d, inp, rel)
+    return None
 
 
 @activity.defn
@@ -698,6 +704,7 @@ def close_session(c: ClosedSession) -> str:
 
 
 SESSION_ACTIVITIES = [
+    *CORE_ACTIVITIES,
     preflight,
     set_generation,
     create_sandbox,

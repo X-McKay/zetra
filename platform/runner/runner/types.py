@@ -171,6 +171,14 @@ class SessionResult:
 
 
 @dataclass
+class CoreSessionResult(SessionResult):
+    runtime_profile: str = "zetra-core-v1"
+    position: dict | None = None
+    reason: str | None = None
+    final_text: str | None = None
+
+
+@dataclass
 class GenIn:
     inp: SessionInput
     generation: int

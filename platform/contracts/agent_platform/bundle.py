@@ -119,6 +119,14 @@ def compile_bundle(
         routes[MCP_HOST] = sorted(f"/{b}/mcp" for b in mcp)
 
     runtime = spec.get("runtime") or {}
+    compiled_runtime = {
+        "ttl_seconds": int(runtime.get("ttlSeconds", SANDBOX_TTL_SECONDS)),
+        "max_boundaries": int(runtime.get("maxBoundaries", MAX_BOUNDARIES)),
+    }
+    if "runtimeProfile" in rspec:
+        if rspec["runtimeProfile"] != "zetra-core-v1":
+            raise ValueError("unsupported runtimeProfile")
+        compiled_runtime["execution_profile"] = rspec["runtimeProfile"]
     return {
         "version": BUNDLE_VERSION,
         "tenant": tenant,
@@ -132,10 +140,7 @@ def compile_bundle(
         "models": models,
         "mcp": mcp,
         "budgets": _budgets(models_in),
-        "runtime": {
-            "ttl_seconds": int(runtime.get("ttlSeconds", SANDBOX_TTL_SECONDS)),
-            "max_boundaries": int(runtime.get("maxBoundaries", MAX_BOUNDARIES)),
-        },
+        "runtime": compiled_runtime,
     }
 
 

@@ -231,6 +231,7 @@ def _patch(monkeypatch, fake: FakeActivities) -> None:
     monkeypatch.setattr(workflow, "execute_activity", execute_activity)
     monkeypatch.setattr(workflow, "wait", asyncio.wait)
     monkeypatch.setattr(workflow, "time", time.monotonic)
+    monkeypatch.setattr(workflow, "patched", lambda name: True)
     monkeypatch.setattr(workflow, "now", lambda: datetime.now(UTC))
     monkeypatch.setattr(workflow.unsafe, "is_replaying", staticmethod(lambda: False))
 

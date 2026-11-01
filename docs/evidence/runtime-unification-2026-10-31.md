@@ -59,3 +59,25 @@ Temporal before importing agent code. The probe failed before the guard, then
 passed with no child created. Complete runtime verification after this correction:
 **92 passed** (72.83 seconds), with Ruff/format checks passing. The guard covers
 cooperative Python APIs, not hostile native code; it is not a sandbox claim.
+
+## Platform host integration
+
+Core releases now bind their profile into the signed policy input and immutable
+release schema. Legacy policy bytes remain unchanged. The runner accepts only
+fully validated, durably persisted checkpoints; execute loss and checkpoint
+exhaustion never redispatch the effect. Core results carry Position, reason and
+final text; legacy result payloads and recorded Activity order remain supported.
+
+Final affected suites: contracts **57 passed**, controller **69 passed**, runner
+**195 passed**, including native Temporal execution/replay, cancellation, complete
+legacy completed/replacement/refusal histories and complete core histories.
+The new controller test initially failed because its fixture computed a legacy
+policy digest before adding the profile; constructing the correct signed input
+fixed it. A separate test proves profile/digest drift is refused.
+
+Archive collection and restore share one worker memory slot, with heartbeats while
+waiting. A concurrency regression failed before this bound and passed after it.
+New histories skip cleanup before session activation; a Temporal patch preserves
+old refusal-history cleanup on replay. Kubani's CRD receives only the optional
+immutable profile field, preserving its newer verifiedSigner schema. Local
+Kustomize rendering is not cluster admission or resource-capacity qualification.

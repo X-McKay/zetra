@@ -366,3 +366,40 @@ def test_bundle_in_configmap_matches_contracts(world, cfg):
         world.get("v1", "ConfigMap", "tenant-a", "policy-investigator-r1")["data"]["bundle.json"]
     )
     assert have == want
+
+
+def test_core_profile_is_signed_policy_input_and_rendered_release_binding(world):
+    release = make_release(AGENT, world.cfg, runtimeProfile="zetra-core-v1")
+    release["spec"]["policySha256"] = digest_hex(
+        compile_bundle(
+            AGENT,
+            release,
+            mcp_resource_base=world.cfg.platform.mcp_resource_base,
+            trust_domain=world.cfg.platform.trust_domain,
+        )
+    )
+    world.add(AGENT)
+    world.add(release)
+    world.reconcile_agent()
+    release = world.release()
+    assert release["status"]["ready"] is True
+    bundle = json.loads(
+        world.get("v1", "ConfigMap", "tenant-a", "policy-investigator-r1")["data"]["bundle.json"]
+    )
+    assert bundle["runtime"]["execution_profile"] == "zetra-core-v1"
+    assert digest_hex(bundle) == release["spec"]["policySha256"]
+    pod = yaml.safe_load(
+        world.get("v1", "ConfigMap", "tenant-a", "podtemplate-investigator-r1")["data"]["pod.yaml"]
+    )
+    env = {entry["name"]: entry["value"] for entry in pod["spec"]["containers"][0]["env"]}
+    binding = json.loads(env["AGENT_RELEASE_BINDING"])
+    assert binding["policy_sha256"] == release["spec"]["policySha256"]
+    assert binding["manifest_sha256"] == release["spec"]["manifestSha256"]
+    assert binding["profile"] == "zetra-core-v1"
+
+
+def test_adding_core_profile_with_legacy_policy_digest_is_not_ready(world):
+    release = setup(world)
+    release["spec"]["runtimeProfile"] = "zetra-core-v1"
+    status = world.rec.reconcile_release(release)
+    assert status["ready"] is False and status["policyDrift"] is True

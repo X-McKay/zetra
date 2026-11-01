@@ -48,11 +48,11 @@
 
 **Files:** platform/runner/runner/core.py (activities and archive validation), workflow.py, activities.py, types.py, worker.py, pyproject/lock; contracts bundle/podtemplate; AgentRelease CRD in SDK and Kubani; new protocol/workflow/contract tests.
 **Interfaces:** preflight returns null for legacy or immutable core configuration for core releases; prepare_core, execute_core, snapshot_core Activities; snapshot returns verified Position plus archive digest and effect metadata.
-- [ ] Write failing tests for explicit profile binding, stable legacy digest, immutable CRD profile and pod environment identity.
-- [ ] Add nonlegacy runtimeProfile to signed policy compilation and release admission without changing legacy policy outputs.
-- [ ] Implement versioned workflow branch, effect-free completion, strictly one execute attempt and post-snapshot acceptance.
-- [ ] Validate full receipt/tape/workspace and bounded link-free archive before immutable upload; test corruption, path attacks, source/candidate mismatches and token exclusion.
-- [ ] Test accepted-prefix replacement, execute loss, snapshot retry/exhaustion, cancellation and cleanup; replay complete legacy and core histories with a real server.
+- [x] Write failing tests for explicit profile binding, stable legacy digest, immutable CRD profile and pod environment identity.
+- [x] Add nonlegacy runtimeProfile to signed policy compilation and release admission without changing legacy policy outputs.
+- [x] Implement versioned workflow branch, effect-free completion, strictly one execute attempt and post-snapshot acceptance.
+- [x] Validate full receipt/tape/workspace and bounded link-free archive before immutable upload; test corruption, path attacks, source/candidate mismatches and token exclusion.
+- [x] Test accepted-prefix replacement, execute loss, snapshot retry/exhaustion, cancellation and cleanup; replay complete legacy and core histories with a real server.
 
 ### Task 4: Reference agents and release integration
 
