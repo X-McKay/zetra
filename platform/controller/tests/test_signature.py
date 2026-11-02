@@ -130,6 +130,10 @@ def test_keyless_verifies_identity_and_every_attestation():
     assert "--key" not in verify
     types = [a[a.index("--type") + 1] for a in run.argv[1:]]
     assert types == list(SIGNER.required_attestations)
+    for attest in run.argv[1:]:
+        # cosign 2.x refuses --trusted-root here for attestations that are not new bundles.
+        assert "--trusted-root" not in attest
+        assert attest[attest.index("--rekor-url") + 1] == "https://rekor.example"
 
 
 def test_keyless_without_signer_fails_closed():

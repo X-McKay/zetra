@@ -179,8 +179,7 @@ class KeylessVerifier:
         if not trusted_root:
             raise ValueError("keyless verification needs a trusted root")
         self._trust = ["--trusted-root", trusted_root]
-        if rekor_url:
-            self._trust += ["--rekor-url", rekor_url]
+        self._rekor = ["--rekor-url", rekor_url] if rekor_url else []
         self._cosign = _Cosign(cosign, timeout, run, env)
         self._cache = _Cache(cache_seconds)
 
@@ -194,7 +193,7 @@ class KeylessVerifier:
 
     def _identity(self, signer: SignerIdentity) -> list[str]:
         return [
-            *self._trust,
+            *self._rekor,
             "--certificate-oidc-issuer",
             signer.issuer,
             "--certificate-identity-regexp",
@@ -208,13 +207,17 @@ class KeylessVerifier:
     ) -> Verification:
         if "@sha256:" not in image:
             return Verification(False, "ImageNotPinned")
-        out = self._cosign("verify", *self._identity(signer), image)
+        out = self._cosign("verify", *self._trust, *self._identity(signer), image)
         if out is None:
             return Verification(False, "SignatureRejected")
         identity = signing_identity(out)
         if identity is None or not signer.matches(*identity):
             return Verification(False, "SignerMismatch")
 
+        # cosign 2.x refuses --trusted-root on verify-attestation unless the attestations
+        # are new-format bundles, which ours are not. It takes the same roots from the
+        # SIGSTORE_ROOT_FILE, SIGSTORE_REKOR_PUBLIC_KEY and SIGSTORE_CT_LOG_PUBLIC_KEY_FILE
+        # environment variables, which the deployment must set.
         for predicate_type in signer.required_attestations:
             out = self._cosign(
                 "verify-attestation", *self._identity(signer), "--type", predicate_type, image
