@@ -33,7 +33,7 @@ The Registry Controller has three signature profiles, chosen with
 | --- | --- |
 | `homelab` | `cosign verify --key` on the image |
 | `enterprise` | the above, plus a release attestation carrying `manifestSha256` and `policySha256` |
-| `keyless` | a Fulcio certificate from the private Sigstore (`REGISTRY_SIGSTORE_TRUSTED_ROOT`, optional `REGISTRY_SIGSTORE_REKOR_URL`) whose issuer and subject match the tenant namespace's declaration, plus every attestation the namespace requires, signed by the same identity |
+| `keyless` | a Fulcio certificate from the private Sigstore (`REGISTRY_SIGSTORE_TRUSTED_ROOT`, optional `REGISTRY_SIGSTORE_REKOR_URL`, and `SIGSTORE_ROOT_FILE`, `SIGSTORE_REKOR_PUBLIC_KEY` and `SIGSTORE_CT_LOG_PUBLIC_KEY_FILE` with the same roots for attestations) whose issuer and subject match the tenant namespace's declaration, plus every attestation the namespace requires, signed by the same identity |
 
 The namespace declaration is a set of annotations, read by both the controller
 and Kyverno (`agent_platform.signing`):
