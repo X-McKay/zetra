@@ -87,6 +87,22 @@ def client_id(tenant: str, agent: str) -> str:
     return f"agent-{tenant}-{agent}"
 
 
+def sandbox_prefix(session_id: str) -> str:
+    """Every generation of a session's sandbox is `s-<hash>-g<n>` (activities.pod_name)."""
+    return pod_name(session_id, 0)[:-1]
+
+
+def failure_type(exc: BaseException) -> str:
+    """The ApplicationError type behind a workflow failure, else the outermost class name."""
+    cause: BaseException | None = exc
+    while cause is not None:
+        kind = getattr(cause, "type", None)
+        if isinstance(kind, str) and kind:
+            return kind
+        cause = cause.__cause__
+    return type(exc).__name__
+
+
 # --- test definitions -------------------------------------------------------------------------
 
 
@@ -172,8 +188,9 @@ def t5_direct_cases(issuer_token_path: str, aps_token_path: str) -> list[DirectC
 @dataclass
 class SessionRun:
     session_id: str
-    pod: str
+    pod: str  # the sandbox of the generation that finished (the first, until known)
     outcome: str
+    generation: int = 1
     boundaries: list[dict] = field(default_factory=list)
     final_summary: str = ""
     started: str = ""
@@ -224,11 +241,13 @@ def status_from_summary(summary: str) -> int | None:
 
 
 def evaluate_t4(run: SessionRun, aps_lines: list[dict], tenant: str) -> dict:
+    # Any generation of this session's sandbox: a replaced sandbox (spec 10.5) asks again.
+    prefix = sandbox_prefix(run.session_id)
     issued = [
         line
         for line in aps_lines
         if line.get("msg") == "token issued"
-        and line.get("pod") == run.pod
+        and str(line.get("pod", "")).startswith(prefix)
         and line.get("namespace") == tenant
     ]
     probes = run.tool_boundaries("probe_files")
@@ -256,6 +275,8 @@ def evaluate_t4(run: SessionRun, aps_lines: list[dict], tenant: str) -> dict:
 def evaluate_t5_sandbox(case: SandboxCase, run: SessionRun, aps_lines: list[dict]) -> dict:
     probes = run.tool_boundaries("probe_http")
     status = status_from_summary(run.final_summary)
+    # The 400/401 refusal paths log no pod, so refusals in the case's window from any client
+    # count; the status the probe reported is what ties the case to its own request.
     refused = [line for line in aps_lines if line.get("msg") == "token route refused"]
     forwarded = [line for line in aps_lines if line.get("msg") == "token issued"]
     checks = {
@@ -354,15 +375,19 @@ class Harness:
         try:
             result: SessionResult = await asyncio.wait_for(handle.result(), self.session_timeout)
             run.outcome = result.outcome
+            run.generation = max(result.generation, 1)
+            run.pod = pod_name(session_id, run.generation)
         except WorkflowFailureError as e:
-            run.outcome = f"FAILED:{type(e.cause).__name__}"
+            run.outcome = f"FAILED:{failure_type(e.cause)}"
         except TimeoutError:
+            # The workflow would otherwise run on beside the next case, up to its own deadline.
             run.outcome = "HARNESS_TIMEOUT"
+            await handle.cancel()
         run.finished = utcnow()
         events = [ev async for ev in handle.fetch_history_events()]
         try:
             boundaries = await boundaries_from_events(events, self.client.data_converter)
-        except ValueError as e:
+        except Exception as e:  # noqa: BLE001 - a wrong key raises InvalidTag, not ValueError
             run.outcome = f"{run.outcome}:undecodable_history:{type(e).__name__}"
             boundaries = []
         run.boundaries = [asdict(b) for b in boundaries]
