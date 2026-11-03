@@ -17,6 +17,7 @@ supported until the platform's Phase B conformance tests pass on a cluster.
 | `platform/agent-runtime` | 11 | `agent_runtime` sandbox SDK baked into agent images |
 | `platform/aps` | 9 | Agent Policy Service (Go): ext_authz, token and grants API, Redis ledger and vault, settlement |
 | `platform/runner` | 10 | Session Runner, cleanup reconciler, AES-GCM payload codec |
+| `platform/runner` (`runner/conformance.py`) | 15 | Phase B conformance harness: `agent-conformance` submits sessions of the conformance agent, reads their boundaries from Temporal history and the APS log, and writes a JSON report (T4, T5 so far) |
 
 Each directory is its own project with its own lock. `just platform-check` runs
 every project's lint and tests; tests that need a cluster are marked `cluster`
