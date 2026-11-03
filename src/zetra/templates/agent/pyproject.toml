@@ -9,7 +9,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = ["zetra @ git+https://github.com/X-McKay/zetra.git@af2e7542b89265eaa4572a586719a67e58238e74"]
 
 [dependency-groups]
-dev = ["pytest>=8,<9", "ruff>=0.11,<1"]
+dev = ["pytest>=9.0.3,<10", "ruff>=0.11,<1"]
 
 [tool.zetra.agents]
 document_reader = "src/agent_package/agents/document_reader/agent.yaml"
