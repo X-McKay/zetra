@@ -13,6 +13,7 @@ dependencies = [
 [project.scripts]
 agent-session-runner = "runner.worker:main"
 agent-session-submit = "runner.submit:main"
+agent-conformance = "runner.conformance:main"
 
 [dependency-groups]
 dev = [

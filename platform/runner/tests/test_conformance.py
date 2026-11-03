@@ -1,0 +1,311 @@
+"""The conformance harness: pass criteria, evidence decoding and token hygiene, without a
+cluster. The T4/T5 runs themselves are the cluster tests (docs/platform.md)."""
+
+from __future__ import annotations
+
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import pytest
+from temporalio.api.enums.v1 import EventType
+from temporalio.api.history.v1 import HistoryEvent
+from temporalio.converter import DataConverter
+
+from runner import conformance as c
+from runner.activities import pod_name
+from runner.types import BoundaryOut, SessionInput, Usage
+
+FAKE_JWT = "eyJ" + "h" * 24 + "." + "p" * 24 + "." + "s" * 24  # built at runtime, not a secret
+TENANT, AGENT = "tenant-test", "conformance"
+SESSION = "6f1d2c3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f"
+
+
+def run(outcome="COMPLETED", tool="probe_files", summary="", session=SESSION) -> c.SessionRun:
+    r = c.SessionRun(session, pod_name(session, 1), outcome)
+    r.boundaries = [
+        {
+            "boundary": 0,
+            "kind": "model",
+            "done": False,
+            "tool": None,
+            "usage": None,
+            "summary": "t",
+        },
+        {"boundary": 1, "kind": "tool", "done": False, "tool": tool, "usage": None, "summary": "x"},
+    ]
+    r.final_summary = summary
+    return r
+
+
+def issued(pod: str, namespace: str = TENANT) -> dict:
+    return {"msg": "token issued", "jti": "j1", "agent_id": "a", "pod": pod, "namespace": namespace}
+
+
+# --- definitions ----------------------------------------------------------------------------------
+
+
+def test_every_case_is_a_valid_session_input():
+    for case in [c.t4_case(), *c.t5_sandbox_cases(TENANT, AGENT)]:
+        SessionInput(TENANT, AGENT, "conformance-r1", SESSION, None, case.task()).validate()
+
+
+def test_t5_cases_cover_the_refusal_matrix():
+    cases = {k.name: k for k in c.t5_sandbox_cases(TENANT, AGENT)}
+    assert set(cases) == {
+        "password_grant",
+        "token_exchange_grant",
+        "client_secret",
+        "non_jwt_assertion",
+        "extra_field",
+        "duplicate_field",
+    }
+    for case in cases.values():
+        assert case.args["host_header"] == c.TOKEN_HOST and case.args["auth"] == "none"
+        assert json.loads(case.args["form"])  # a form the probe can encode
+    assert (
+        json.loads(cases["duplicate_field"].args["form"])["client_id"]
+        == ["agent-tenant-test-conformance"] * 2
+    )
+    assert [d.expect_status for d in c.t5_direct_cases("/i", "/a")] == [403, 401]
+
+
+# --- evidence -------------------------------------------------------------------------------------
+
+
+async def test_boundaries_are_decoded_from_run_boundary_results_only():
+    conv = DataConverter.default
+    out = BoundaryOut(1, "tool", False, "probe_files", Usage(1, 2), "probe_files -> ['files']")
+    scheduled = HistoryEvent(event_id=5, event_type=EventType.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
+    scheduled.activity_task_scheduled_event_attributes.activity_type.name = "run_boundary"
+    other = HistoryEvent(event_id=7, event_type=EventType.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
+    other.activity_task_scheduled_event_attributes.activity_type.name = "snapshot_workspace"
+    done = HistoryEvent(event_id=6, event_type=EventType.EVENT_TYPE_ACTIVITY_TASK_COMPLETED)
+    done.activity_task_completed_event_attributes.scheduled_event_id = 5
+    done.activity_task_completed_event_attributes.result.payloads.extend(
+        await conv.encode(
+            [
+                json.loads(
+                    json.dumps(out.__dict__ | {"usage": {"input_tokens": 1, "output_tokens": 2}})
+                )
+            ]
+        )
+    )
+    snap = HistoryEvent(event_id=8, event_type=EventType.EVENT_TYPE_ACTIVITY_TASK_COMPLETED)
+    snap.activity_task_completed_event_attributes.scheduled_event_id = 7
+    snap.activity_task_completed_event_attributes.result.payloads.extend(await conv.encode(["abc"]))
+
+    assert await c.boundaries_from_events([scheduled, other, done, snap], conv) == [out]
+
+
+def test_aps_log_keeps_only_token_route_events():
+    text = "\n".join(
+        [
+            "not json",
+            json.dumps({"msg": "ext_authz allow", "x": 1}),
+            json.dumps({"msg": "token route refused", "reason": "unsupported_grant_type"}),
+            json.dumps(issued("s-1-g1")),
+            "",
+        ]
+    )
+    assert [line["msg"] for line in c.parse_aps_log(text)] == [
+        "token route refused",
+        "token issued",
+    ]
+
+
+@pytest.mark.parametrize(
+    "summary,status",
+    [
+        ('{"status": 401, "body": "{\\"error\\":\\"invalid_client\\"}"}', 401),
+        ("The probe returned status=400 (invalid_request).", 400),
+        ("The request was refused with 403 forbidden", 403),
+        ("connected", None),
+    ],
+)
+def test_status_is_read_from_the_model_report(summary, status):
+    assert c.status_from_summary(summary) == status
+
+
+# --- pass criteria --------------------------------------------------------------------------------
+
+
+def test_t4_passes_when_the_aps_issued_a_token_to_that_pod():
+    r = run(
+        summary='{"files": [{"path": "/sandbox/state/token.json", "claims": [{"aud": "agent-gateway"}]}]}'
+    )
+    out = c.evaluate_t4(r, [issued(r.pod)], TENANT)
+    assert out["result"] == "pass" and all(out["checks"].values())
+    assert out["evidence"]["token_issued"][0]["pod"] == r.pod
+
+
+@pytest.mark.parametrize(
+    "r,lines",
+    [
+        (run(), []),  # no issuance seen
+        (run(), [issued("s-other-g1")]),  # another pod's token
+        (run(), [issued(pod_name(SESSION, 1), "tenant-other")]),  # another tenant
+        (run(outcome="FAILED"), [issued(pod_name(SESSION, 1))]),
+        (run(tool="probe_env"), [issued(pod_name(SESSION, 1))]),
+    ],
+)
+def test_t4_fails_without_its_required_evidence(r, lines):
+    assert c.evaluate_t4(r, lines, TENANT)["result"] == "fail"
+
+
+def test_t4_records_a_second_issuance_without_failing():
+    r = run()
+    out = c.evaluate_t4(r, [issued(r.pod), issued(r.pod)], TENANT)
+    assert out["result"] == "pass" and out["checks"]["one_token_per_sandbox"] is False
+
+
+def test_t5_sandbox_case_passes_on_expected_status_and_logged_refusal():
+    case = c.t5_sandbox_cases(TENANT, AGENT)[0]
+    r = run(tool="probe_http", summary='{"status": 400, "body": "...", "claims": []}')
+    refusal = {"msg": "token route refused", "reason": "unsupported_grant_type"}
+    out = c.evaluate_t5_sandbox(case, r, [refusal, issued(r.pod)])
+    assert out["result"] == "pass" and out["observed_status"] == 400
+    assert out["evidence"]["refusals"] == [{"reason": "unsupported_grant_type"}]
+    assert out["evidence"]["issued_during_case"] == 1
+
+
+@pytest.mark.parametrize(
+    "summary,lines",
+    [
+        ('{"status": 200}', [{"msg": "token route refused"}]),  # wrong status
+        ('{"status": 400}', []),  # nothing refused at the APS
+        ("done", [{"msg": "token route refused"}]),  # no status reported
+    ],
+)
+def test_t5_sandbox_case_fails_otherwise(summary, lines):
+    case = c.t5_sandbox_cases(TENANT, AGENT)[0]
+    assert (
+        c.evaluate_t5_sandbox(case, run(tool="probe_http", summary=summary), lines)["result"]
+        == "fail"
+    )
+
+
+def test_t5_direct_case_never_accepts_a_token_in_the_reply():
+    case = c.DirectCase("non_sandbox_pod", "/t", 403)
+    assert (
+        c.evaluate_t5_direct(case, 403, '{"error":"forbidden","reason":"not_an_agent"}', None)[
+            "result"
+        ]
+        == "pass"
+    )
+    assert c.evaluate_t5_direct(case, 401, "{}", None)["result"] == "fail"
+    assert c.evaluate_t5_direct(case, None, "", "URLError")["result"] == "fail"
+    bad = c.evaluate_t5_direct(case, 403, '{"access_token":"' + FAKE_JWT + '"}', None)
+    assert bad["result"] == "fail" and FAKE_JWT not in json.dumps(bad)
+
+
+def test_summary_is_the_worst_result():
+    assert c.summarize([{"result": "pass"}, {"result": "fail"}]) == "fail"
+    assert c.summarize([{"result": "fail"}, {"result": "error"}]) == "error"
+    assert c.summarize([{"result": "pass"}]) == "pass"
+
+
+def test_scrub_removes_every_token_shape():
+    doc = {"a": [FAKE_JWT, {"b": "Bearer " + "x" * 30}], FAKE_JWT: "ok"}
+    text = json.dumps(c.scrub(doc))
+    assert FAKE_JWT not in text and "Bearer " + "x" * 30 not in text
+    assert text.count("[redacted]") == 3
+
+
+# --- the direct cases against a fake APS ----------------------------------------------------------
+
+
+@pytest.fixture
+def fake_aps():
+    seen: list[dict] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            form = dict(
+                (k, v[0])
+                for k, v in __import__("urllib.parse")
+                .parse.parse_qs(self.rfile.read(length).decode())
+                .items()
+            )
+            seen.append(form)
+            status = 403 if form.get("client_assertion") == "issuer-token" else 401
+            body = json.dumps(
+                {"error": "forbidden" if status == 403 else "invalid_client"}
+            ).encode()
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}", seen
+    server.shutdown()
+
+
+async def test_t5_direct_cases_post_the_pod_tokens_and_never_log_them(fake_aps, tmp_path, caplog):
+    url, seen = fake_aps
+    (tmp_path / "issuer").write_text("issuer-token\n")
+    (tmp_path / "aps").write_text(FAKE_JWT)
+
+    async def no_logs(since: float) -> str:
+        return ""
+
+    h = c.Harness(
+        client=None,
+        tenant=TENANT,
+        agent=AGENT,
+        release="conformance-r1",
+        aps_logs=no_logs,
+        aps_url=url,
+        issuer_token_path=str(tmp_path / "issuer"),
+        aps_token_path=str(tmp_path / "aps"),
+    )
+    # Only the direct cases: no Temporal client, so the sandbox cases are skipped by monkeypatch.
+    h.run_session = None  # type: ignore[assignment]
+    c_cases = c.t5_sandbox_cases  # keep a reference for restoration
+    c.t5_sandbox_cases = lambda tenant, agent: []  # type: ignore[assignment]
+    try:
+        out = await h.t5()
+    finally:
+        c.t5_sandbox_cases = c_cases  # type: ignore[assignment]
+    assert [k["result"] for k in out["cases"]] == ["pass", "pass"] and out["result"] == "pass"
+    assert [s["client_assertion"] for s in seen] == ["issuer-token", FAKE_JWT]
+    assert all(s["client_id"] == "agent-tenant-test-conformance" for s in seen)
+    assert FAKE_JWT not in json.dumps(c.scrub(out))
+
+
+async def test_t5_direct_case_is_an_error_when_the_token_file_is_missing(fake_aps, tmp_path):
+    url, _ = fake_aps
+
+    async def no_logs(since: float) -> str:
+        return ""
+
+    h = c.Harness(
+        None,
+        TENANT,
+        AGENT,
+        "r1",
+        no_logs,
+        aps_url=url,
+        issuer_token_path=str(tmp_path / "missing"),
+        aps_token_path=str(tmp_path / "missing"),
+    )
+    saved = c.t5_sandbox_cases
+    c.t5_sandbox_cases = lambda tenant, agent: []  # type: ignore[assignment]
+    try:
+        out = await h.t5()
+    finally:
+        c.t5_sandbox_cases = saved  # type: ignore[assignment]
+    assert out["result"] == "error" and {k["result"] for k in out["cases"]} == {"error"}
+
+
+def test_cli_rejects_unknown_tests(capsys):
+    with pytest.raises(SystemExit):
+        c.parse_args(["--release", "r1", "--tests", "T4,T99"])
+    args = c.parse_args(["--release", "r1", "--tests", "t5"])
+    assert args.tests == ["T5"] and args.tenant == "tenant-test"
