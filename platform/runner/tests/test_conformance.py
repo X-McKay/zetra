@@ -3,8 +3,10 @@ cluster. The T4/T5 runs themselves are the cluster tests (docs/platform.md)."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
+import types
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -151,6 +153,53 @@ def test_t4_passes_when_the_aps_issued_a_token_to_that_pod():
 )
 def test_t4_fails_without_its_required_evidence(r, lines):
     assert c.evaluate_t4(r, lines, TENANT)["result"] == "fail"
+
+
+def test_t4_accepts_the_token_of_a_replaced_sandbox():
+    r = run()
+    r.generation, r.pod = 2, pod_name(SESSION, 2)
+    out = c.evaluate_t4(r, [issued(pod_name(SESSION, 2))], TENANT)
+    assert out["result"] == "pass" and out["evidence"]["session"]["pod"] == pod_name(SESSION, 2)
+
+
+def test_failure_type_finds_the_application_error_behind_the_wrapping():
+    from temporalio.exceptions import ApplicationError
+
+    inner = ApplicationError("preflight refused", type="Forbidden")
+    outer = RuntimeError("activity failed")  # stands in for the SDK's ActivityError wrapper
+    outer.__cause__ = inner
+    assert c.failure_type(outer) == "Forbidden"
+    assert c.failure_type(RuntimeError("x")) == "RuntimeError"
+
+
+async def test_run_session_cancels_the_workflow_on_harness_timeout(monkeypatch):
+    class Handle:
+        cancelled = False
+
+        async def result(self):
+            await asyncio.sleep(10)
+
+        async def cancel(self):
+            self.cancelled = True
+
+        async def fetch_history_events(self):
+            return
+            yield  # an empty async iterator
+
+    handle = Handle()
+
+    async def fake_submit(client, inp):
+        return handle
+
+    monkeypatch.setattr(c, "submit", fake_submit)
+
+    async def no_logs(since: float) -> str:
+        return ""
+
+    client = types.SimpleNamespace(data_converter=DataConverter.default)
+    h = c.Harness(client, TENANT, AGENT, "r1", no_logs, session_timeout=0.01)
+    r = await h.run_session(c.t4_case())
+    assert r.outcome == "HARNESS_TIMEOUT" and handle.cancelled and r.boundaries == []
 
 
 def test_t4_records_a_second_issuance_without_failing():
