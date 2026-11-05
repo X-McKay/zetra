@@ -50,6 +50,10 @@ def configure(settings: kopf.OperatorSettings, **_) -> None:
     )
     # One replica with a Recreate strategy; kopf peering is not used (standalone).
     settings.posting.enabled = False
+    # Sync handlers run in a thread pool. Unbounded, a startup listing of every
+    # NetworkPolicy in the cluster plus the release timers reconciled every tenant and
+    # verified every release at once; the pod ran out of memory before it finished.
+    settings.execution.max_workers = CFG.max_workers
 
 
 # -- Agent --------------------------------------------------------------------------
