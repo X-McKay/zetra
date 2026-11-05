@@ -74,11 +74,42 @@ def alternation(pod: str, rounds: int) -> list[dict]:
     return out
 
 
+def capture(
+    session: str, jti: str, sub: str = "agent-sa", act: str = "", ts: str = "t1", **agent
+) -> dict:
+    return {
+        "ts": ts,
+        "method": "POST",
+        "path": "/kubernetes/mcp",
+        "status": 200,
+        "ms": 3,
+        "x_agent": {"x-agent-id": f"{TENANT}/{AGENT}", "x-agent-session-id": session, **agent},
+        "bearer": {
+            "sub": sub,
+            "act_sub": act,
+            "aud": ["https://mcp.almckay.io/kubernetes/mcp"],
+            "azp": "agent-policy-service",
+            "jti": jti,
+        },
+    }
+
+
+GATEWAY_LINE = (
+    "2026-11-05T22:17:40.1Z\tinfo\trequest gateway=ai-gateway/agents listener=agents-https "
+    "route=ai-gateway/agents-mcp-kubernetes src.addr=10.42.1.93:1 http.method=POST "
+    "http.host=mcp.agents.internal http.path=/kubernetes/mcp http.version=HTTP/1.1 http.status=200 "
+    "jwt.sub=dcf3e4d4-7779-4a71-835f-6e278d278b9d protocol=mcp mcp.method.name=tools/call "
+    'duration=6ms agent.id="tenant-test/conformance" agent.session_id="{session}" '
+    'agent.decision="allow" agent.decision_id="d0" error="mcp: denied for tool: x"'
+)
+
+
 def test_every_case_is_a_valid_session_input():
     for case in [
         c.t4_case(),
         *c.t5_sandbox_cases(TENANT, AGENT),
         c.t8_case(TENANT),
+        c.t11_case(TENANT),
         c.t19_case(TENANT),
     ]:
         SessionInput(TENANT, AGENT, "conformance-r1", SESSION, None, case.task()).validate()
@@ -438,6 +469,109 @@ def test_t19_fails_without_its_required_evidence(r, lines, failed_check):
     assert out["result"] == "fail" and out["checks"][failed_check] is False
 
 
+def test_capture_and_gateway_logs_are_parsed():
+    text = (
+        json.dumps(capture(SESSION, "trrtte:1"))
+        + "\n"
+        + json.dumps({"msg": "other"})
+        + "\nnot json"
+    )
+    [rec] = c.parse_capture_log(text)
+    assert rec["bearer"]["jti"] == "trrtte:1"
+    [line] = c.parse_gateway_log(
+        GATEWAY_LINE.format(session=SESSION) + "\nnoise without the path key"
+    )
+    assert line["jwt.sub"] == "dcf3e4d4-7779-4a71-835f-6e278d278b9d"
+    assert line["agent.session_id"] == SESSION and line["http.status"] == "200"
+    assert line["error"] == "mcp: denied for tool: x"
+    r = run(tool="probe_mcp")
+    assert c.inbound_subjects(r, [line]) == {"dcf3e4d4-7779-4a71-835f-6e278d278b9d"}
+    other = capture("other-session", "trrtte:9", ts="t0")
+    ordered = c.captures_of(
+        r, [other, capture(SESSION, "trrtte:2", ts="t2"), capture(SESSION, "trrtte:1", ts="t1")]
+    )
+    assert [x["bearer"]["jti"] for x in ordered] == ["trrtte:1", "trrtte:2"]
+
+
+def exchanged(pod: str, jti: str, did: str = "a0") -> dict:
+    return {
+        **decision(pod, c.MCP_ALLOWED_TOOL, "allow", did),
+        "delegation": "agent",
+        "exchange": {"cached": False, "ms": 100, "upstream_jti": jti},
+    }
+
+
+SUB = "dcf3e4d4-7779-4a71-835f-6e278d278b9d"
+
+
+def test_t11_passes_when_the_server_saw_the_agents_own_subject_without_act():
+    r = run(tool="probe_mcp", summary='{"calls":["ok"]}')
+    caps = [capture(SESSION, "trrtte:1", sub=SUB), capture(SESSION, "trrtte:1", sub=SUB, ts="t2")]
+    gw = c.parse_gateway_log(GATEWAY_LINE.format(session=SESSION))
+    out = c.evaluate_t11(r, [exchanged(r.pod, "trrtte:1")], caps, gw, TENANT, AGENT)
+    assert out["result"] == "pass" and all(out["checks"].values()), out["checks"]
+    assert out["evidence"]["inbound_subjects"] == [SUB]
+    assert json.dumps(out).count("eyJ") == 0
+
+
+@pytest.mark.parametrize(
+    "caps,gw_session,failed_check",
+    [
+        ([], SESSION, "upstream_captured"),
+        ([capture(SESSION, "j", sub="someone-else")], SESSION, "sub_is_the_agent"),
+        ([capture(SESSION, "j", sub=SUB, act="agent")], SESSION, "no_act"),
+        ([capture(SESSION, "j", sub=SUB)], "another", "inbound_subject_known"),
+    ],
+)
+def test_t11_fails_without_its_required_evidence(caps, gw_session, failed_check):
+    r = run(tool="probe_mcp")
+    gw = c.parse_gateway_log(GATEWAY_LINE.format(session=gw_session))
+    out = c.evaluate_t11(r, [exchanged(r.pod, "j")], caps, gw, TENANT, AGENT)
+    assert out["result"] == "fail" and out["checks"][failed_check] is False
+
+
+def test_t12_passes_when_only_exchanged_tokens_reached_the_server():
+    r = run(tool="probe_mcp")
+    lines = [{**issued(r.pod), "jti": "trrtcc:agent"}, exchanged(r.pod, "trrtte:up")]
+    caps = [capture(SESSION, "trrtte:up"), capture(SESSION, "trrtte:up", ts="t2")]
+    out = c.evaluate_t12(r, lines, caps, TENANT)
+    assert out["result"] == "pass" and all(out["checks"].values()), out["checks"]
+    assert out["evidence"]["agent_token_jti"] == ["trrtcc:agent"]
+
+
+@pytest.mark.parametrize(
+    "caps,failed_check",
+    [
+        ([capture(SESSION, "trrtcc:agent")], "agent_token_never_at_server"),
+        ([capture(SESSION, "trrtte:unknown")], "every_upstream_token_was_exchanged"),
+        ([], "upstream_captured"),
+    ],
+)
+def test_t12_fails_when_the_agent_token_or_a_stranger_reaches_the_server(caps, failed_check):
+    r = run(tool="probe_mcp")
+    lines = [{**issued(r.pod), "jti": "trrtcc:agent"}, exchanged(r.pod, "trrtte:up")]
+    out = c.evaluate_t12(r, lines, caps, TENANT)
+    assert out["result"] == "fail" and out["checks"][failed_check] is False
+
+
+def test_t8_upstream_half_checks_what_the_server_received():
+    r = run(tool="probe_mcp", summary='{"calls":["ok"]}')
+    line = decision(r.pod, c.MCP_ALLOWED_TOOL, "allow", "a0")
+    out = c.evaluate_t8(r, [line], TENANT, AGENT, [capture(SESSION, "j")])
+    assert out["result"] == "pass" and all(out["checks"].values()), out["checks"]
+    assert out["evidence"]["upstream_capture"][0]["x_agent"]["x-agent-session-id"] == SESSION
+    forged = capture(SESSION, "j", **{"x-agent-principal": "mallory"})
+    out = c.evaluate_t8(r, [line], TENANT, AGENT, [forged])
+    assert out["result"] == "fail" and out["checks"]["upstream_no_forged_value"] is False
+    reason = capture(SESSION, "j", **{"x-agent-decision-reason": "allow"})
+    out = c.evaluate_t8(r, [line], TENANT, AGENT, [reason])
+    assert out["result"] == "fail" and out["checks"]["upstream_no_decision_reason"] is False
+    out = c.evaluate_t8(r, [line], TENANT, AGENT, [])
+    assert out["result"] == "fail" and out["checks"]["upstream_captured"] is False
+    out = c.evaluate_t8(r, [line], TENANT, AGENT, None)
+    assert out["result"] == "pass" and "not captured" in out["evidence"]["upstream_capture"]
+
+
 def test_t8_passes_when_the_decision_carries_the_sandboxes_identity():
     r = run(tool="probe_mcp", summary='{"calls":["ok"]}')
     out = c.evaluate_t8(r, [decision(r.pod, c.MCP_ALLOWED_TOOL, "allow", "a0")], TENANT, AGENT)
@@ -575,5 +709,5 @@ async def test_t5_direct_case_is_an_error_when_the_token_file_is_missing(fake_ap
 def test_cli_rejects_unknown_tests(capsys):
     with pytest.raises(SystemExit):
         c.parse_args(["--release", "r1", "--tests", "T4,T99"])
-    args = c.parse_args(["--release", "r1", "--tests", "t5,T19,t8"])
-    assert args.tests == ["T5", "T19", "T8"] and args.tenant == "tenant-test"
+    args = c.parse_args(["--release", "r1", "--tests", "t5,T19,t8,t11,T12"])
+    assert args.tests == ["T5", "T19", "T8", "T11", "T12"] and args.tenant == "tenant-test"
