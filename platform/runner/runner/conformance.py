@@ -192,6 +192,7 @@ class SessionRun:
     outcome: str
     generation: int = 1
     boundaries: list[dict] = field(default_factory=list)
+    failures: list[dict] = field(default_factory=list)  # decoded activity and workflow failures
     final_summary: str = ""
     started: str = ""
     finished: str = ""
@@ -213,6 +214,60 @@ async def boundaries_from_events(events, converter: DataConverter) -> list[Bound
                 continue
             [doc] = await converter.decode(list(attrs.result.payloads), [dict])
             out.append(BoundaryOut.parse_strict(doc))
+    return out
+
+
+async def failure_message(failure, converter: DataConverter) -> str:
+    """The runner's failure converter moves the message into encoded (encrypted) attributes."""
+    if failure.HasField("encoded_attributes"):
+        try:
+            [attrs] = await converter.decode([failure.encoded_attributes], [dict])
+            return str(attrs.get("message", ""))
+        except Exception as e:  # noqa: BLE001 - never let an undecodable failure hide the rest
+            return f"[undecodable: {type(e).__name__}]"
+    return failure.message
+
+
+async def failures_from_events(events, converter: DataConverter) -> list[dict]:
+    """Why a session failed: every activity failure or timeout, and the workflow's own
+    failure, with the activity name, the ApplicationError type and the decoded message."""
+    scheduled: dict[int, str] = {}
+    out: list[dict] = []
+    for ev in events:
+        if ev.event_type == EventType.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+            scheduled[ev.event_id] = ev.activity_task_scheduled_event_attributes.activity_type.name
+        elif ev.event_type == EventType.EVENT_TYPE_ACTIVITY_TASK_FAILED:
+            attrs = ev.activity_task_failed_event_attributes
+            f = attrs.failure
+            info = f.application_failure_info
+            out.append(
+                {
+                    "activity": scheduled.get(attrs.scheduled_event_id, "?"),
+                    "type": info.type or "Failure",
+                    "non_retryable": bool(info.non_retryable),
+                    "message": await failure_message(f, converter),
+                }
+            )
+        elif ev.event_type == EventType.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
+            attrs = ev.activity_task_timed_out_event_attributes
+            out.append(
+                {
+                    "activity": scheduled.get(attrs.scheduled_event_id, "?"),
+                    "type": "TimedOut",
+                    "non_retryable": False,
+                    "message": str(attrs.failure.timeout_failure_info.timeout_type),
+                }
+            )
+        elif ev.event_type == EventType.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+            f = ev.workflow_execution_failed_event_attributes.failure
+            out.append(
+                {
+                    "activity": "workflow",
+                    "type": f.application_failure_info.type or "Failure",
+                    "non_retryable": True,
+                    "message": await failure_message(f, converter),
+                }
+            )
     return out
 
 
@@ -391,6 +446,12 @@ class Harness:
             run.outcome = f"{run.outcome}:undecodable_history:{type(e).__name__}"
             boundaries = []
         run.boundaries = [asdict(b) for b in boundaries]
+        try:
+            run.failures = await failures_from_events(events, self.client.data_converter)
+        except Exception as e:  # noqa: BLE001 - diagnostics must not fail the test
+            run.failures = [
+                {"activity": "?", "type": type(e).__name__, "message": "", "non_retryable": False}
+            ]
         for b in reversed(boundaries):
             if b.kind == "model" and b.summary:
                 run.final_summary = b.summary

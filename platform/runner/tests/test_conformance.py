@@ -100,6 +100,50 @@ async def test_boundaries_are_decoded_from_run_boundary_results_only():
     assert await c.boundaries_from_events([scheduled, other, done, snap], conv) == [out]
 
 
+async def test_failures_are_decoded_from_history():
+    conv = DataConverter.default
+    sched = HistoryEvent(event_id=3, event_type=EventType.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
+    sched.activity_task_scheduled_event_attributes.activity_type.name = "preflight"
+    plain = HistoryEvent(event_id=4, event_type=EventType.EVENT_TYPE_ACTIVITY_TASK_FAILED)
+    plain.activity_task_failed_event_attributes.scheduled_event_id = 3
+    plain.activity_task_failed_event_attributes.failure.message = "release not ready"
+    plain.activity_task_failed_event_attributes.failure.application_failure_info.type = "Forbidden"
+    plain.activity_task_failed_event_attributes.failure.application_failure_info.non_retryable = (
+        True
+    )
+    sched2 = HistoryEvent(event_id=5, event_type=EventType.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
+    sched2.activity_task_scheduled_event_attributes.activity_type.name = "set_generation"
+    encoded = HistoryEvent(event_id=6, event_type=EventType.EVENT_TYPE_ACTIVITY_TASK_FAILED)
+    encoded.activity_task_failed_event_attributes.scheduled_event_id = 5
+    encoded.activity_task_failed_event_attributes.failure.message = "Encoded failure"
+    encoded.activity_task_failed_event_attributes.failure.application_failure_info.type = (
+        "APSUnavailable"
+    )
+    [payload] = await conv.encode([{"message": "APS unreachable: URLError", "stack_trace": "x"}])
+    encoded.activity_task_failed_event_attributes.failure.encoded_attributes.CopyFrom(payload)
+    timed = HistoryEvent(event_id=7, event_type=EventType.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT)
+    timed.activity_task_timed_out_event_attributes.scheduled_event_id = 5
+    wf = HistoryEvent(event_id=8, event_type=EventType.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED)
+    wf.workflow_execution_failed_event_attributes.failure.message = "deadline"
+
+    out = await c.failures_from_events([sched, plain, sched2, encoded, timed, wf], conv)
+    assert out[0] == {
+        "activity": "preflight",
+        "type": "Forbidden",
+        "non_retryable": True,
+        "message": "release not ready",
+    }
+    assert out[1]["activity"] == "set_generation" and out[1]["type"] == "APSUnavailable"
+    assert out[1]["message"] == "APS unreachable: URLError"
+    assert out[2]["activity"] == "set_generation" and out[2]["type"] == "TimedOut"
+    assert out[3] == {
+        "activity": "workflow",
+        "type": "Failure",
+        "non_retryable": True,
+        "message": "deadline",
+    }
+
+
 def test_aps_log_keeps_only_token_route_events():
     text = "\n".join(
         [
