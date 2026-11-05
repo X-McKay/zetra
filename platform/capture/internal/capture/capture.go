@@ -21,6 +21,7 @@ import (
 type Record struct {
 	TS         string            `json:"ts"`
 	Method     string            `json:"method"`
+	Host       string            `json:"host"` // the Host header as it arrived
 	Path       string            `json:"path"`
 	Status     int               `json:"status"`
 	DurationMS int64             `json:"ms"`
@@ -77,6 +78,7 @@ func Observe(r *http.Request) Record {
 	rec := Record{
 		TS:     time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 		Method: r.Method,
+		Host:   r.Host,
 		Path:   r.URL.Path,
 		Agent:  map[string]string{},
 	}
@@ -109,11 +111,21 @@ func (w *statusWriter) Flush() {
 	}
 }
 
-// Handler forwards every request to upstream unchanged and writes one JSON record per
-// request to out. FlushInterval -1 keeps streamed (SSE) responses flowing.
+// Handler forwards every request to upstream and writes one JSON record per request to out.
+// Headers and body pass through untouched except Host: the upstream is reached on loopback,
+// and an MCP server built on the Go SDK rejects a loopback request whose Host is not
+// localhost (DNS rebinding protection, 403), so Host becomes the upstream address and the
+// original travels as X-Forwarded-Host and in the record. FlushInterval -1 keeps streamed
+// (SSE) responses flowing.
 func Handler(upstream *url.URL, out io.Writer) http.Handler {
-	proxy := httputil.NewSingleHostReverseProxy(upstream)
-	proxy.FlushInterval = -1
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(upstream)
+			r.SetXForwarded()
+			r.Out.Host = upstream.Host
+		},
+		FlushInterval: -1,
+	}
 	var mu sync.Mutex
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := Observe(r)
