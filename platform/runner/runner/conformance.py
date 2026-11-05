@@ -16,6 +16,14 @@ Tests covered so far (the Phase B gate is 22; the rest are added batch by batch)
 - T5: the token route refuses every other grant, client or assertion before the IdP sees it.
   Cases that a sandbox can express are posted from inside one (`probe_http`); the two that
   need a real projected token from a non-sandbox pod are posted by the harness itself.
+- T8: forged `x-agent-*` request headers never become the identity the APS acts on. One
+  `probe_mcp` session calls an allowed tool with forged headers; the APS decision for that
+  call must carry the sandbox's own agent, session and principal, and no forged value may
+  appear anywhere in the decision log. (Spec 15 also wants a capture at the MCP server; the
+  backends here log no headers, so that half is recorded as not captured.)
+- T19: no decision is cached. One `probe_mcp` session alternates an allowed and a forbidden
+  tool with one token; the APS decision log must show one decision per request, with distinct
+  decision ids, in exact alternation (allow, deny.route_not_permitted, ...).
 
 Reports never carry token material: every string is scrubbed with the runner's token patterns
 before it is written (spec 13.6).
@@ -60,10 +68,26 @@ DEFAULT_APS_URL = "http://agent-policy-service.agent-platform.svc.cluster.local:
 DEFAULT_ISSUER_TOKEN_PATH = "/var/run/secrets/issuer-audience/token"
 DEFAULT_APS_TOKEN_PATH = "/var/run/secrets/agent-policy-service/token"
 SESSION_TIMEOUT = 900.0
+# The MCP route (spec 8.8, 9.3): the conformance Agent's bundle admits one kubernetes tool;
+# pods_get is in the gateway's role policy for the backend but not in the bundle, so the APS
+# must deny it on every request.
+MCP_ROUTE = "mcp"
+MCP_BACKEND = "kubernetes"
+MCP_ALLOWED_TOOL = "pods_list_in_namespace"
+MCP_FORBIDDEN_TOOL = "pods_get"
+DENY_ROUTE = "deny.route_not_permitted"
+T19_ROUNDS = 5
+# T8: values a sandbox might forge; none may survive into a decision or reach an upstream.
+FORGED_HEADERS = {
+    "x-agent-id": "tenant-test/other",
+    "x-agent-principal": "mallory",
+    "x-agent-session-id": "0000",
+    "x-agent-decision-reason": "allow",
+}
 # The probe reports {"status": 403, ...}; the model is told to repeat the result as JSON.
 STATUS_JSON = re.compile(r"[\"']?status[\"']?\s*[:=]\s*[\"']?([1-5][0-9]{2})")
 STATUS_WORD = re.compile(r"\b([45][0-9]{2})\b")
-TESTS = ("T4", "T5")
+TESTS = ("T4", "T5", "T8", "T19")
 
 
 def utcnow() -> str:
@@ -173,6 +197,31 @@ def t5_sandbox_cases(tenant: str, agent: str) -> list[SandboxCase]:
     ]
 
 
+def t8_case(tenant: str) -> SandboxCase:
+    return SandboxCase(
+        "forged_agent_headers",
+        "probe_mcp",
+        {
+            "tool": MCP_ALLOWED_TOOL,
+            "args": json.dumps({"namespace": tenant}, separators=(",", ":")),
+            "headers": json.dumps(FORGED_HEADERS, separators=(",", ":")),
+        },
+    )
+
+
+def t19_case(tenant: str, rounds: int = T19_ROUNDS) -> SandboxCase:
+    return SandboxCase(
+        "alternating_tools",
+        "probe_mcp",
+        {
+            "tool": MCP_ALLOWED_TOOL,
+            "alt_tool": MCP_FORBIDDEN_TOOL,
+            "rounds": str(rounds),
+            "args": json.dumps({"namespace": tenant}, separators=(",", ":")),
+        },
+    )
+
+
 def t5_direct_cases(issuer_token_path: str, aps_token_path: str) -> list[DirectCase]:
     return [
         # A valid projected token of a non-sandbox ServiceAccount: reviewed, then refused.
@@ -272,7 +321,9 @@ async def failures_from_events(events, converter: DataConverter) -> list[dict]:
 
 
 def parse_aps_log(text: str) -> list[dict]:
-    """The APS writes one slog JSON document per line; keep the token-route events."""
+    """The APS writes one JSON document per line: slog events on stderr and ext_authz decisions
+    (spec 13.5, every line carries a decision_id) on stdout. Keep the token-route events and
+    the decisions."""
     lines = []
     for raw in text.splitlines():
         raw = raw.strip()
@@ -282,9 +333,25 @@ def parse_aps_log(text: str) -> list[dict]:
             doc = json.loads(raw)
         except ValueError:
             continue
-        if isinstance(doc, dict) and doc.get("msg") in APS_MESSAGES:
+        if isinstance(doc, dict) and (doc.get("msg") in APS_MESSAGES or "decision_id" in doc):
             lines.append(doc)
     return lines
+
+
+def mcp_calls_of(run: SessionRun, aps_lines: list[dict]) -> list[dict]:
+    """The APS decisions on tools/call requests of this session's sandbox, in log order."""
+    prefix = sandbox_prefix(run.session_id)
+    return [
+        line
+        for line in aps_lines
+        if "decision_id" in line
+        and line.get("route") == MCP_ROUTE
+        and line.get("method") == "tools/call"
+        and str(line.get("pod", "")).startswith(prefix)
+    ]
+
+
+DECISION_FIELDS = ("ts", "decision_id", "reason", "tool", "agent_id", "session_id", "principal")
 
 
 def status_from_summary(summary: str) -> int | None:
@@ -356,6 +423,75 @@ def evaluate_t5_sandbox(case: SandboxCase, run: SessionRun, aps_lines: list[dict
             ],
             # The sandbox's own token for its model call is the only issuance expected here.
             "issued_during_case": len(forwarded),
+        },
+    }
+
+
+def evaluate_t8(run: SessionRun, aps_lines: list[dict], tenant: str, agent: str) -> dict:
+    calls = mcp_calls_of(run, aps_lines)
+    allowed = [c for c in calls if c.get("tool") == MCP_ALLOWED_TOOL and c.get("reason") == "allow"]
+    own = f"{tenant}/{agent}"
+    identity_ok = bool(allowed) and all(
+        c.get("agent_id") == own
+        and c.get("session_id") == run.session_id
+        and c.get("principal") != FORGED_HEADERS["x-agent-principal"]
+        for c in allowed
+    )
+    forged = [v for v in FORGED_HEADERS.values() if v != "allow"]
+    text = json.dumps([line for line in aps_lines if "decision_id" in line])
+    checks = {
+        "session_completed": run.outcome == "COMPLETED",
+        "probe_mcp_ran": bool(run.tool_boundaries("probe_mcp")),
+        "call_allowed": bool(allowed),
+        "identity_is_the_sandboxes": identity_ok,
+        "no_forged_value_in_decisions": not any(v in text for v in forged),
+        "probe_reported_ok": "ok" in run.final_summary,
+    }
+    required = (
+        "session_completed",
+        "probe_mcp_ran",
+        "call_allowed",
+        "identity_is_the_sandboxes",
+        "no_forged_value_in_decisions",
+    )
+    return {
+        "result": "pass" if all(checks[k] for k in required) else "fail",
+        "checks": checks,
+        "evidence": {
+            "session": asdict(run),
+            "decisions": [{k: c.get(k) for k in DECISION_FIELDS} for c in calls],
+            "upstream_capture": "not captured: the MCP backends log no request headers",
+        },
+    }
+
+
+def evaluate_t19(run: SessionRun, aps_lines: list[dict], rounds: int = T19_ROUNDS) -> dict:
+    calls = mcp_calls_of(run, aps_lines)
+    observed = [(c.get("tool"), c.get("reason")) for c in calls]
+    expected = [(MCP_ALLOWED_TOOL, "allow"), (MCP_FORBIDDEN_TOOL, DENY_ROUTE)] * rounds
+    ids = [c.get("decision_id") for c in calls]
+    checks = {
+        "session_completed": run.outcome == "COMPLETED",
+        "probe_mcp_ran": bool(run.tool_boundaries("probe_mcp")),
+        "one_decision_per_request": len(observed) == 2 * rounds,
+        "exact_alternation": observed == expected,
+        "distinct_decision_ids": len(set(ids)) == len(ids),
+        "probe_reported_alternation": "deny" in run.final_summary and "ok" in run.final_summary,
+    }
+    required = (
+        "session_completed",
+        "probe_mcp_ran",
+        "one_decision_per_request",
+        "exact_alternation",
+        "distinct_decision_ids",
+    )
+    return {
+        "result": "pass" if all(checks[k] for k in required) else "fail",
+        "checks": checks,
+        "evidence": {
+            "session": asdict(run),
+            "rounds": rounds,
+            "decisions": [{k: c.get(k) for k in DECISION_FIELDS} for c in calls],
         },
     }
 
@@ -514,6 +650,22 @@ class Harness:
             "result": summarize(cases),
             "cases": cases,
         }
+
+    async def t8(self) -> dict:
+        started = time.time()
+        run = await self.run_session(t8_case(self.tenant))
+        lines = await self.aps_lines_since(started)
+        return {
+            "id": "T8",
+            "name": "forged agent headers",
+            **evaluate_t8(run, lines, self.tenant, self.agent),
+        }
+
+    async def t19(self) -> dict:
+        started = time.time()
+        run = await self.run_session(t19_case(self.tenant))
+        lines = await self.aps_lines_since(started)
+        return {"id": "T19", "name": "no decision caching", **evaluate_t19(run, lines)}
 
     async def run(self, tests: list[str]) -> dict:
         started = utcnow()
