@@ -90,8 +90,10 @@ def client_representation(
         clientAuthenticatorType=rep.get("clientAuthenticatorType", "federated-jwt"),
     )
     attrs = rep.setdefault("attributes", {})
-    attrs["federated.jwt.identity.provider"] = idp_alias
-    attrs["federated.jwt.expected.subject"] = spec.expected_subject
+    # Keycloak's "Signed JWT - Federated" authenticator reads its two per-client properties
+    # from these attribute keys (FederatedJWTClientAuthenticator.JWT_CREDENTIAL_*_KEY).
+    attrs["jwt.credential.issuer"] = idp_alias
+    attrs["jwt.credential.sub"] = spec.expected_subject
     attrs["standard.token.exchange.enabled"] = "true"
     return rep
 

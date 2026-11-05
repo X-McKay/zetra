@@ -159,8 +159,8 @@ def test_creates_client_per_7_3(kc):
         or client["directAccessGrantsEnabled"]
     )
     assert client["clientAuthenticatorType"] == "federated-jwt"
-    assert client["attributes"]["federated.jwt.identity.provider"] == "kubernetes-cluster-a"
-    assert client["attributes"]["federated.jwt.expected.subject"] == (
+    assert client["attributes"]["jwt.credential.issuer"] == "kubernetes-cluster-a"
+    assert client["attributes"]["jwt.credential.sub"] == (
         "system:serviceaccount:tenant-a:agent-investigator"
     )
     assert client["attributes"]["standard.token.exchange.enabled"] == "true"
