@@ -38,7 +38,12 @@ type DelegatedRequest struct {
 // Adapter is the provider-specific half of 9.5, selected by IDP_ADAPTER.
 type Adapter interface {
 	Delegated(ctx context.Context, r DelegatedRequest) (*TokenResponse, error)
-	Agent(ctx context.Context, subjectToken, audience string) (*TokenResponse, error)
+	// Agent exchanges the agent's own token for one addressed to audience. scope names the
+	// requester's optional client scope that carries that audience (mcp:<backend>): Keycloak's
+	// standard token exchange takes the audiences of the new token from the requester's
+	// effective client scopes and only filters them by the audience parameter, so without the
+	// scope the exchange fails with "Requested audience not available".
+	Agent(ctx context.Context, subjectToken, audience, scope string) (*TokenResponse, error)
 	Refresh(ctx context.Context, refreshToken string) (*TokenResponse, error)
 }
 
@@ -77,12 +82,13 @@ func (k *Keycloak) Delegated(ctx context.Context, r DelegatedRequest) (*TokenRes
 	}, false)
 }
 
-func (k *Keycloak) Agent(ctx context.Context, subjectToken, audience string) (*TokenResponse, error) {
+func (k *Keycloak) Agent(ctx context.Context, subjectToken, audience, scope string) (*TokenResponse, error) {
 	return k.post(ctx, url.Values{
 		"grant_type":           {policy.GrantTokenExchange},
 		"subject_token":        {subjectToken},
 		"subject_token_type":   {policy.TokenTypeAccess},
 		"audience":             {audience},
+		"scope":                {scope},
 		"requested_token_type": {policy.TokenTypeAccess},
 	}, true)
 }
