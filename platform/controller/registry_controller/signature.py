@@ -77,9 +77,24 @@ class _Cosign:
             log.warning("cosign could not run: %s", type(exc).__name__)
             return None
         if proc.returncode != 0:
-            log.info("cosign %s refused the image (exit %d)", args[0], proc.returncode)
+            # cosign's last stderr line names the reason (no matching attestations, a Rekor
+            # lookup, a certificate problem); without it a refusal is undiagnosable from the log.
+            log.info(
+                "cosign %s refused the image (exit %d): %s",
+                args[0],
+                proc.returncode,
+                _last_line(proc.stderr),
+            )
             return None
         return proc.stdout
+
+
+def _last_line(text: str | None, limit: int = 240) -> str:
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    if not lines:
+        return "(no stderr)"
+    last = lines[-1]
+    return last if len(last) <= limit else last[: limit - 3] + "..."
 
 
 class _Cache:
