@@ -47,8 +47,38 @@ def issued(pod: str, namespace: str = TENANT) -> dict:
 # --- definitions ----------------------------------------------------------------------------------
 
 
+def decision(pod: str, tool: str, reason: str, did: str, **extra) -> dict:
+    return {
+        "ts": "t",
+        "decision_id": did,
+        "reason": reason,
+        "route": "mcp",
+        "backend": "kubernetes",
+        "method": "tools/call",
+        "tool": tool,
+        "pod": pod,
+        "agent_id": f"{TENANT}/{AGENT}",
+        "session_id": SESSION,
+        "principal": None,
+        **extra,
+    }
+
+
+def alternation(pod: str, rounds: int) -> list[dict]:
+    out = []
+    for i in range(rounds):
+        out.append(decision(pod, c.MCP_ALLOWED_TOOL, "allow", f"a{i}"))
+        out.append(decision(pod, c.MCP_FORBIDDEN_TOOL, c.DENY_ROUTE, f"d{i}"))
+    return out
+
+
 def test_every_case_is_a_valid_session_input():
-    for case in [c.t4_case(), *c.t5_sandbox_cases(TENANT, AGENT)]:
+    for case in [
+        c.t4_case(),
+        *c.t5_sandbox_cases(TENANT, AGENT),
+        c.t8_case(TENANT),
+        c.t19_case(TENANT),
+    ]:
         SessionInput(TENANT, AGENT, "conformance-r1", SESSION, None, case.task()).validate()
 
 
@@ -70,6 +100,15 @@ def test_t5_cases_cover_the_refusal_matrix():
         == ["agent-tenant-test-conformance"] * 2
     )
     assert [d.expect_status for d in c.t5_direct_cases("/i", "/a")] == [403, 401]
+
+
+def test_mcp_cases_name_the_bundle_tools_and_the_forged_headers():
+    t19 = c.t19_case(TENANT, rounds=3)
+    assert t19.tool == "probe_mcp" and t19.args["rounds"] == "3"
+    assert (t19.args["tool"], t19.args["alt_tool"]) == (c.MCP_ALLOWED_TOOL, c.MCP_FORBIDDEN_TOOL)
+    assert json.loads(t19.args["args"]) == {"namespace": TENANT}
+    t8 = c.t8_case(TENANT)
+    assert json.loads(t8.args["headers"]) == c.FORGED_HEADERS and "alt_tool" not in t8.args
 
 
 # --- evidence -------------------------------------------------------------------------------------
@@ -158,6 +197,16 @@ def test_aps_log_keeps_only_token_route_events():
         "token route refused",
         "token issued",
     ]
+
+
+def test_aps_log_keeps_decisions_too():
+    text = (
+        json.dumps(decision("s-1-g1", "pods_get", c.DENY_ROUTE, "d1"))
+        + "\n"
+        + json.dumps({"msg": "ext_authz allow", "x": 1})
+    )
+    [kept] = c.parse_aps_log(text)
+    assert kept["decision_id"] == "d1"
 
 
 @pytest.mark.parametrize(
@@ -292,6 +341,79 @@ def test_t5_direct_case_never_accepts_a_token_in_the_reply():
     assert bad["result"] == "fail" and FAKE_JWT not in json.dumps(bad)
 
 
+def test_t19_passes_on_an_exact_alternation_of_fresh_decisions():
+    r = run(tool="probe_mcp", summary='{"calls":["ok","deny","ok","deny"]}')
+    other = decision("s-other-g1", c.MCP_ALLOWED_TOOL, "allow", "x")  # another session's call
+    init = {**decision(r.pod, None, "allow", "i"), "method": "initialize", "tool": None}
+    out = c.evaluate_t19(r, [init, *alternation(r.pod, 2), other], rounds=2)
+    assert out["result"] == "pass" and all(out["checks"].values()), out["checks"]
+    assert [d["decision_id"] for d in out["evidence"]["decisions"]] == ["a0", "d0", "a1", "d1"]
+
+
+@pytest.mark.parametrize(
+    "r,lines,failed_check",
+    [
+        (run(tool="probe_mcp"), alternation(pod_name(SESSION, 1), 1), "one_decision_per_request"),
+        (  # a cached allow served the forbidden tool
+            run(tool="probe_mcp"),
+            [
+                decision(pod_name(SESSION, 1), c.MCP_ALLOWED_TOOL, "allow", "a0"),
+                decision(pod_name(SESSION, 1), c.MCP_FORBIDDEN_TOOL, "allow", "d0"),
+                *alternation(pod_name(SESSION, 1), 1),
+            ],
+            "exact_alternation",
+        ),
+        (  # one decision id reused: the second request was not evaluated
+            run(tool="probe_mcp"),
+            [
+                decision(pod_name(SESSION, 1), c.MCP_ALLOWED_TOOL, "allow", "same"),
+                decision(pod_name(SESSION, 1), c.MCP_FORBIDDEN_TOOL, c.DENY_ROUTE, "same"),
+                *alternation(pod_name(SESSION, 1), 1),
+            ],
+            "distinct_decision_ids",
+        ),
+        (
+            run(outcome="FAILED", tool="probe_mcp"),
+            alternation(pod_name(SESSION, 1), 2),
+            "session_completed",
+        ),
+        (run(tool="probe_http"), alternation(pod_name(SESSION, 1), 2), "probe_mcp_ran"),
+    ],
+)
+def test_t19_fails_without_its_required_evidence(r, lines, failed_check):
+    out = c.evaluate_t19(r, lines, rounds=2)
+    assert out["result"] == "fail" and out["checks"][failed_check] is False
+
+
+def test_t8_passes_when_the_decision_carries_the_sandboxes_identity():
+    r = run(tool="probe_mcp", summary='{"calls":["ok"]}')
+    out = c.evaluate_t8(r, [decision(r.pod, c.MCP_ALLOWED_TOOL, "allow", "a0")], TENANT, AGENT)
+    assert out["result"] == "pass" and all(out["checks"].values()), out["checks"]
+    assert "not captured" in out["evidence"]["upstream_capture"]
+
+
+@pytest.mark.parametrize(
+    "forged",
+    [
+        {"agent_id": "tenant-test/other"},
+        {"principal": "mallory"},
+        {"session_id": "0000"},
+    ],
+)
+def test_t8_fails_when_a_forged_value_wins(forged):
+    line = decision(pod_name(SESSION, 1), c.MCP_ALLOWED_TOOL, "allow", "a0", **forged)
+    out = c.evaluate_t8(run(tool="probe_mcp"), [line], TENANT, AGENT)
+    assert out["result"] == "fail"
+    assert out["checks"]["identity_is_the_sandboxes"] is False
+    assert out["checks"]["no_forged_value_in_decisions"] is False
+
+
+def test_t8_fails_when_the_allowed_call_is_denied():
+    line = decision(pod_name(SESSION, 1), c.MCP_ALLOWED_TOOL, c.DENY_ROUTE, "a0")
+    out = c.evaluate_t8(run(tool="probe_mcp"), [line], TENANT, AGENT)
+    assert out["result"] == "fail" and out["checks"]["call_allowed"] is False
+
+
 def test_summary_is_the_worst_result():
     assert c.summarize([{"result": "pass"}, {"result": "fail"}]) == "fail"
     assert c.summarize([{"result": "fail"}, {"result": "error"}]) == "error"
@@ -400,5 +522,5 @@ async def test_t5_direct_case_is_an_error_when_the_token_file_is_missing(fake_ap
 def test_cli_rejects_unknown_tests(capsys):
     with pytest.raises(SystemExit):
         c.parse_args(["--release", "r1", "--tests", "T4,T99"])
-    args = c.parse_args(["--release", "r1", "--tests", "t5"])
-    assert args.tests == ["T5"] and args.tenant == "tenant-test"
+    args = c.parse_args(["--release", "r1", "--tests", "t5,T19,t8"])
+    assert args.tests == ["T5", "T19", "T8"] and args.tenant == "tenant-test"
