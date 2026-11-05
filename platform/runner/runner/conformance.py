@@ -60,6 +60,8 @@ APS_NAMESPACE = "agent-platform"
 APS_LABEL = "app.kubernetes.io/name=agent-policy-service"
 APS_CONTAINER = "agent-policy-service"
 APS_MESSAGES = ("token issued", "token route refused", "idp issued an unacceptable agent token")
+LOG_UNAVAILABLE = "log unavailable"  # the harness's own marker for an APS pod it could not read
+LOG_READ_ATTEMPTS = 3
 TOKEN_HOST = "token.agents.internal"
 TOKEN_PATH = "/v1/token"
 ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
@@ -333,15 +335,31 @@ def parse_aps_log(text: str) -> list[dict]:
             doc = json.loads(raw)
         except ValueError:
             continue
-        if isinstance(doc, dict) and (doc.get("msg") in APS_MESSAGES or "decision_id" in doc):
+        if isinstance(doc, dict) and (
+            doc.get("msg") in APS_MESSAGES
+            or doc.get("msg") == LOG_UNAVAILABLE
+            or "decision_id" in doc
+        ):
             lines.append(doc)
     return lines
 
 
+def unreadable_pods(aps_lines: list[dict]) -> list[str]:
+    """APS pods whose log the harness could not read: evidence that may be missing, not a
+    platform fact. Run 7 lost T4's `token issued` line this way without a trace."""
+    return sorted(
+        {str(line.get("pod")) for line in aps_lines if line.get("msg") == LOG_UNAVAILABLE}
+    )
+
+
 def mcp_calls_of(run: SessionRun, aps_lines: list[dict]) -> list[dict]:
-    """The APS decisions on tools/call requests of this session's sandbox, in log order."""
+    """The APS decisions on tools/call requests of this session's sandbox, in time order.
+
+    The log text is one APS pod after another, and a session's requests are spread over the
+    replicas, so the lines must be ordered by their timestamp before an alternation can be
+    judged (run 7 read a real alternation as broken for this reason)."""
     prefix = sandbox_prefix(run.session_id)
-    return [
+    calls = [
         line
         for line in aps_lines
         if "decision_id" in line
@@ -349,6 +367,7 @@ def mcp_calls_of(run: SessionRun, aps_lines: list[dict]) -> list[dict]:
         and line.get("method") == "tools/call"
         and str(line.get("pod", "")).startswith(prefix)
     ]
+    return sorted(calls, key=lambda line: str(line.get("ts", "")))
 
 
 DECISION_FIELDS = ("ts", "decision_id", "reason", "tool", "agent_id", "session_id", "principal")
@@ -390,6 +409,7 @@ def evaluate_t4(run: SessionRun, aps_lines: list[dict], tenant: str) -> dict:
                 {k: v for k, v in line.items() if k in ("time", "agent_id", "pod", "namespace")}
                 for line in issued
             ],
+            "aps_log_unreadable": unreadable_pods(aps_lines),
         },
     }
 
@@ -461,6 +481,7 @@ def evaluate_t8(run: SessionRun, aps_lines: list[dict], tenant: str, agent: str)
             "session": asdict(run),
             "decisions": [{k: c.get(k) for k in DECISION_FIELDS} for c in calls],
             "upstream_capture": "not captured: the MCP backends log no request headers",
+            "aps_log_unreadable": unreadable_pods(aps_lines),
         },
     }
 
@@ -492,6 +513,7 @@ def evaluate_t19(run: SessionRun, aps_lines: list[dict], rounds: int = T19_ROUND
             "session": asdict(run),
             "rounds": rounds,
             "decisions": [{k: c.get(k) for k in DECISION_FIELDS} for c in calls],
+            "aps_log_unreadable": unreadable_pods(aps_lines),
         },
     }
 
@@ -602,6 +624,10 @@ class Harness:
         case = t4_case()
         run = await self.run_session(case)
         lines = await self.aps_lines_since(started)
+        if not any(line.get("msg") == "token issued" for line in lines):
+            # The log may lag the session by a moment, and a pod read may have failed.
+            await asyncio.sleep(3)
+            lines = await self.aps_lines_since(started)
         return {
             "id": "T4",
             "name": "sandbox token issuance",
@@ -700,22 +726,29 @@ def aps_log_reader(core) -> Callable[[float], Awaitable[str]]:
             pods = core.list_namespaced_pod(APS_NAMESPACE, label_selector=APS_LABEL)
             chunks = []
             for pod in pods.items:
-                try:
-                    chunks.append(
-                        core.read_namespaced_pod_log(
-                            pod.metadata.name,
-                            APS_NAMESPACE,
-                            container=APS_CONTAINER,
-                            since_seconds=int(since) + 1,
+                last: Exception | None = None
+                for attempt in range(LOG_READ_ATTEMPTS):
+                    try:
+                        chunks.append(
+                            core.read_namespaced_pod_log(
+                                pod.metadata.name,
+                                APS_NAMESPACE,
+                                container=APS_CONTAINER,
+                                since_seconds=int(since) + 1 + attempt,
+                            )
                         )
-                    )
-                except Exception as e:  # noqa: BLE001 - a pod mid-restart has no log yet
+                        last = None
+                        break
+                    except Exception as e:  # noqa: BLE001 - a transient API error or a restart
+                        last = e
+                        time.sleep(1)
+                if last is not None:
                     chunks.append(
                         json.dumps(
                             {
-                                "msg": "log unavailable",
+                                "msg": LOG_UNAVAILABLE,
                                 "pod": pod.metadata.name,
-                                "error": type(e).__name__,
+                                "error": type(last).__name__,
                             }
                         )
                     )

@@ -67,8 +67,10 @@ def decision(pod: str, tool: str, reason: str, did: str, **extra) -> dict:
 def alternation(pod: str, rounds: int) -> list[dict]:
     out = []
     for i in range(rounds):
-        out.append(decision(pod, c.MCP_ALLOWED_TOOL, "allow", f"a{i}"))
-        out.append(decision(pod, c.MCP_FORBIDDEN_TOOL, c.DENY_ROUTE, f"d{i}"))
+        out.append(decision(pod, c.MCP_ALLOWED_TOOL, "allow", f"a{i}", ts=f"t{2 * i:03d}"))
+        out.append(
+            decision(pod, c.MCP_FORBIDDEN_TOOL, c.DENY_ROUTE, f"d{i}", ts=f"t{2 * i + 1:03d}")
+        )
     return out
 
 
@@ -197,6 +199,40 @@ def test_aps_log_keeps_only_token_route_events():
         "token route refused",
         "token issued",
     ]
+
+
+def test_unreadable_aps_pods_are_evidence_not_silence():
+    text = "\n".join(
+        [
+            json.dumps({"msg": c.LOG_UNAVAILABLE, "pod": "aps-b", "error": "ApiException"}),
+            json.dumps(issued("s-1-g1")),
+        ]
+    )
+    lines = c.parse_aps_log(text)
+    assert c.unreadable_pods(lines) == ["aps-b"]
+    out = c.evaluate_t4(run(), lines, TENANT)
+    assert out["evidence"]["aps_log_unreadable"] == ["aps-b"]
+
+
+def test_aps_log_reader_retries_a_failed_pod_read():
+    class Core:
+        def __init__(self):
+            self.calls = 0
+
+        def list_namespaced_pod(self, ns, label_selector):
+            return types.SimpleNamespace(
+                items=[types.SimpleNamespace(metadata=types.SimpleNamespace(name="aps-a"))]
+            )
+
+        def read_namespaced_pod_log(self, name, ns, container, since_seconds):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("transient")
+            return json.dumps(issued("s-1-g1"))
+
+    core = Core()
+    text = asyncio.run(c.aps_log_reader(core)(5.0))
+    assert core.calls == 2 and c.parse_aps_log(text)[0]["msg"] == "token issued"
 
 
 def test_aps_log_keeps_decisions_too():
@@ -348,6 +384,23 @@ def test_t19_passes_on_an_exact_alternation_of_fresh_decisions():
     out = c.evaluate_t19(r, [init, *alternation(r.pod, 2), other], rounds=2)
     assert out["result"] == "pass" and all(out["checks"].values()), out["checks"]
     assert [d["decision_id"] for d in out["evidence"]["decisions"]] == ["a0", "d0", "a1", "d1"]
+
+
+def test_t19_orders_decisions_by_time_across_aps_replicas():
+    # Two APS pods: the log text is one pod's lines after the other's (run 7).
+    r = run(tool="probe_mcp", summary='{"calls":["ok","deny","ok","deny","ok","deny"]}')
+    lines = alternation(r.pod, 3)
+    pod_a, pod_b = lines[1:4] + [lines[5]], [lines[0], lines[4]]
+    out = c.evaluate_t19(r, pod_a + pod_b, rounds=3)
+    assert out["checks"]["exact_alternation"] is True and out["result"] == "pass"
+    assert [d["decision_id"] for d in out["evidence"]["decisions"]] == [
+        "a0",
+        "d0",
+        "a1",
+        "d1",
+        "a2",
+        "d2",
+    ]
 
 
 @pytest.mark.parametrize(
