@@ -71,8 +71,10 @@ func TestClaimsReportIdentityNeverTheToken(t *testing.T) {
 
 func TestHandlerForwardsUnchangedAndRecordsWhatArrived(t *testing.T) {
 	var got http.Header
+	var gotHost string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = r.Header.Clone()
+		gotHost = r.Host
 		w.WriteHeader(http.StatusTeapot)
 		_, _ = w.Write([]byte("ok"))
 	}))
@@ -94,9 +96,13 @@ func TestHandlerForwardsUnchangedAndRecordsWhatArrived(t *testing.T) {
 	}
 	_, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	// The backend received everything, untouched.
+	// The backend received everything, untouched, with Host rewritten to its own address and
+	// the original Host forwarded.
 	if got.Get("Authorization") != "Bearer "+token || got.Get("X-Agent-Id") != "tenant-test/conformance" || got.Get("Cookie") != "secret=1" {
 		t.Fatalf("backend headers %v", got)
+	}
+	if gotHost != u.Host || got.Get("X-Forwarded-Host") != strings.TrimPrefix(srv.URL, "http://") {
+		t.Fatalf("host %q forwarded %q", gotHost, got.Get("X-Forwarded-Host"))
 	}
 	line := log.line(t)
 	var rec Record
@@ -105,6 +111,9 @@ func TestHandlerForwardsUnchangedAndRecordsWhatArrived(t *testing.T) {
 	}
 	if rec.Method != "POST" || rec.Path != "/kubernetes/mcp" || rec.Status != http.StatusTeapot {
 		t.Fatalf("%+v", rec)
+	}
+	if rec.Host != strings.TrimPrefix(srv.URL, "http://") {
+		t.Fatalf("record host %q", rec.Host)
 	}
 	if rec.Agent["x-agent-id"] != "tenant-test/conformance" || rec.Agent["x-agent-session-id"] != "s1" || len(rec.Agent) != 2 {
 		t.Fatalf("x-agent headers %v", rec.Agent)
