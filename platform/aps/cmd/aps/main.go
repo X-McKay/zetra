@@ -19,6 +19,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	"google.golang.org/grpc"
+	_ "google.golang.org/grpc/encoding/gzip" // Alloy sends the access log gzip-compressed (settlement)
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
