@@ -26,6 +26,7 @@ class ControllerConfig:
     trusted_root: str = "/etc/sigstore/trusted_root.json"  # keyless: private Sigstore root
     rekor_url: str = ""  # keyless: https://rekor.<domain>; empty uses the root's log only
     resync_seconds: float = 60.0
+    max_workers: int = 4  # concurrent kopf handlers (threads)
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> ControllerConfig:
@@ -44,6 +45,7 @@ class ControllerConfig:
             trusted_root=e.get("REGISTRY_SIGSTORE_TRUSTED_ROOT", cls.trusted_root),
             rekor_url=e.get("REGISTRY_SIGSTORE_REKOR_URL", ""),
             resync_seconds=float(e.get("REGISTRY_RESYNC_SECONDS", "60")),
+            max_workers=int(e.get("REGISTRY_MAX_WORKERS", "4")),
         )
 
     def client_template(self) -> dict[str, Any] | None:

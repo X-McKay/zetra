@@ -17,6 +17,7 @@ import base64
 import json
 import logging
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -32,6 +33,12 @@ from agent_platform.signing import (
 )
 
 log = logging.getLogger(__name__)
+
+# One cosign process at a time, across every verifier. kopf runs the release timers
+# of different AgentReleases in parallel threads, and each verification is six cosign
+# runs; concurrent runs took the controller past its memory limit (OOMKilled within
+# seconds of start, every start). Verification is not latency-sensitive.
+_COSIGN_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -64,6 +71,10 @@ class _Cosign:
         self._env = env
 
     def __call__(self, *args: str) -> str | None:
+        with _COSIGN_LOCK:
+            return self._call(*args)
+
+    def _call(self, *args: str) -> str | None:
         try:
             proc = self._run(
                 [self._cosign, *args],

@@ -254,3 +254,27 @@ def test_cosign_refusal_logs_the_reason_from_stderr(caplog):
     run = Runner([(1, "", err)])
     assert not CosignVerifier("/k.pub", run=run).verify(IMAGE, M, P)
     assert "refused the image (exit 1): Error: no matching attestations" in caplog.text
+
+
+def test_cosign_runs_one_process_at_a_time():
+    import threading
+
+    live, peak, lock = 0, 0, threading.Lock()
+
+    def run(argv, **kw):
+        nonlocal live, peak
+        with lock:
+            live += 1
+            peak = max(peak, live)
+        threading.Event().wait(0.02)
+        with lock:
+            live -= 1
+        return subprocess.CompletedProcess(argv, 1, "", "refused")
+
+    verifiers = [CosignVerifier("/k.pub", run=run) for _ in range(6)]
+    threads = [threading.Thread(target=v.verify, args=(IMAGE, M, P)) for v in verifiers]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert peak == 1
