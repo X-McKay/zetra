@@ -24,6 +24,15 @@ Tests covered so far (the Phase B gate is 22; the rest are added batch by batch)
 - T19: no decision is cached. One `probe_mcp` session alternates an allowed and a forbidden
   tool with one token; the APS decision log must show one decision per request, with distinct
   decision ids, in exact alternation (allow, deny.route_not_permitted, ...).
+- T11: an agent-mode session's upstream token. The capture proxy in front of the kubernetes
+  MCP server (zetra platform/capture) records what the server received; every bearer for the
+  session must carry the agent's own subject (the inbound token's `sub`, read from the
+  gateway's access log) and no `act`, and the call must be allowed by the agent's role.
+- T12: the agent access token never reaches the MCP server: no captured `jti` equals the
+  `jti` the APS issued to the session's pod, and every captured `jti` is one the APS minted by
+  exchange for that pod. (The native-exchange configuration of spec 8.11 is not deployed.)
+- T8 also reads the capture: the server received the APS-set `x-agent-*` values for the
+  session, none of the forged ones, and no `x-agent-decision-reason`.
 
 Reports never carry token material: every string is scrubbed with the runner's token patterns
 before it is written (spec 13.6).
@@ -89,7 +98,17 @@ FORGED_HEADERS = {
 # The probe reports {"status": 403, ...}; the model is told to repeat the result as JSON.
 STATUS_JSON = re.compile(r"[\"']?status[\"']?\s*[:=]\s*[\"']?([1-5][0-9]{2})")
 STATUS_WORD = re.compile(r"\b([45][0-9]{2})\b")
-TESTS = ("T4", "T5", "T8", "T19")
+TESTS = ("T4", "T5", "T8", "T11", "T12", "T19")
+CAPTURE_NAMESPACE, CAPTURE_LABEL, CAPTURE_CONTAINER = (
+    "mcp",
+    "app.kubernetes.io/name=kubernetes-mcp",
+    "capture",
+)
+GATEWAY_NAMESPACE, GATEWAY_LABEL, GATEWAY_CONTAINER = (
+    "ai-gateway",
+    "app.kubernetes.io/name=agents",
+    None,
+)
 
 
 def utcnow() -> str:
@@ -207,6 +226,18 @@ def t8_case(tenant: str) -> SandboxCase:
             "tool": MCP_ALLOWED_TOOL,
             "args": json.dumps({"namespace": tenant}, separators=(",", ":")),
             "headers": json.dumps(FORGED_HEADERS, separators=(",", ":")),
+        },
+    )
+
+
+def t11_case(tenant: str) -> SandboxCase:
+    """One allowed MCP call in agent mode; T11 and T12 read what the server received."""
+    return SandboxCase(
+        "agent_mode_call",
+        "probe_mcp",
+        {
+            "tool": MCP_ALLOWED_TOOL,
+            "args": json.dumps({"namespace": tenant}, separators=(",", ":")),
         },
     )
 
@@ -352,6 +383,59 @@ def unreadable_pods(aps_lines: list[dict]) -> list[str]:
     )
 
 
+def parse_capture_log(text: str) -> list[dict]:
+    """The capture proxy writes one JSON record per forwarded request (zetra platform/capture):
+    method, path, status, x_agent (every x-agent-* header) and bearer (sub, act_sub, aud, azp,
+    jti), never a token."""
+    out = []
+    for raw in text.splitlines():
+        raw = raw.strip()
+        if not raw.startswith("{"):
+            continue
+        try:
+            doc = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(doc, dict) and "x_agent" in doc:
+            out.append(doc)
+    return out
+
+
+GATEWAY_FIELD = re.compile(r'([A-Za-z0-9_.]+)=("((?:[^"\\]|\\.)*)"|\S*)')
+
+
+def parse_gateway_log(text: str) -> list[dict]:
+    """agentgateway's access log is one text line per request of key=value pairs (values
+    with spaces are quoted). Keep the request lines as dicts."""
+    out = []
+    for raw in text.splitlines():
+        if "http.path=" not in raw:
+            continue
+        doc = {}
+        for m in GATEWAY_FIELD.finditer(raw):
+            doc[m.group(1)] = m.group(3) if m.group(3) is not None else m.group(2)
+        out.append(doc)
+    return out
+
+
+def captures_of(run: SessionRun, records: list[dict]) -> list[dict]:
+    """The capture records of this session: the APS sets x-agent-session-id on every upstream
+    request, so the server-side record names the session itself."""
+    return sorted(
+        [r for r in records if r.get("x_agent", {}).get("x-agent-session-id") == run.session_id],
+        key=lambda r: str(r.get("ts", "")),
+    )
+
+
+def inbound_subjects(run: SessionRun, gateway_lines: list[dict]) -> set[str]:
+    """The `sub` of the inbound agent token on this session's gateway requests."""
+    return {
+        line["jwt.sub"]
+        for line in gateway_lines
+        if line.get("agent.session_id") == run.session_id and line.get("jwt.sub")
+    }
+
+
 def mcp_calls_of(run: SessionRun, aps_lines: list[dict]) -> list[dict]:
     """The APS decisions on tools/call requests of this session's sandbox, in time order.
 
@@ -447,7 +531,13 @@ def evaluate_t5_sandbox(case: SandboxCase, run: SessionRun, aps_lines: list[dict
     }
 
 
-def evaluate_t8(run: SessionRun, aps_lines: list[dict], tenant: str, agent: str) -> dict:
+def evaluate_t8(
+    run: SessionRun,
+    aps_lines: list[dict],
+    tenant: str,
+    agent: str,
+    captures: list[dict] | None = None,
+) -> dict:
     calls = mcp_calls_of(run, aps_lines)
     allowed = [c for c in calls if c.get("tool") == MCP_ALLOWED_TOOL and c.get("reason") == "allow"]
     own = f"{tenant}/{agent}"
@@ -467,12 +557,96 @@ def evaluate_t8(run: SessionRun, aps_lines: list[dict], tenant: str, agent: str)
         "no_forged_value_in_decisions": not any(v in text for v in forged),
         "probe_reported_ok": "ok" in run.final_summary,
     }
-    required = (
+    required = [
         "session_completed",
         "probe_mcp_ran",
         "call_allowed",
         "identity_is_the_sandboxes",
         "no_forged_value_in_decisions",
+    ]
+    evidence: dict[str, Any] = {
+        "session": asdict(run),
+        "decisions": [{k: c.get(k) for k in DECISION_FIELDS} for c in calls],
+        "aps_log_unreadable": unreadable_pods(aps_lines),
+    }
+    if captures is None:
+        evidence["upstream_capture"] = "not captured: no capture proxy log was read"
+    else:
+        # What the MCP server received (spec 15.2 T8: "capture at the MCP server").
+        seen = captures_of(run, captures)
+        headers = [r.get("x_agent", {}) for r in seen]
+        values = [v for h in headers for v in h.values()]
+        checks["upstream_captured"] = bool(seen)
+        checks["upstream_received_aps_values"] = bool(seen) and all(
+            h.get("x-agent-id") == own and h.get("x-agent-session-id") == run.session_id
+            for h in headers
+        )
+        checks["upstream_no_forged_value"] = not any(v in values for v in forged)
+        checks["upstream_no_decision_reason"] = not any(
+            "x-agent-decision-reason" in h for h in headers
+        )
+        required += [
+            "upstream_captured",
+            "upstream_received_aps_values",
+            "upstream_no_forged_value",
+            "upstream_no_decision_reason",
+        ]
+        evidence["upstream_capture"] = [
+            {k: r.get(k) for k in ("ts", "method", "path", "status", "x_agent")} for r in seen
+        ]
+    return {
+        "result": "pass" if all(checks[k] for k in required) else "fail",
+        "checks": checks,
+        "evidence": evidence,
+    }
+
+
+def bearer_summary(record: dict) -> dict:
+    b = record.get("bearer") or {}
+    return {k: b.get(k) for k in ("sub", "act_sub", "aud", "azp", "jti", "error")}
+
+
+def evaluate_t11(
+    run: SessionRun,
+    aps_lines: list[dict],
+    captures: list[dict],
+    gateway_lines: list[dict],
+    tenant: str,
+    agent: str,
+) -> dict:
+    calls = mcp_calls_of(run, aps_lines)
+    allowed = [c for c in calls if c.get("tool") == MCP_ALLOWED_TOOL and c.get("reason") == "allow"]
+    seen = captures_of(run, captures)
+    bearers = [r.get("bearer") or {} for r in seen]
+    subjects = inbound_subjects(run, gateway_lines)
+    agent_sub = next(iter(subjects)) if len(subjects) == 1 else None
+    checks = {
+        "session_completed": run.outcome == "COMPLETED",
+        "probe_mcp_ran": bool(run.tool_boundaries("probe_mcp")),
+        "call_allowed": bool(allowed),
+        "agent_mode": all(c.get("delegation") == "agent" for c in calls) and bool(calls),
+        "upstream_captured": bool(seen) and all(b.get("sub") for b in bearers),
+        "inbound_subject_known": agent_sub is not None,
+        "sub_is_the_agent": bool(bearers)
+        and agent_sub is not None
+        and all(b.get("sub") == agent_sub for b in bearers),
+        "no_act": bool(bearers) and all(not b.get("act_sub") for b in bearers),
+        "aud_is_the_backend": bool(bearers)
+        and all(
+            any(str(a).endswith(f"/{MCP_BACKEND}/mcp") for a in (b.get("aud") or []))
+            for b in bearers
+        ),
+        "upstream_status_ok": bool(seen) and all(int(r.get("status", 0)) < 400 for r in seen),
+    }
+    required = (
+        "session_completed",
+        "probe_mcp_ran",
+        "call_allowed",
+        "agent_mode",
+        "upstream_captured",
+        "inbound_subject_known",
+        "sub_is_the_agent",
+        "no_act",
     )
     return {
         "result": "pass" if all(checks[k] for k in required) else "fail",
@@ -480,7 +654,63 @@ def evaluate_t8(run: SessionRun, aps_lines: list[dict], tenant: str, agent: str)
         "evidence": {
             "session": asdict(run),
             "decisions": [{k: c.get(k) for k in DECISION_FIELDS} for c in calls],
-            "upstream_capture": "not captured: the MCP backends log no request headers",
+            "inbound_subjects": sorted(subjects),
+            "upstream_capture": [
+                {
+                    **{k: r.get(k) for k in ("ts", "method", "path", "status")},
+                    "bearer": bearer_summary(r),
+                }
+                for r in seen
+            ],
+            "aps_log_unreadable": unreadable_pods(aps_lines),
+        },
+    }
+
+
+def evaluate_t12(run: SessionRun, aps_lines: list[dict], captures: list[dict], tenant: str) -> dict:
+    prefix = sandbox_prefix(run.session_id)
+    issued = [
+        line
+        for line in aps_lines
+        if line.get("msg") == "token issued"
+        and str(line.get("pod", "")).startswith(prefix)
+        and line.get("namespace") == tenant
+    ]
+    agent_jtis = {str(line.get("jti")) for line in issued if line.get("jti")}
+    exchanged = {
+        str((line.get("exchange") or {}).get("upstream_jti"))
+        for line in aps_lines
+        if "decision_id" in line
+        and str(line.get("pod", "")).startswith(prefix)
+        and (line.get("exchange") or {}).get("upstream_jti")
+    }
+    seen = captures_of(run, captures)
+    captured = [str((r.get("bearer") or {}).get("jti") or "") for r in seen]
+    checks = {
+        "session_completed": run.outcome == "COMPLETED",
+        "agent_token_known": bool(agent_jtis),
+        "upstream_captured": bool(seen) and all(captured),
+        "agent_token_never_at_server": bool(captured)
+        and not any(j in agent_jtis for j in captured),
+        "every_upstream_token_was_exchanged": bool(captured)
+        and all(j in exchanged for j in captured),
+    }
+    required = (
+        "session_completed",
+        "agent_token_known",
+        "upstream_captured",
+        "agent_token_never_at_server",
+        "every_upstream_token_was_exchanged",
+    )
+    return {
+        "result": "pass" if all(checks[k] for k in required) else "fail",
+        "checks": checks,
+        "evidence": {
+            "session": asdict(run),
+            "agent_token_jti": sorted(agent_jtis),
+            "exchanged_jti": sorted(exchanged),
+            "captured_jti": captured,
+            "native_exchange_configuration": "not deployed (spec 8.11 optional); not covered",
             "aps_log_unreadable": unreadable_pods(aps_lines),
         },
     }
@@ -565,6 +795,8 @@ class Harness:
         agent: str,
         release: str,
         aps_logs: Callable[[float], Awaitable[str]],
+        capture_logs: Callable[[float], Awaitable[str]] | None = None,
+        gateway_logs: Callable[[float], Awaitable[str]] | None = None,
         aps_url: str = DEFAULT_APS_URL,
         issuer_token_path: str = DEFAULT_ISSUER_TOKEN_PATH,
         aps_token_path: str = DEFAULT_APS_TOKEN_PATH,
@@ -574,6 +806,8 @@ class Harness:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
         self.aps_logs = aps_logs  # since-seconds -> raw log text of every APS pod
+        self.capture_logs = capture_logs  # the capture sidecar on the kubernetes MCP server
+        self.gateway_logs = gateway_logs  # the agents Gateway access log
         self.aps_url = aps_url
         self.issuer_token_path = issuer_token_path
         self.aps_token_path = aps_token_path
@@ -618,6 +852,16 @@ class Harness:
 
     async def aps_lines_since(self, started: float) -> list[dict]:
         return parse_aps_log(await self.aps_logs(max(1.0, time.time() - started + 5)))
+
+    async def captures_since(self, started: float) -> list[dict] | None:
+        if self.capture_logs is None:
+            return None
+        return parse_capture_log(await self.capture_logs(max(1.0, time.time() - started + 5)))
+
+    async def gateway_since(self, started: float) -> list[dict]:
+        if self.gateway_logs is None:
+            return []
+        return parse_gateway_log(await self.gateway_logs(max(1.0, time.time() - started + 5)))
 
     async def t4(self) -> dict:
         started = time.time()
@@ -681,10 +925,34 @@ class Harness:
         started = time.time()
         run = await self.run_session(t8_case(self.tenant))
         lines = await self.aps_lines_since(started)
+        captures = await self.captures_since(started)
         return {
             "id": "T8",
             "name": "forged agent headers",
-            **evaluate_t8(run, lines, self.tenant, self.agent),
+            **evaluate_t8(run, lines, self.tenant, self.agent, captures),
+        }
+
+    async def t11(self) -> dict:
+        started = time.time()
+        run = await self.run_session(t11_case(self.tenant))
+        lines = await self.aps_lines_since(started)
+        captures = await self.captures_since(started) or []
+        gateway = await self.gateway_since(started)
+        return {
+            "id": "T11",
+            "name": "agent-mode upstream token",
+            **evaluate_t11(run, lines, captures, gateway, self.tenant, self.agent),
+        }
+
+    async def t12(self) -> dict:
+        started = time.time()
+        run = await self.run_session(t11_case(self.tenant))
+        lines = await self.aps_lines_since(started)
+        captures = await self.captures_since(started) or []
+        return {
+            "id": "T12",
+            "name": "agent token never reaches the MCP server",
+            **evaluate_t12(run, lines, captures, self.tenant),
         }
 
     async def t19(self) -> dict:
@@ -720,21 +988,31 @@ class Harness:
 
 def aps_log_reader(core) -> Callable[[float], Awaitable[str]]:
     """Read the token-route events of every APS pod from the last `since` seconds."""
+    return pod_log_reader(core, APS_NAMESPACE, APS_LABEL, APS_CONTAINER)
+
+
+def pod_log_reader(
+    core, namespace: str, label: str, container: str | None
+) -> Callable[[float], Awaitable[str]]:
+    """Read the logs of every pod matching `label` in `namespace` from the last `since` seconds,
+    one pod after another; a pod whose log cannot be read after LOG_READ_ATTEMPTS is recorded
+    as a `log unavailable` line, never silently skipped."""
 
     async def read(since: float) -> str:
         def blocking() -> str:
-            pods = core.list_namespaced_pod(APS_NAMESPACE, label_selector=APS_LABEL)
+            pods = core.list_namespaced_pod(namespace, label_selector=label)
             chunks = []
             for pod in pods.items:
                 last: Exception | None = None
                 for attempt in range(LOG_READ_ATTEMPTS):
                     try:
+                        kwargs = {"container": container} if container else {}
                         chunks.append(
                             core.read_namespaced_pod_log(
                                 pod.metadata.name,
-                                APS_NAMESPACE,
-                                container=APS_CONTAINER,
+                                namespace,
                                 since_seconds=int(since) + 1 + attempt,
+                                **kwargs,
                             )
                         )
                         last = None
@@ -773,6 +1051,8 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
         args.agent,
         args.release,
         aps_log_reader(core),
+        capture_logs=pod_log_reader(core, CAPTURE_NAMESPACE, CAPTURE_LABEL, CAPTURE_CONTAINER),
+        gateway_logs=pod_log_reader(core, GATEWAY_NAMESPACE, GATEWAY_LABEL, GATEWAY_CONTAINER),
         aps_url=os.environ.get("APS_URL", DEFAULT_APS_URL),
         issuer_token_path=os.environ.get("ISSUER_TOKEN_PATH", DEFAULT_ISSUER_TOKEN_PATH),
         aps_token_path=os.environ.get("APS_TOKEN_PATH", DEFAULT_APS_TOKEN_PATH),
