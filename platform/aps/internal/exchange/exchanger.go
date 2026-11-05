@@ -119,7 +119,7 @@ func (e *Exchanger) mint(ctx context.Context, mode, session, key, resource, acto
 	var err error
 	switch mode {
 	case "agent":
-		tr, err = e.Adapter.Agent(ctx, actor, resource)
+		tr, err = e.Adapter.Agent(ctx, actor, resource, "mcp:"+backendOf(key))
 	case "on-behalf-of":
 		tr, err = e.delegated(ctx, session, key, actor, pod)
 	default:

@@ -51,7 +51,7 @@ func TestKeycloakRetryPolicy(t *testing.T) {
 			}
 		}))
 		k := &Keycloak{TokenEndpoint: srv.URL, ClientID: "agent-policy-service", ClientSecret: "s", HTTP: srv.Client()}
-		_, err := k.Agent(context.Background(), "subject", resource)
+		_, err := k.Agent(context.Background(), "subject", resource, "mcp:kubernetes")
 		if (err == nil) != c.ok || n.Load() != c.calls {
 			t.Errorf("%s: err=%v calls=%d", c.name, err, n.Load())
 		}
@@ -75,7 +75,7 @@ func TestKeycloakTimeoutRetriedOnce(t *testing.T) {
 	cl := srv.Client()
 	cl.Timeout = 200 * time.Millisecond
 	k := &Keycloak{TokenEndpoint: srv.URL, HTTP: cl}
-	if _, err := k.Agent(context.Background(), "s", resource); err != nil || n.Load() != 2 {
+	if _, err := k.Agent(context.Background(), "s", resource, "mcp:kubernetes"); err != nil || n.Load() != 2 {
 		t.Fatalf("err=%v calls=%d", err, n.Load())
 	}
 }
@@ -94,7 +94,7 @@ func TestKeycloakRequestShapes(t *testing.T) {
 	k := &Keycloak{TokenEndpoint: srv.URL, ClientID: "agent-policy-service", ClientSecret: "sec", HTTP: srv.Client()}
 	ctx := context.Background()
 	_, _ = k.Delegated(ctx, DelegatedRequest{ClientID: "agent-tenant-a-investigator", ClientAssertion: "sa", SubjectToken: "user", ActorToken: "agent", Scope: "mcp:kubernetes"})
-	_, _ = k.Agent(ctx, "agent", resource)
+	_, _ = k.Agent(ctx, "agent", resource, "mcp:kubernetes")
 	_, _ = k.Refresh(ctx, "rt")
 
 	d := forms[0]
@@ -114,6 +114,11 @@ func TestKeycloakRequestShapes(t *testing.T) {
 	if a.Get("subject_token") != "agent" || a.Get("audience") != resource || a.Has("actor_token") || basics[1] != "agent-policy-service:sec" {
 		t.Errorf("agent mode form %v basic %s", a, basics[1])
 	}
+	// Keycloak takes the audiences of the exchanged token from the requester's effective
+	// client scopes; the audience parameter only filters them.
+	if a.Get("scope") != "mcp:kubernetes" {
+		t.Errorf("agent mode must request the audience scope, got %q", a.Get("scope"))
+	}
 	r := forms[2]
 	if r.Get("grant_type") != "refresh_token" || r.Get("client_id") != "agent-cli" || r.Get("refresh_token") != "rt" || basics[2] != ":" {
 		t.Errorf("refresh form %v", r)
@@ -121,9 +126,10 @@ func TestKeycloakRequestShapes(t *testing.T) {
 }
 
 type fakeAdapter struct {
-	mu        sync.Mutex
-	delegated []DelegatedRequest
-	agent     int
+	mu          sync.Mutex
+	delegated   []DelegatedRequest
+	agent       int
+	agentScopes []string
 	refresh   int
 	token     func() string
 	refreshOK bool
@@ -140,9 +146,10 @@ func (f *fakeAdapter) Delegated(_ context.Context, r DelegatedRequest) (*TokenRe
 	return &TokenResponse{AccessToken: f.token(), ExpiresIn: 300}, nil
 }
 
-func (f *fakeAdapter) Agent(context.Context, string, string) (*TokenResponse, error) {
+func (f *fakeAdapter) Agent(_ context.Context, _, _, scope string) (*TokenResponse, error) {
 	f.mu.Lock()
 	f.agent++
+	f.agentScopes = append(f.agentScopes, scope)
 	f.mu.Unlock()
 	return &TokenResponse{AccessToken: f.token(), ExpiresIn: 300}, nil
 }
@@ -258,7 +265,7 @@ func TestAgentModeNeedsNoAct(t *testing.T) {
 	x, _ := setup(t, ad)
 	x.Verifier = jwtverify.New(testutil.Issuer, idp.Server.URL, nil)
 	ad.token = func() string { return idp.Sign(t, map[string]any{"sub": "9b2c", "aud": []string{resource}}) }
-	if _, err := x.Exchange(context.Background(), "agent", sess, "kubernetes", resource, "a", pod); err != nil || ad.agent != 1 {
+	if _, err := x.Exchange(context.Background(), "agent", sess, "kubernetes", resource, "a", pod); err != nil || ad.agent != 1 || ad.agentScopes[0] != "mcp:kubernetes" {
 		t.Fatalf("agent mode: %v %d", err, ad.agent)
 	}
 }
