@@ -40,8 +40,8 @@ class Runner:
         r = self.results.pop(0)
         if isinstance(r, BaseException):
             raise r
-        code, out = r
-        return subprocess.CompletedProcess(argv, code, out, "")
+        code, out, *err = r
+        return subprocess.CompletedProcess(argv, code, out, err[0] if err else "")
 
 
 def test_homelab_verifies_signature_only():
@@ -244,3 +244,13 @@ def test_keyless_default_declaration_binds_manifest_digest():
 
     assert run_with(M).ok
     assert run_with("00" * 32).reason == "AttestationRejected"
+
+
+def test_cosign_refusal_logs_the_reason_from_stderr(caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="registry_controller.signature")
+    err = "x\nError: no matching attestations: none matched the predicate type\n"
+    run = Runner([(1, "", err)])
+    assert not CosignVerifier("/k.pub", run=run).verify(IMAGE, M, P)
+    assert "refused the image (exit 1): Error: no matching attestations" in caplog.text
