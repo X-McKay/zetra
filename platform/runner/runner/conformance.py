@@ -339,9 +339,13 @@ def parse_aps_log(text: str) -> list[dict]:
 
 
 def mcp_calls_of(run: SessionRun, aps_lines: list[dict]) -> list[dict]:
-    """The APS decisions on tools/call requests of this session's sandbox, in log order."""
+    """The APS decisions on tools/call requests of this session's sandbox, in time order.
+
+    The log text is one APS pod after another, and a session's requests are spread over the
+    replicas, so the lines must be ordered by their timestamp before an alternation can be
+    judged (run 7 read a real alternation as broken for this reason)."""
     prefix = sandbox_prefix(run.session_id)
-    return [
+    calls = [
         line
         for line in aps_lines
         if "decision_id" in line
@@ -349,6 +353,7 @@ def mcp_calls_of(run: SessionRun, aps_lines: list[dict]) -> list[dict]:
         and line.get("method") == "tools/call"
         and str(line.get("pod", "")).startswith(prefix)
     ]
+    return sorted(calls, key=lambda line: str(line.get("ts", "")))
 
 
 DECISION_FIELDS = ("ts", "decision_id", "reason", "tool", "agent_id", "session_id", "principal")

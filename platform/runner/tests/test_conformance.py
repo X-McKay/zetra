@@ -67,8 +67,10 @@ def decision(pod: str, tool: str, reason: str, did: str, **extra) -> dict:
 def alternation(pod: str, rounds: int) -> list[dict]:
     out = []
     for i in range(rounds):
-        out.append(decision(pod, c.MCP_ALLOWED_TOOL, "allow", f"a{i}"))
-        out.append(decision(pod, c.MCP_FORBIDDEN_TOOL, c.DENY_ROUTE, f"d{i}"))
+        out.append(decision(pod, c.MCP_ALLOWED_TOOL, "allow", f"a{i}", ts=f"t{2 * i:03d}"))
+        out.append(
+            decision(pod, c.MCP_FORBIDDEN_TOOL, c.DENY_ROUTE, f"d{i}", ts=f"t{2 * i + 1:03d}")
+        )
     return out
 
 
@@ -348,6 +350,23 @@ def test_t19_passes_on_an_exact_alternation_of_fresh_decisions():
     out = c.evaluate_t19(r, [init, *alternation(r.pod, 2), other], rounds=2)
     assert out["result"] == "pass" and all(out["checks"].values()), out["checks"]
     assert [d["decision_id"] for d in out["evidence"]["decisions"]] == ["a0", "d0", "a1", "d1"]
+
+
+def test_t19_orders_decisions_by_time_across_aps_replicas():
+    # Two APS pods: the log text is one pod's lines after the other's (run 7).
+    r = run(tool="probe_mcp", summary='{"calls":["ok","deny","ok","deny","ok","deny"]}')
+    lines = alternation(r.pod, 3)
+    pod_a, pod_b = lines[1:4] + [lines[5]], [lines[0], lines[4]]
+    out = c.evaluate_t19(r, pod_a + pod_b, rounds=3)
+    assert out["checks"]["exact_alternation"] is True and out["result"] == "pass"
+    assert [d["decision_id"] for d in out["evidence"]["decisions"]] == [
+        "a0",
+        "d0",
+        "a1",
+        "d1",
+        "a2",
+        "d2",
+    ]
 
 
 @pytest.mark.parametrize(
