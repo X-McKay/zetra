@@ -22,6 +22,7 @@ class FakeKeycloak:
         self.client_scopes: dict[tuple[str, str], set[str]] = {}
         self.roles: dict[str, dict] = {}
         self.user_roles: dict[str, dict[str, dict]] = {}
+        self.client_roles: dict[str, dict[str, dict]] = {}  # client id -> realm scope mapping
         self.sa_user: dict[str, str] = {}
         self.calls: list[tuple[str, str]] = []
         self.token_requests = 0
@@ -100,8 +101,11 @@ class FakeKeycloak:
                 return httpx.Response(201)
             role = self.roles.get(parts[1])
             return httpx.Response(200, json=role) if role else httpx.Response(404)
-        if parts[0] == "users" and parts[2] == "role-mappings":
-            mapped = self.user_roles[parts[1]]
+        if (parts[0] == "users" and parts[2] == "role-mappings") or (
+            parts[0] == "clients" and parts[2] == "scope-mappings"
+        ):
+            store = self.user_roles if parts[0] == "users" else self.client_roles
+            mapped = store.setdefault(parts[1], {})
             if method == "GET":
                 return httpx.Response(200, json=list(mapped.values()))
             for role in body:
@@ -200,10 +204,15 @@ def test_realm_roles_assigned_and_removed(kc):
     fake, admin = kc
     uid = admin.ensure_agent(spec(("kubernetes", "github")))
     assert set(fake.user_roles[uid]) == {"agent-role-kubernetes-read", "agent-role-github-read"}
+    cid = next(iter(fake.clients))
+    # The client's realm scope mapping carries the same roles: fullScopeAllowed is false, so
+    # this is what puts realm_access.roles into the token for the gateway's 8.8 check.
+    assert set(fake.client_roles[cid]) == {"agent-role-kubernetes-read", "agent-role-github-read"}
     fake.user_roles[uid]["offline_access"] = {"name": "offline_access", "id": "x"}
+    fake.client_roles[cid]["offline_access"] = {"name": "offline_access", "id": "x"}
     admin.ensure_agent(spec(("kubernetes",)))
     assert set(fake.user_roles[uid]) == {"agent-role-kubernetes-read", "offline_access"}
-    cid = next(iter(fake.clients))
+    assert set(fake.client_roles[cid]) == {"agent-role-kubernetes-read", "offline_access"}
     optional = {fake.scopes[s]["name"] for s in fake.client_scopes[(cid, "optional-client-scopes")]}
     assert optional == {"mcp:kubernetes"}
 

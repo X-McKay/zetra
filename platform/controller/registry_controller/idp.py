@@ -245,17 +245,26 @@ class KeycloakAdmin:
 
         user = self._call("GET", f"/clients/{cid}/service-account-user").json()
         uid = user["id"]
-        base = f"/users/{uid}/role-mappings/realm"
+        self._sync_agent_roles(f"/users/{uid}/role-mappings/realm", spec.realm_roles)
+        # The client has fullScopeAllowed false (7.3), so Keycloak puts a realm role into the
+        # token only when the client's own scope admits it. Without this mapping the service
+        # account holds the role but realm_access.roles is absent from every token, and the
+        # gateway's role check (8.8) denies each tool (found 2026-11-05 on the first MCP call).
+        self._sync_agent_roles(f"/clients/{cid}/scope-mappings/realm", spec.realm_roles)
+        return uid
+
+    def _sync_agent_roles(self, base: str, want: frozenset[str]) -> None:
+        """Make the agent-role-* realm roles at `base` (a user role mapping or a client scope
+        mapping) exactly `want`; roles outside the agent-role-* pattern are left alone."""
         have = {
             r["name"]: r for r in self._call("GET", base).json() if AGENT_ROLE_RE.match(r["name"])
         }
-        add = [self._ensure_role(n) for n in sorted(spec.realm_roles - have.keys())]
+        add = [self._ensure_role(n) for n in sorted(want - have.keys())]
         if add:
             self._call("POST", base, json=add)
-        remove = [have[n] for n in sorted(have.keys() - spec.realm_roles)]
+        remove = [have[n] for n in sorted(have.keys() - want)]
         if remove:
             self._call("DELETE", base, json=remove)
-        return uid
 
     def delete_agent(self, client_id: str, claims_scope: str) -> None:
         existing = self._find_client(client_id)
