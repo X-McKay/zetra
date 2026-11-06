@@ -203,3 +203,124 @@ func TestBackendKeyComparisonNeverRecordsCredential(t *testing.T) {
 		})
 	}
 }
+
+func TestRPCClassificationIsBoundedFixedAndLeavesBodyUnchanged(t *testing.T) {
+	for _, tc := range []struct{ name, body, want string }{
+		{"call", `{"jsonrpc":"2.0","id":"private-id","method":"tools/call","params":{"name":"pods_list_in_namespace","arguments":{"secret":"private-argument"}}}`, "tools/call"},
+		{"init", `{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"clientInfo":{"name":"private-client"}}}`, "initialize"},
+		{"notification", `{"jsonrpc":"2.0","method":"notifications/initialized"}`, "notifications/initialized"},
+		{"list", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "tools/list"},
+		{"unknown", `{"jsonrpc":"2.0","id":1,"method":"private-method"}`, "unclassified"},
+		{"malformed", `{"jsonrpc":"2.0","method":"tools/call"`, "unclassified"},
+		{"duplicate", `{"jsonrpc":"2.0","method":"tools/call","method":"initialize"}`, "unclassified"},
+		{"batch", `[{"jsonrpc":"2.0","method":"tools/call"}]`, "unclassified"},
+		{"version", `{"jsonrpc":"1.0","method":"tools/call"}`, "unclassified"},
+		{"trailing", `{"jsonrpc":"2.0","method":"tools/call"} {}`, "unclassified"},
+		{"oversize", `{"jsonrpc":"2.0","method":"tools/call","params":"` + strings.Repeat("x", 65536) + `"}`, "unclassified"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err != nil || string(body) != tc.body {
+					t.Error("forwarded bytes changed")
+				}
+				w.WriteHeader(200)
+			}))
+			defer backend.Close()
+			u, _ := url.Parse(backend.URL)
+			out := &syncBuffer{}
+			srv := httptest.NewServer(Handler(u, out))
+			defer srv.Close()
+			req, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(tc.body))
+			// Exercise unknown-length/chunked forwarding too.
+			req.ContentLength = -1
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+			line := out.line(t)
+			var record map[string]any
+			if err := json.Unmarshal([]byte(line), &record); err != nil {
+				t.Fatal(err)
+			}
+			if record["rpc_method"] != tc.want {
+				t.Fatalf("classification %v, want %s", record["rpc_method"], tc.want)
+			}
+			for _, secret := range []string{"private-id", "private-argument", "private-client", "private-method", "pods_list_in_namespace", "arguments", "params"} {
+				if strings.Contains(line, secret) {
+					t.Fatalf("capture emitted body content %s", secret)
+				}
+			}
+		})
+	}
+}
+
+func TestModelBodyIsNeverClassifiedAsRPC(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.Copy(io.Discard, r.Body) }))
+	defer backend.Close()
+	u, _ := url.Parse(backend.URL)
+	out := &syncBuffer{}
+	srv := httptest.NewServer(Handler(u, out))
+	defer srv.Close()
+	resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(`{"jsonrpc":"2.0","method":"tools/call"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if strings.Contains(out.line(t), "rpc_method") {
+		t.Fatal("model body was inspected")
+	}
+}
+
+type countingBody struct {
+	reads  int
+	closed bool
+}
+
+func (b *countingBody) Read(p []byte) (int, error) {
+	b.reads++
+	copy(p, "abc")
+	return 3, io.ErrUnexpectedEOF
+}
+func (b *countingBody) Close() error { b.closed = true; return nil }
+
+func TestRPCObserverNeverReadsAheadAndPreservesErrorsAndClose(t *testing.T) {
+	source := &countingBody{}
+	body := &rpcBody{ReadCloser: source, length: -1}
+	if body.method() != "unclassified" || source.reads != 0 {
+		t.Fatal("classification read ahead")
+	}
+	p := make([]byte, 8)
+	n, err := body.Read(p)
+	if n != 3 || err != io.ErrUnexpectedEOF || string(p[:n]) != "abc" || source.reads != 1 {
+		t.Fatal("body read changed")
+	}
+	if body.method() != "unclassified" {
+		t.Fatal("failed read was accepted")
+	}
+	if body.Close() != nil || !source.closed {
+		t.Fatal("close not forwarded")
+	}
+}
+
+func TestRPCObserverBoundsMemoryAndRequiresCompleteBody(t *testing.T) {
+	raw := `{"jsonrpc":"2.0","method":"tools/call"}`
+	body := &rpcBody{ReadCloser: io.NopCloser(strings.NewReader(raw)), length: int64(len(raw) + 1)}
+	p := make([]byte, len(raw))
+	_, _ = body.Read(p)
+	if body.method() != "unclassified" {
+		t.Fatal("incomplete request accepted")
+	}
+	_, _ = body.Read(p) // EOF cannot satisfy a declared length that was never read.
+	if body.method() != "unclassified" {
+		t.Fatal("early EOF accepted")
+	}
+	large := &rpcBody{ReadCloser: io.NopCloser(strings.NewReader(strings.Repeat("x", 3*maxRPCBytes))), length: -1}
+	if _, err := io.Copy(io.Discard, large); err != nil {
+		t.Fatal(err)
+	}
+	if len(large.prefix) > maxRPCBytes || cap(large.prefix) > maxRPCBytes || large.total != 3*maxRPCBytes || large.method() != "unclassified" {
+		t.Fatal("observation memory/stream bound not preserved")
+	}
+}
