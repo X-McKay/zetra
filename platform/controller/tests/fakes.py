@@ -84,9 +84,14 @@ class FakeKube:
             raise RuntimeError("NotFound")
         _merge(cur.setdefault("status", {}), copy.deepcopy(status))
 
-    def delete(self, api_version, kind, namespace, name):
+    def delete(self, api_version, kind, namespace, name, *, uid=None):
+        current = self.obj(api_version, kind, namespace, name)
+        if uid and current and current["metadata"]["uid"] != uid:
+            raise RuntimeError("Conflict")
         if self.objects.pop(self._key(api_version, kind, namespace, name), None) is not None:
             self.writes.append(("delete", kind, name))
+            return True
+        return False
 
 
 class FakeIdp:

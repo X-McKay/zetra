@@ -980,3 +980,62 @@ The full gate remains exactly 100 serialized signed starts plus an unpoliced
 negative with no annotation/agent start and real exit 3 or 4. The historical ten
 starts remain insufficient. No new live run, guard/attestor image publication,
 admission pin change or production rollout is claimed by this code change.
+
+### T28 automatic effective-policy repair
+
+The historical Phase A T28 result proved digest refusal and manual restoration,
+not automatic controller repair. Full qualification now selects only `T28`:
+
+```sh
+agent-conformance --tenant tenant-test --agent conformance --release "$SIGNED_RELEASE" \
+  --tests T28 --allow-policy-repair-mutation \
+  --policy-repair-digest "$INDEPENDENTLY_RENDERED_CANONICAL_NETPOL_DIGEST" \
+  --report /tmp/t28-report.json
+```
+
+Run only in a root-approved exclusive window with no sandbox Pods or other
+sessions, releases, Flux changes, manual reconciles or policy mutations. The
+expected digest must come from the reviewed canonical four-policy renderer,
+not from accepting whatever the live namespace currently contains. The fixture
+must be an existing signed Ready `conformance` release permitting a session without
+a grant: agent mode, or on-behalf-of with `delegationRequired` explicitly false.
+Required delegation and missing/unknown fallback status are refused. The operator
+needs create/read/list/delete for NetworkPolicies in `tenant-test`, existing
+session observation permissions and read-only access to the Registry Controller
+Pod/logs in `agent-platform`; do not grant broad policy mutation access to the
+ordinary conformance service account. Root owns exact Job/RBAC staging.
+
+The harness checks the clean canonical baseline and one stable Ready controller,
+creates exactly one randomly named run-owned allow-all egress policy, and submits
+an actual SessionWorkflow while that exact policy is still observed. Its genuine
+preflight failure must contain the injected policy name/UID and matching effective
+digest from the activity's own LIST, retained as bounded encrypted Temporal
+failure details. The original Forbidden type and message remain unchanged.
+Missing details from an older runner cannot qualify this gate. A controller that
+repairs before the real preflight wins the race produces a failed attempt; never
+stop, delay or pause the controller to manufacture a refusal.
+
+Repair is measured with the harness's monotonic clock from before the create API
+call to observing the original canonical set and injected-name absence. The bound
+is exactly 60 seconds, including API latency. An independent 60-second policy
+lease starts immediately after creation and removes the owned extra even if
+Temporal submission is stalled; that operator deletion forces failure. The start
+RPC has an explicit five-second deadline and settles before deterministic-handle
+cleanup, so no start task is abandoned in the background. A successful controller
+UID-conditional DELETE emits a bounded name/UID/resourceVersion receipt; 404 or
+conflict emits no receipt. The harness requires that receipt from the same
+unchanged controller Pod/image, separately confirms policy absence and the
+canonical digest, and rejects any sandbox provisioning by the refused session.
+No controller reconcile API, Flux reconcile, or restart is called by the harness.
+
+Cleanup is separate from repair evidence. Errors/cancellation settle ambiguous
+create/start operations, recover only the random run-owned policy and exact
+workflow handle, cancel/settle the session, and use an exact UID precondition to
+remove a remaining owned policy. The bounded absence check is recorded; operator
+cleanup never earns a passing repair result, and replacement UIDs are untouched.
+Keep failed race/timeout reports and verify no owned policy/session/Pod remains.
+
+Deploy the new controller and runner images together before qualification: the
+controller receipt and preflight failure details are both required. Source tests
+exercise event dispatch, exact-UID API options, evaluator controls and cleanup;
+they do not establish live repair latency or full T28 acceptance.
