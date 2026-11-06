@@ -3,6 +3,7 @@
 // backend received: the method and path, every x-agent-* header, and the claims of the
 // bearer token that identify it (sub, act.sub, aud, azp, jti, exp). It never logs the token,
 // any other header value, or a body (13.6); a captured token is compared by jti (15.4).
+// MCP requests additionally carry one fixed protocol-method classification, never params or IDs.
 package capture
 
 import (
@@ -25,6 +26,7 @@ type Record struct {
 	Host            string            `json:"host"` // the Host header as it arrived
 	Path            string            `json:"path"`
 	Status          int               `json:"status"`
+	RPCMethod       string            `json:"rpc_method,omitempty"` // fixed MCP protocol enum only
 	DurationMS      int64             `json:"ms"`
 	Agent           map[string]string `json:"x_agent"`                     // every x-agent-* header, lower-cased names
 	Bearer          *Bearer           `json:"bearer"`                      // nil when the request carried no bearer
@@ -138,6 +140,11 @@ func HandlerWithBackendKey(upstream *url.URL, out io.Writer, backendKey string) 
 	var mu sync.Mutex
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := Observe(r)
+		var rpc *rpcBody
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/mcp") && r.Body != nil {
+			rpc = &rpcBody{ReadCloser: r.Body, length: r.ContentLength}
+			r.Body = rpc
+		}
 		if backendKey != "" {
 			auth := r.Header.Get("Authorization")
 			match := false
@@ -149,6 +156,9 @@ func HandlerWithBackendKey(upstream *url.URL, out io.Writer, backendKey string) 
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		proxy.ServeHTTP(sw, r)
+		if rpc != nil {
+			rec.RPCMethod = rpc.method()
+		}
 		rec.Status = sw.status
 		rec.DurationMS = time.Since(start).Milliseconds()
 		line, err := json.Marshal(rec)
