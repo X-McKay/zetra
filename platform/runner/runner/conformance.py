@@ -1392,16 +1392,26 @@ class Harness:
         started = time.time()
         case = t4_case()
         run = await self.run_session(case)
-        lines = await self.aps_lines_since(started)
-        if not any(line.get("msg") == "token issued" for line in lines):
-            # The log may lag the session by a moment, and a pod read may have failed.
-            await asyncio.sleep(3)
-            lines = await self.aps_lines_since(started)
         claims, read_error = None, None
         try:
             claims = await asyncio.to_thread(read_t4_claims, self.artifact_dir, run.snapshot)
         except (OSError, ValueError, KeyError, TypeError, tarfile.TarError) as exc:
             read_error = type(exc).__name__
+        lines = []
+        for attempt in range(LOG_READ_ATTEMPTS):
+            lines = await self.aps_lines_since(started)
+            # Another session's issuance must not suppress a retry for this one.
+            matching = claims is not None and any(
+                line.get("msg") == "token issued"
+                and line.get("namespace") == self.tenant
+                and line.get("pod") == run.pod
+                and line.get("jti") == claims.get("jti")
+                for line in lines
+            )
+            if matching and not unreadable_pods(lines):
+                break
+            if attempt + 1 < LOG_READ_ATTEMPTS:
+                await asyncio.sleep(1)
         return {
             "id": "T4",
             "name": "sandbox token issuance",
@@ -1654,8 +1664,14 @@ def pod_log_reader(
     as a `log unavailable` line, never silently skipped."""
 
     async def read(since: float) -> str:
+        # Kubernetes' client exposes a relative since_seconds option. Preserve
+        # the original cutoff across slow discovery, earlier replicas and retries.
+        cutoff = time.monotonic() - since
+
         def blocking() -> str:
-            pods = core.list_namespaced_pod(namespace, label_selector=label)
+            pods = core.list_namespaced_pod(
+                namespace, label_selector=label, _request_timeout=(5, 15)
+            )
             chunks = []
             for pod in pods.items:
                 last: Exception | None = None
@@ -1666,7 +1682,8 @@ def pod_log_reader(
                             core.read_namespaced_pod_log(
                                 pod.metadata.name,
                                 namespace,
-                                since_seconds=int(since) + 1 + attempt,
+                                since_seconds=max(1, math.ceil(time.monotonic() - cutoff) + 1),
+                                _request_timeout=(5, 15),
                                 **kwargs,
                             )
                         )

@@ -423,3 +423,15 @@ role needs get on the exact new AgentRelease and existing sandbox Pod list.
 No scale, patch, status, exec, Secret or Flux privileges enter the harness.
 Local tests cover scheduling, evidence completeness and cancellation; they do not
 establish a live T17 pass.
+
+### Bounded log collection across replicas
+
+The harness preserves one log-window cutoff while reading replicas sequentially.
+It recomputes Kubernetes' relative `since_seconds` for every request and retry, so
+slow discovery or an earlier replica cannot discard another replica's early events.
+API discovery/log calls have explicit timeouts. T4 retries only until it finds the
+exact namespace, final sandbox Pod and snapshot token JTI, with every APS log source
+readable; an unrelated issuance cannot suppress the retry. Missing evidence after
+three reads still fails. Run18's historical missing issuance remains a failure;
+these regressions demonstrate collection defects without proving which delay caused
+that particular missing event.
