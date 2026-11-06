@@ -29,6 +29,14 @@ func TestConfiguredKeyAndFixtureAllowlistFailClosed(t *testing.T) {
 	if _, _, err := config(); err != nil {
 		t.Fatal("explicit retry fixture refused")
 	}
+	t.Setenv("BUDGET_BACKEND_AGENTS", "tenant-test/conformance-budget-day-retry2")
+	if _, _, err := config(); err != nil {
+		t.Fatal("explicit retry2 fixture refused")
+	}
+	t.Setenv("BUDGET_BACKEND_AGENTS", "tenant-test/conformance-budget-day-retry3")
+	if _, _, err := config(); err == nil {
+		t.Fatal("unapproved retry3 accepted")
+	}
 	t.Setenv("BUDGET_BACKEND_AGENTS", "tenant-test/conformance-budget-day-arbitrary")
 	if _, _, err := config(); err == nil {
 		t.Fatal("arbitrary retry identity accepted")

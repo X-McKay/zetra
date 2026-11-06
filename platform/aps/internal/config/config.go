@@ -99,7 +99,7 @@ func Load() (*Config, error) {
 			return nil, errors.New("budget observer requires the conformance harness and explicit fixture agents")
 		}
 		for _, agent := range c.BudgetObserverAgents {
-			if agent != "conformance-budget-day" && agent != "conformance-budget-day-retry" && agent != "conformance-budget-session" {
+			if agent != "conformance-budget-day" && agent != "conformance-budget-day-retry" && agent != "conformance-budget-day-retry2" && agent != "conformance-budget-session" {
 				return nil, errors.New("budget observer agent is not a dedicated budget fixture")
 			}
 		}

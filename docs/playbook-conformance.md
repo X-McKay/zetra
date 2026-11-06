@@ -860,3 +860,19 @@ bound workflows are closed and Pods absent. Qualification requires stable worker
 UIDs/images/restarts, unchanged fixture UID/spec, and confirmed ordinary cleanup
 for both sessions. Unit tests, dummy-process lifetime tests and installed-image
 validation establish these local paths; they do not constitute live T27 evidence.
+
+### Explicit second daily-budget retry identity
+
+`conformance-budget-day-retry2` adds one exact selectable T13 identity after
+run 30 consumed 1800 tokens on the first retry fixture before Kubernetes log
+deserialization blocked its evidence collection. Both previous daily ledgers
+and their failed reports are retained. The new signed fixture keeps the same
+2000-token daily limit, 300-token maximum reservation and 100-token actual cost;
+there is no reset, dynamic identity generation or added model permission.
+
+Runner CLI, APS read-only observer and deterministic backend admit only this
+additional fixed fixture name. An unrelated retry name is still rejected.
+A fresh signed unapproved release, exact gateway/observer/backend allowlists,
+and matching component images are prerequisites to a root-operated exclusive
+retry. Existing baseline, committed HTTP completion, restart-watch timing and
+restoration checks remain unchanged.
