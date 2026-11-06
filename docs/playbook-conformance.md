@@ -754,3 +754,109 @@ exception class, never arbitrary log/response/exception text. Evidence is frozen
 at failure without extra network collection; settled independent session cleanup
 cannot rewrite an error into a pass. Missing committed fixture or complete logs
 remain missing; partial observations never qualify the test.
+
+### Observed TLS transport and ordinary T4 capture (T27)
+
+T27 uses a signed `conformance-transport` fixture followed by the ordinary
+`conformance` T4 case. The fixture first proves the fixed gateway listener is
+reachable with verified TLS, then sends a credential-free plaintext HTTP request
+to that same port443. Only an explicit TLS-required response or a closed/reset
+connection qualifies; timeout and unrelated HTTP failures do not. A separate
+loopback server uses a newly generated ephemeral CA and IP-valid certificate.
+Its trusted positive control must succeed, while the ordinary SDK identity
+client must fail with unknown-issuer verification code20/21 before sending HTTP.
+The fixture never requests an identity token; it deletes its temporary key files.
+The installed driver forwards the normal SDK manifest/factory validators, whose
+release-image checks remain mandatory.
+
+The operator creates `agent-platform/conformance-transport-control` with
+`data.config` containing exactly the following JSON shape. Every ID is a new
+UUIDv4; both releases must be controller-verified, approved and Ready:
+
+```json
+{"version":1,"run_id":"RUN-UUID","tenant":"tenant-test","queue":"conformance-transport-RUN-UUID","worker_image":"registry.almckay.io/platform/session-runner:COMMIT@sha256:DIGEST","transport_release":"conformance-transport-SIGNED-RELEASE","t4_release":"conformance-SIGNED-RELEASE","sessions":{"transport":"UUID1","t4":"UUID2"}}
+```
+
+Start one temporary worker using the same immutable image as production, on the
+bound queue, with `python -m runner.conformance_transport_worker`. It uses the
+ordinary session-runner identity, Temporal/APS mounts and artifact PVC. Supply
+`TRANSPORT_RUN_ID` and downward-API `POD_UID`; label it as a tenant-test
+session-runner with `agentplatform.io/transport-run: RUN-UUID`. It accepts only
+these two bound sessions without seed or delegated grant. Only its actual T4
+`run_boundary` wrapper waits before boundary0 and after the final real exec;
+the standard SessionWorkflow, activity result and deletion order remain intact.
+The before-exec gate waits at most240s, and the after-exec gate120s, within the
+ordinary activity deadline. A missed window requires a new bound run.
+
+Run the harness with its normal read-only logs/Pods, exact two release reads,
+Temporal identity and read-only artifact PVC:
+
+```sh
+python -m runner.conformance --tenant tenant-test --agent conformance \
+  --release T4-RELEASE --tests T27 --transport-fixture-release TRANSPORT-RELEASE \
+  --observe-host-capture --session-timeout 900 --report /tmp/report.json
+```
+
+Both workloads require only `get` on the exact control ConfigMap. Neither can
+publish a capture receipt, execute host commands or open a raw socket. The
+operator owns bounded host preparation/capture and separate UID/resourceVersion
+conditional publication of the two sanitized receipts. Concrete host actions
+must be inspected before execution; the opt-in flags are scope guards, not an
+additional mandatory user-approval policy. Never create a privileged capture Pod.
+
+On `capture_start_required`, save only its `gate` object to a private0600 JSON
+file. On rig0, prepare the exact binding using an explicitly selected kubeconfig:
+
+```sh
+python -m runner.conformance_transport_host prepare --kubeconfig KUBECONFIG \
+  --gate GATE.json --binding BINDING.json --allow-host-metadata
+```
+
+Preparation reads the exact Pod UID/IP, its CRI sandbox/netns, guest eth0 and host
+veth peer indices. Review that binding and the concrete capture command before
+running it. Capture rechecks those identities before start, during collection,
+and after stop; it refuses replacement, termination, another node or interface.
+
+```sh
+sudo python -m runner.conformance_transport_host capture --kubeconfig KUBECONFIG \
+  --gate GATE.json --binding BINDING.json --directory FRESH-PRIVATE-DIRECTORY \
+  --owner al --allow-host-metadata --allow-host-capture
+```
+
+The only filter is `host EXACT-POD-IP and host 10.43.250.10 and tcp port 443`
+on the single bound host veth, with promiscuous mode disabled. `tcpdump` drops to
+the selected unprivileged local owner. Its raw pcap is0600 inside a0700 directory;
+the file is capped at32MiB and4096packets. An independent `/usr/bin/timeout`
+supervisor sends INT at115s and kills the process group after another5s, even if
+the Python helper is killed. Ordinary signal/failure cleanup also stops that
+exact process group. The start receipt's `pid` identifies this supervisor.
+Hitting any limit, losing packets, missing statistics or forced cleanup fails
+qualification rather than producing a partial pass.
+
+Once `capture-start.json` exists, the operator publishes its exact JSON as the
+control ConfigMap's new `data.capture-start`, preserving the original config and
+UID with an atomic resourceVersion precondition. This releases the first real
+T4 exec. The existing T4 evaluator must independently pass exact claims, current
+JTI and its sole APS issuance. On `capture_stop_required`, create the local
+`FRESH-PRIVATE-DIRECTORY/stop` marker. The worker holds that same Pod Running until
+the helper stops and writes `capture-complete.json`. Publish that exact sanitized
+JSON as new `data.capture-complete` using the same conditional operation. Never
+replace an existing receipt; observed keys are immutable. Failed completion
+still releases normal cleanup and produces a failed/error report.
+
+The report requires both real gate times and the entire captured T4 execution,
+including its exact issuance, to fall within the recorded interval. The bounded
+classic-pcap parser requires complete IPv4 TCP stream coverage, TLS handshake and
+encrypted application records in both directions, no unexpected endpoint,
+fragment, missing segment or conflicting overlap. It searches reassembled bytes
+for cleartext Authorization/Bearer/JWT patterns, including packet splits. Missing
+or ambiguous evidence fails. Only sanitized counts, times and SHA256 enter the
+report/control object; raw bytes and bearer values are never printed or uploaded.
+Keep the raw0600 file local only until operator verification, then remove it along
+with the private binding/receipts after retaining the sanitized report and digest.
+
+Finally remove the temporary worker/control/RBAC and independently confirm both
+bound workflows are closed and Pods absent. Qualification requires stable worker
+UIDs/images/restarts, unchanged fixture UID/spec, and confirmed ordinary cleanup
+for both sessions. Unit tests, dummy-process lifetime tests and installed-image
+validation establish these local paths; they do not constitute live T27 evidence.

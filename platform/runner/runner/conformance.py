@@ -1297,6 +1297,7 @@ class Harness:
         fail_closed=None,
         checkpoint=None,
         lifecycle=None,
+        transport=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1327,6 +1328,7 @@ class Harness:
         self.fail_closed = fail_closed
         self.checkpoint = checkpoint
         self.lifecycle = lifecycle
+        self.transport = transport
 
     async def run_session(
         self,
@@ -1633,6 +1635,8 @@ class Harness:
                     target = self.revocation
                 if t == "T23":
                     target = self.checkpoint
+                if t == "T27":
+                    target = self.transport
                 if t == "T17":
                     target = self.fail_closed
                 if t == "T24":
@@ -1882,6 +1886,15 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             LifecycleObserver(),
             args.lifecycle_fixture_release,
         )
+    if "T27" in args.tests:
+        from runner.conformance_transport_runtime import TransportHarness, KubernetesTransport
+
+        harness.transport = TransportHarness(
+            KubernetesTransport(core, k8s.CustomObjectsApi(), args.tenant),
+            temporal,
+            harness,
+            args.transport_fixture_release,
+        )
     return await harness.run(args.tests)
 
 
@@ -1956,6 +1969,14 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="T23: authorize exact operator-bound checkpoint gates",
     )
+    parser.add_argument(
+        "--transport-fixture-release", help="T27 signed Ready conformance-transport release"
+    )
+    parser.add_argument(
+        "--observe-host-capture",
+        action="store_true",
+        help="T27: observe an explicitly operator-approved exact-veth host capture; never execute it",
+    )
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)
@@ -1968,6 +1989,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "T17",
         "T23",
         "T24",
+        "T27",
     )
     known = {t.upper(): t for t in supported}
     args.tests = [
@@ -1976,6 +1998,17 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     unknown = [t for t in args.tests if t not in supported]
     if unknown:
         parser.error(f"unknown tests {unknown}; known: {', '.join(supported)}")
+    if "T27" in args.tests and not (
+        args.tests == ["T27"]
+        and args.tenant == "tenant-test"
+        and args.agent == "conformance"
+        and args.transport_fixture_release
+        and args.observe_host_capture
+        and args.session_timeout >= 900
+    ):
+        parser.error(
+            "T27 requires exclusive selection, tenant-test/conformance, signed fixture, --observe-host-capture and --session-timeout >=900"
+        )
     if "T23" in args.tests and not (
         args.tests == ["T23"]
         and args.tenant == "tenant-test"
