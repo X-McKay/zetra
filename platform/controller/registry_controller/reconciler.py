@@ -107,7 +107,26 @@ class Reconciler:
             name = policy["metadata"]["name"]
             if name not in TENANT_NETWORK_POLICIES:
                 log.warning("deleting foreign NetworkPolicy %s/%s", tenant, name)
-                self.kube.delete(NETPOL_API, "NetworkPolicy", tenant, name)
+                meta = policy["metadata"]
+                deleted = self.kube.delete(
+                    NETPOL_API, "NetworkPolicy", tenant, name, uid=meta["uid"]
+                )
+                if not deleted:
+                    continue
+                # A receipt after a successful UID-conditional API acknowledgement;
+                # absence and canonical repair are independently observed by T28.
+                log.info(
+                    json.dumps(
+                        {
+                            "event": "tenant_network_policy_deleted",
+                            "tenant": tenant,
+                            "name": name,
+                            "uid": meta["uid"],
+                            "resource_version": meta["resourceVersion"],
+                        },
+                        sort_keys=True,
+                    )
+                )
 
         source = self.kube.get(
             "v1", "ConfigMap", self.cfg.ca_source_namespace, self.cfg.platform.ca_configmap

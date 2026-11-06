@@ -1298,6 +1298,7 @@ class Harness:
         checkpoint=None,
         lifecycle=None,
         transport=None,
+        policy_repair=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1329,6 +1330,7 @@ class Harness:
         self.checkpoint = checkpoint
         self.lifecycle = lifecycle
         self.transport = transport
+        self.policy_repair = policy_repair
 
     async def run_session(
         self,
@@ -1635,6 +1637,8 @@ class Harness:
                     target = self.revocation
                 if t == "T23":
                     target = self.checkpoint
+                if t == "T28":
+                    target = self.policy_repair
                 if t == "T27":
                     target = self.transport
                 if t == "T17":
@@ -1845,6 +1849,17 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             args.revocation_fixture_release,
             allow_mutations=args.allow_revocation_mutations,
         )
+    if "T28" in args.tests:
+        from runner.conformance_policy_repair_runtime import PolicyRepairHarness, PolicyRepairOps
+
+        harness.policy_repair = PolicyRepairHarness(
+            temporal,
+            PolicyRepairOps(
+                core, k8s.NetworkingV1Api(), k8s.CustomObjectsApi(), args.policy_repair_digest
+            ),
+            args.agent,
+            args.release,
+        )
     if "T17" in args.tests:
         from runner.conformance_fail_closed_runtime import FailClosedHarness, OutageOps
 
@@ -1977,6 +1992,15 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="T27: observe an explicitly operator-approved exact-veth host capture; never execute it",
     )
+    parser.add_argument(
+        "--allow-policy-repair-mutation",
+        action="store_true",
+        help="T28: authorize one exact owned extra allow-all egress policy",
+    )
+    parser.add_argument(
+        "--policy-repair-digest",
+        help="T28: independently rendered canonical sha256 NetworkPolicy digest",
+    )
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)
@@ -1990,6 +2014,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "T23",
         "T24",
         "T27",
+        "T28",
     )
     known = {t.upper(): t for t in supported}
     args.tests = [
@@ -1998,6 +2023,16 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     unknown = [t for t in args.tests if t not in supported]
     if unknown:
         parser.error(f"unknown tests {unknown}; known: {', '.join(supported)}")
+    if "T28" in args.tests and not (
+        args.tests == ["T28"]
+        and args.tenant == "tenant-test"
+        and args.agent == "conformance"
+        and args.allow_policy_repair_mutation
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", args.policy_repair_digest or "")
+    ):
+        parser.error(
+            "T28 requires exclusive tenant-test/conformance, --allow-policy-repair-mutation and independently rendered --policy-repair-digest"
+        )
     if "T27" in args.tests and not (
         args.tests == ["T27"]
         and args.tenant == "tenant-test"

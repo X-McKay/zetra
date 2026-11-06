@@ -24,7 +24,15 @@ class KubePort(Protocol):
         self, api_version: str, kind: str, namespace: str, name: str, status: dict
     ) -> None: ...
 
-    def delete(self, api_version: str, kind: str, namespace: str | None, name: str) -> None: ...
+    def delete(
+        self,
+        api_version: str,
+        kind: str,
+        namespace: str | None,
+        name: str,
+        *,
+        uid: str | None = None,
+    ) -> bool: ...
 
 
 class ApiServer:
@@ -78,10 +86,22 @@ class ApiServer:
         res = self._res(api_version, kind).subresources["status"]
         res.patch(body={"status": status}, name=name, namespace=namespace, content_type=MERGE_PATCH)
 
-    def delete(self, api_version, kind, namespace, name):
+    def delete(self, api_version, kind, namespace, name, *, uid=None):
         from kubernetes.dynamic.exceptions import NotFoundError
 
         try:
-            self._res(api_version, kind).delete(name=name, namespace=namespace)
+            options = (
+                {
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "DeleteOptions",
+                        "preconditions": {"uid": uid},
+                    }
+                }
+                if uid
+                else {}
+            )
+            self._res(api_version, kind).delete(name=name, namespace=namespace, **options)
+            return True
         except NotFoundError:
-            pass
+            return False

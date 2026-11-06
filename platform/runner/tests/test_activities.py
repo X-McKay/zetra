@@ -96,6 +96,11 @@ def test_t28_preflight_refuses_extra_network_policy(tmp_path):
     setup(tmp_path, net=FakeNet(extra=[ALLOW_ALL_EGRESS]))
     err = refused(act.preflight, inp())
     assert err.type == "Forbidden" and "NetworkPolicy" in str(err)
+    [evidence] = err.details
+    assert evidence["kind"] == "effective_network_policy_mismatch"
+    assert evidence["session_id"] == SESSION
+    assert evidence["digest"] != evidence["published_digest"]
+    assert "allow-all-egress" in {p["name"] for p in evidence["policies"]}
 
 
 def test_t28_preflight_refuses_digest_mismatch(tmp_path):

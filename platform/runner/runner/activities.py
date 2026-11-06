@@ -354,7 +354,24 @@ def preflight(inp: SessionInput) -> None:
     names, have = netpol_digest(policies, d.serializer)
     want = (namespace.metadata.annotations or {}).get(LABEL + "netpol-digest")
     if names != EXPECTED_POLICIES or want != have:
-        raise _forbidden("effective NetworkPolicy set differs from the controller's")
+        # Bounded identifiers from the exact preflight LIST, not a later harness poll.
+        # Temporal encrypts failure details with the tenant payload codec. T28 uses
+        # this snapshot to distinguish a real concurrent refusal from a repair race.
+        evidence = {
+            "kind": "effective_network_policy_mismatch",
+            "tenant": ns,
+            "session_id": inp.session_id,
+            "digest": have,
+            "published_digest": want,
+            "policies": [{"name": p.metadata.name, "uid": p.metadata.uid} for p in policies[:16]],
+            "truncated": len(policies) > 16,
+        }
+        raise ApplicationError(
+            "effective NetworkPolicy set differs from the controller's",
+            evidence,
+            type="Forbidden",
+            non_retryable=True,
+        )
     if status.get("identityMode") == "on-behalf-of" and status.get("delegationRequired", True):
         grant = d.aps.get(f"/v1/grants/{inp.grant_handle}") if inp.grant_handle else None
         if not grant or grant.get("session_id") != inp.session_id:
