@@ -128,3 +128,34 @@ async def test_ambiguous_unready_or_replaced_candidate_is_refused(broken):
         inventory.core.list_namespaced_pod.return_value.items.append(deepcopy(pod))
     with pytest.raises(GuardError):
         await inventory.candidate(DEPLOYMENT, "new", IMAGE)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["env_from", "build_value_from", "pool_value_from"])
+async def test_worker_routing_must_not_be_injected_through_unresolved_environment(source):
+    inventory, dep, rs, pod = setup()
+    container = pod.spec.containers[0]
+    if source == "env_from":
+        container.env_from = [N(config_map_ref=N(name="unresolved"))]
+    else:
+        key = "WORKER_BUILD_ID" if source == "build_value_from" else "WORKER_POOL"
+        item = next(e for e in container.env if e.name == key)
+        item.value_from = N(config_map_key_ref=N(name="unresolved", key=key))
+    with pytest.raises(GuardError, match="environment"):
+        await inventory.candidate(DEPLOYMENT, "new", IMAGE)
+
+
+@pytest.mark.asyncio
+async def test_legacy_inventory_refuses_envfrom_that_could_enable_versioning():
+    inventory, dep, rs, pod = setup()
+    name = "session-runner-tenant-test"
+    labels = {"app.kubernetes.io/name": "session-runner", "agentplatform.io/tenant": "tenant-test"}
+    dep.metadata.name = name
+    dep.spec.selector.match_labels = labels
+    rs.metadata.owner_references[0].name = name
+    pod.metadata.labels = labels
+    pod.spec.containers[0].env = []
+    assert (await inventory.legacy("sessions"))["pool"] == "legacy"
+    pod.spec.containers[0].env_from = [N(config_map_ref=N(name="unresolved-build"))]
+    with pytest.raises(GuardError, match="environment"):
+        await inventory.legacy("sessions")

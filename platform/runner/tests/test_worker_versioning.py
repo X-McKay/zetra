@@ -283,3 +283,17 @@ async def test_timeout_after_mutation_is_reconciled_but_never_retried_or_reporte
     assert service.current == "new" and len(service.mutations) == 1
     assert result["status"] == "uncertain" and result["observed_current"] == "new"
     assert "sensitive" not in str(receipts) and TOKEN.decode() not in str(receipts)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["BAD", "bad.build", "bad:build", "bad_build", "x" * 41])
+async def test_routing_rejects_malformed_current_build_ids(bad):
+    from runner.worker_versioning import GuardError, VersioningOperator
+
+    service = TemporalService()
+    service.current = bad
+    operator = VersioningOperator(
+        service, HealthyInventory(), tenant="tenant-test", now=lambda: NOW
+    )
+    with pytest.raises(GuardError, match="build"):
+        await operator.routing(DEPLOYMENT)

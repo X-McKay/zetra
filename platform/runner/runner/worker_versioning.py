@@ -138,6 +138,8 @@ class VersioningOperator:
             current = route.current_version[len(deployment) + 1 :]
         else:
             raise GuardError("unrecognized current version")
+        if current != UNVERSIONED and not BUILD_RE.fullmatch(current):
+            raise GuardError("current routing build ID is malformed")
         if (
             route.ramping_version
             or route.ramping_deployment_version.build_id

@@ -115,6 +115,14 @@ class KubernetesInventory:
                 or state.restart_count != 0
             ):
                 raise GuardError("worker container is not stable and running")
+            routing_keys = {"WORKER_POOL", "WORKER_BUILD_ID", "WORKER_DEPLOYMENT"}
+            routing_env = [e for e in container.env or [] if e.name in routing_keys]
+            if (
+                getattr(container, "env_from", None)
+                or any(getattr(e, "value_from", None) is not None for e in routing_env)
+                or len({e.name for e in routing_env}) != len(routing_env)
+            ):
+                raise GuardError("unresolved or duplicate worker routing environment")
             env = {e.name: e.value for e in container.env or []}
             if pool == "legacy":
                 if (
