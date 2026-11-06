@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import os
+from contextlib import ExitStack
 from pathlib import Path
 
 from runner.types import worker_deployment
@@ -185,11 +186,15 @@ def main(argv=None):
 
     args = parser().parse_args(argv)
     try:
-        result = asyncio.run(run(args))
-        if args.output:
-            private_json(args.output, result)
-        else:
-            print(json.dumps(result, sort_keys=True))
+        with ExitStack() as outputs:
+            # Reserve the immutable result path before any service connection or
+            # write. Existing/dangling-symlink paths cannot fail only after mutation.
+            write = outputs.enter_context(Journal(args.output)) if args.output else None
+            result = asyncio.run(run(args))
+            if write:
+                write(result)
+            else:
+                print(json.dumps(result, sort_keys=True))
         if result.get("status") == "uncertain":
             return 3
         return 1 if result.get("result") == "fail" else 0

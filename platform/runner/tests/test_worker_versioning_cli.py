@@ -115,3 +115,30 @@ def test_mutating_commands_require_new_journal_and_plan():
 
     with pytest.raises(SystemExit):
         parser().parse_args(["--tenant", "tenant-test", "promote", "--plan", "plan.json"])
+
+
+def test_existing_result_file_refuses_before_any_remote_operation(monkeypatch, tmp_path):
+    from runner import worker_versioning_cli as cli
+
+    output = tmp_path / "result.json"
+    output.write_text("preserved")
+    remote = AsyncMock(return_value={"status": "confirmed"})
+    monkeypatch.setattr(cli, "run", remote)
+    code = cli.main(
+        [
+            "--tenant",
+            "tenant-test",
+            "current",
+            "--role",
+            "sessions",
+            "--pool",
+            "legacy",
+            "--image",
+            "pin",
+            "--output",
+            str(output),
+        ]
+    )
+    assert code == 2
+    remote.assert_not_called()
+    assert output.read_text() == "preserved"
