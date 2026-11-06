@@ -27,13 +27,23 @@ GROUP, VERSION = "agentplatform.io", "v1alpha1"
 LABEL = "agentplatform.io/"
 POLICY = "agent-sandbox-admission"
 RELEASE_RULE = "release-must-be-ready-and-match"
+PSA_VIOLATIONS = {
+    "hostPath": 'restricted volume types (volume "forbidden" uses restricted volume type "hostPath")',
+    "hostNetwork": "host namespaces (hostNetwork=true)",
+}
 
 
 class FixtureConflict(RuntimeError):
     """A concurrent spec change must not be overwritten by fixture restoration."""
 
 
-def admission_result(error=None, policy: str | None = None, rule: str | None = None) -> dict:
+def admission_result(
+    error=None,
+    policy: str | None = None,
+    rule: str | None = None,
+    *,
+    psa_violation: str | None = None,
+) -> dict:
     text = str(getattr(error, "body", "") or getattr(error, "reason", ""))[:8192]
     try:
         status_body = json.loads(text)
@@ -53,12 +63,29 @@ def admission_result(error=None, policy: str | None = None, rule: str | None = N
         and block
         and re.search(rf"(?m)^[ \t]+{re.escape(rule)}:", block.group(1))
     )
+    # T22 requires rejection, not a particular admission layer. PSA runs before
+    # Kyverno and these two malformed shapes intrinsically violate Restricted.
+    # Opt in per shape; all T9b cases keep the named-Kyverno requirement.
+    psa_match = re.fullmatch(
+        r'pods "[a-z0-9.-]+" is forbidden: violates PodSecurity "(restricted:v1\.[0-9]+)": (.+)',
+        text,
+    )
+    psa = bool(
+        policy
+        and status == 403
+        and psa_violation in PSA_VIOLATIONS
+        and psa_match
+        and psa_match.group(2) == PSA_VIOLATIONS[psa_violation]
+    )
     if policy is None:
         result = "pass" if accepted else "error"
         checks = {"positive_control_admitted": accepted}
     else:
-        result = "pass" if named else ("fail" if accepted else "error")
-        checks = {"rejected": not accepted, "expected_rule": named}
+        result = "pass" if named or psa else ("fail" if accepted else "error")
+        checks = {
+            "rejected": not accepted,
+            **({"expected_admission": named or psa} if psa_violation else {"expected_rule": named}),
+        }
     return {
         "result": result,
         "checks": checks,
@@ -68,6 +95,10 @@ def admission_result(error=None, policy: str | None = None, rule: str | None = N
             "message": text,
             "expected_policy": policy,
             "expected_rule": rule,
+            "expected_psa_violation": psa_violation,
+            "admission_layer": "kyverno" if named else "pod-security-admission" if psa else None,
+            "pod_security_policy": psa_match.group(1) if psa else None,
+            "pod_security_violation": psa_match.group(2) if psa else None,
         },
     }
 
@@ -90,6 +121,7 @@ class PodCase:
     pod: dict
     rule: str
     policy: str = POLICY
+    psa_violation: str | None = None
 
 
 def shape_cases(template: dict) -> list[PodCase]:
@@ -108,7 +140,9 @@ def shape_cases(template: dict) -> list[PodCase]:
         p = fresh_pod(template)
         spec = p["spec"]
         if name == "extra_container":
-            spec["containers"].append({"name": "extra", "image": spec["containers"][0]["image"]})
+            extra = copy.deepcopy(spec["containers"][0])
+            extra["name"] = "extra"
+            spec["containers"].append(extra)
         elif name == "changed_init_image":
             spec["initContainers"][0]["image"] = spec["containers"][0]["image"]
         elif name == "hostpath_volume":
@@ -125,7 +159,17 @@ def shape_cases(template: dict) -> list[PodCase]:
             spec.pop("runtimeClassName", None)
         elif name == "hostnetwork_true":
             spec["hostNetwork"] = True
-        cases.append(PodCase(name, p, rule))
+        cases.append(
+            PodCase(
+                name,
+                p,
+                rule,
+                psa_violation={
+                    "hostpath_volume": "hostPath",
+                    "hostnetwork_true": "hostNetwork",
+                }.get(name),
+            )
+        )
     return cases
 
 
@@ -181,12 +225,12 @@ class KubernetesAdmission:
             raise ValueError("controller pod template does not match fixture release")
         return template
 
-    def admit(self, pod: dict, policy=None, rule=None) -> dict:
+    def admit(self, pod: dict, policy=None, rule=None, *, psa_violation=None) -> dict:
         try:
             self.core.create_namespaced_pod(self.tenant, pod, dry_run="All", _request_timeout=30)
         except ApiException as exc:
-            return admission_result(exc, policy, rule)
-        return admission_result(None, policy, rule)
+            return admission_result(exc, policy, rule, psa_violation=psa_violation)
+        return admission_result(None, policy, rule, psa_violation=psa_violation)
 
     def attach(self, pod: dict) -> dict:
         # The Kubernetes client's first advertised PATCH media type is JSON Patch.
@@ -451,7 +495,9 @@ class AdmissionHarness:
     async def _case(self, case: PodCase) -> dict:
         return {
             "case": case.name,
-            **await asyncio.to_thread(self.ops.admit, case.pod, case.policy, case.rule),
+            **await asyncio.to_thread(
+                self.ops.admit, case.pod, case.policy, case.rule, psa_violation=case.psa_violation
+            ),
         }
 
     def _report(self, test: str, cases: list[dict], **extra) -> dict:

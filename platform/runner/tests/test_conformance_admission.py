@@ -117,6 +117,102 @@ def test_t22_cases_are_independent_and_cover_every_shape():
     assert len({c.pod["metadata"]["name"] for c in cases.values()}) == 9
 
 
+def test_extra_container_keeps_the_valid_container_security_and_shape():
+    original = pod()
+    original["spec"]["containers"][0].update(
+        securityContext={
+            "allowPrivilegeEscalation": False,
+            "runAsNonRoot": True,
+            "capabilities": {"drop": ["ALL"]},
+            "readOnlyRootFilesystem": True,
+        },
+        command=["/app/.venv/bin/python", "-m", "agent_runtime.wait"],
+        resources={"requests": {"cpu": "1", "memory": "1Gi"}},
+    )
+    extra = next(c for c in a.shape_cases(original) if c.name == "extra_container")
+    assert extra.pod["spec"]["containers"][1] == {
+        **original["spec"]["containers"][0],
+        "name": "extra",
+    }
+    extra.pod["spec"]["containers"][1]["securityContext"]["allowPrivilegeEscalation"] = True
+    assert original["spec"]["containers"][0]["securityContext"]["allowPrivilegeEscalation"] is False
+
+
+# Exact Kubernetes messages retained from live Phase B run15 (2026-11-06).
+PSA_HOSTPATH = 'pods "admission-35528428-c99d-4a1b-9947-b37363b91ae7" is forbidden: violates PodSecurity "restricted:v1.34": restricted volume types (volume "forbidden" uses restricted volume type "hostPath")'
+PSA_HOSTNETWORK = 'pods "admission-982d60fd-0005-422c-a799-8adb214f7f6e" is forbidden: violates PodSecurity "restricted:v1.34": host namespaces (hostNetwork=true)'
+PSA_EXTRA = 'pods "admission-c4e3b85d-1fc5-4bcc-a057-56c3a5da830e" is forbidden: violates PodSecurity "restricted:v1.34": allowPrivilegeEscalation != false (container "extra" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "extra" must set securityContext.capabilities.drop=["ALL"])'
+
+
+def psa_error(message, status=403):
+    error = ApiException(status=status, reason="Forbidden")
+    error.body = json.dumps({"kind": "Status", "message": message})
+    return error
+
+
+@pytest.mark.parametrize(
+    "case,message", [("hostpath_volume", PSA_HOSTPATH), ("hostnetwork_true", PSA_HOSTNETWORK)]
+)
+def test_t22_accepts_exact_restricted_psa_violation_and_exposes_its_layer(case, message):
+    class Core:
+        def create_namespaced_pod(self, namespace, body, **kwargs):
+            assert kwargs["dry_run"] == "All"
+            raise psa_error(message)
+
+    candidate = next(c for c in a.shape_cases(pod()) if c.name == case)
+    result = a.KubernetesAdmission(Core(), None, "tenant-test").admit(
+        candidate.pod, candidate.policy, candidate.rule, psa_violation=candidate.psa_violation
+    )
+    assert result["result"] == "pass" and all(result["checks"].values())
+    assert result["evidence"]["admission_layer"] == "pod-security-admission"
+    assert result["evidence"]["pod_security_policy"] == "restricted:v1.34"
+    assert result["evidence"]["message"] == message
+    # T9b's same API error still requires the exact named Kyverno rule.
+    assert a.admission_result(psa_error(message), a.POLICY, a.RELEASE_RULE)["result"] == "error"
+
+
+@pytest.mark.parametrize(
+    "message,status,expected",
+    [
+        (PSA_HOSTPATH, 403, "hostNetwork"),
+        (PSA_HOSTNETWORK, 403, "hostPath"),
+        (PSA_EXTRA, 403, "hostPath"),
+        (PSA_HOSTPATH.replace("restricted:v1.34", "baseline:v1.34"), 403, "hostPath"),
+        (PSA_HOSTPATH, 500, "hostPath"),
+        (
+            'pods "admission-test" is forbidden: User "harness" cannot create resource "pods"',
+            403,
+            "hostPath",
+        ),
+        (
+            PSA_HOSTPATH + ', privileged (container "agent" must not set privileged=true)',
+            403,
+            "hostPath",
+        ),
+    ],
+)
+def test_t22_psa_allowance_rejects_wrong_violation_profile_status_or_rbac(
+    message, status, expected
+):
+    result = a.admission_result(
+        psa_error(message, status), a.POLICY, "sandbox-shape", psa_violation=expected
+    )
+    assert result["result"] == "error"
+
+
+def test_t22_only_two_cases_allow_psa_and_kyverno_still_passes():
+    cases = a.shape_cases(pod())
+    assert {c.name for c in cases if c.psa_violation} == {"hostpath_volume", "hostnetwork_true"}
+    for case in cases:
+        result = a.admission_result(
+            rejection(case.policy, case.rule),
+            case.policy,
+            case.rule,
+            psa_violation=case.psa_violation,
+        )
+        assert result["result"] == "pass" and result["evidence"]["admission_layer"] == "kyverno"
+
+
 def test_kubernetes_adapter_never_creates_forbidden_pods_or_ephemeral_containers():
     requests = []
 
@@ -285,7 +381,7 @@ class ScenarioOps(a.KubernetesAdmission):
     def template(self, rel):
         return pod()
 
-    def admit(self, candidate, policy=None, rule=None):
+    def admit(self, candidate, policy=None, rule=None, *, psa_violation=None):
         self.ran.append((policy, rule))
         if policy is None and not self.control_ok:
             return a.admission_result(rejection())
