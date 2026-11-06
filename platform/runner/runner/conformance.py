@@ -16,6 +16,11 @@ Tests covered so far (the Phase B gate is 22; the rest are added batch by batch)
 - T5: the token route refuses every other grant, client or assertion before the IdP sees it.
   Cases that a sandbox can express are posted from inside one (`probe_http`); the two that
   need a real projected token from a non-sandbox pod are posted by the harness itself.
+- T6: the harness calls the model engine directly without a credential and with a mounted
+  raw backend key. Only HTTP statuses are retained: expected 401 then 200.
+- T7: a normal conformance session completes a model call through the gateway. The model
+  server's capture must show a static backend-key match and no agent JWT, the chat-completion
+  path and status 200. Committed boundaries and gateway logs must both show nonzero usage.
 - T8: forged `x-agent-*` request headers never become the identity the APS acts on. One
   `probe_mcp` session calls an allowed tool with forged headers; the APS decision for that
   call must carry the sandbox's own agent, session and principal, and no forged value may
@@ -109,7 +114,7 @@ FORGED_HEADERS = {
 # The probe reports {"status": 403, ...}; the model is told to repeat the result as JSON.
 STATUS_JSON = re.compile(r"[\"']?status[\"']?\s*[:=]\s*[\"']?([1-5][0-9]{2})")
 STATUS_WORD = re.compile(r"\b([45][0-9]{2})\b")
-TESTS = ("T4", "T5", "T8", "T11", "T12", "T19", "T26")
+TESTS = ("T4", "T5", "T6", "T7", "T8", "T11", "T12", "T19", "T26")
 DEFAULT_ARTIFACT_DIR = "/var/lib/agent-artifacts"
 TOKEN_STASH_MEMBER = "workspace/t26/token"  # what probe_token_stash writes, as the tar names it
 DENY_BOUND = "deny.token_bound_elsewhere"
@@ -119,6 +124,13 @@ CAPTURE_NAMESPACE, CAPTURE_LABEL, CAPTURE_CONTAINER = (
     "app.kubernetes.io/name=kubernetes-mcp",
     "capture",
 )
+MODEL_CAPTURE_NAMESPACE, MODEL_CAPTURE_LABEL, MODEL_CAPTURE_CONTAINER = (
+    "vllm",
+    "app=vllm",
+    "capture",
+)
+MODEL_CHAT_PATH = "/v1/chat/completions"
+GATEWAY_MODEL_CHAT_PATH = "/models/llm-main/v1/chat/completions"
 GATEWAY_NAMESPACE, GATEWAY_LABEL, GATEWAY_CONTAINER = (
     "ai-gateway",
     "app.kubernetes.io/name=agents",
@@ -457,7 +469,7 @@ def unreadable_pods(aps_lines: list[dict]) -> list[str]:
 def parse_capture_log(text: str) -> list[dict]:
     """The capture proxy writes one JSON record per forwarded request (zetra platform/capture):
     method, path, status, x_agent (every x-agent-* header) and bearer (sub, act_sub, aud, azp,
-    jti), never a token."""
+    jti), and an optional static backend_key_match boolean, never a token or key."""
     out = []
     for raw in text.splitlines():
         raw = raw.strip()
@@ -598,6 +610,91 @@ def evaluate_t5_sandbox(case: SandboxCase, run: SessionRun, aps_lines: list[dict
             ],
             # The sandbox's own token for its model call is the only issuance expected here.
             "issued_during_case": len(forwarded),
+        },
+    }
+
+
+def evaluate_t7(run: SessionRun, captures: list[dict], gateway_lines: list[dict]) -> dict:
+    upstream = captures_of(run, captures)
+    gateway = [
+        line
+        for line in gateway_lines
+        if line.get("agent.session_id") == run.session_id
+        and line.get("http.path") == GATEWAY_MODEL_CHAT_PATH
+        and line.get("http.method") == "POST"
+    ]
+    model = [b for b in run.boundaries if b.get("kind") == "model"]
+
+    def nonzero_usage(values: list) -> bool:
+        try:
+            counts = [int(v) for v in values]
+        except (ValueError, TypeError):
+            return False
+        return bool(counts) and all(n >= 0 for n in counts) and sum(counts) > 0
+
+    def no_agent_jwt(rec: dict) -> bool:
+        bearer = rec.get("bearer") or {}
+        return (
+            bearer.get("error") == "not_a_jwt"
+            and not bearer.get("jti")
+            and not rec.get("jti")
+            and not rec.get("bearer_jti")
+        )
+
+    checks = {
+        "session_completed": run.outcome == "COMPLETED",
+        "model_server_captured": bool(upstream),
+        "chat_completion_at_model_server": bool(upstream)
+        and all(r.get("method") == "POST" and r.get("path") == MODEL_CHAT_PATH for r in upstream),
+        "model_server_status_200": bool(upstream) and all(r.get("status") == 200 for r in upstream),
+        "backend_key_received": bool(upstream)
+        and all(r.get("backend_key_match") is True for r in upstream),
+        "no_agent_jwt_at_model_server": bool(upstream) and all(map(no_agent_jwt, upstream)),
+        "gateway_accepted_agent_token": bool(gateway)
+        and all(
+            r.get("http.status") == "200"
+            and r.get("jwt.sub")
+            and r.get("agent.decision") == "allow"
+            for r in gateway
+        ),
+        "boundary_usage_nonzero": nonzero_usage(
+            [
+                (b.get("usage") or {}).get(k)
+                for b in model
+                for k in ("input_tokens", "output_tokens")
+            ]
+        ),
+        "gateway_usage_nonzero": nonzero_usage(
+            [r.get(k) for r in gateway for k in ("llm.tokens_in", "llm.tokens_out")]
+        ),
+    }
+    return {
+        "result": "pass" if all(checks.values()) else "fail",
+        "checks": checks,
+        "evidence": {
+            "session": asdict(run),
+            "model_capture": [
+                {
+                    **{k: r.get(k) for k in ("ts", "method", "path", "status")},
+                    "backend_key_match": r.get("backend_key_match") is True,
+                    "no_agent_jwt": no_agent_jwt(r),
+                }
+                for r in upstream
+            ],
+            "gateway": [
+                {
+                    k: r.get(k)
+                    for k in (
+                        "http.method",
+                        "http.path",
+                        "http.status",
+                        "agent.session_id",
+                        "llm.tokens_in",
+                        "llm.tokens_out",
+                    )
+                }
+                for r in gateway
+            ],
         },
     }
 
@@ -943,6 +1040,36 @@ def post_token_form(aps_url: str, form: dict[str, str], timeout: float = 10.0) -
         return e.code, body
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # a backend key must never follow an engine redirect
+
+
+def model_status(url: str, key: str | None) -> int:
+    """Read status only. Bodies and exception messages may contain the backend key."""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username:
+        raise ValueError("T6_MODEL_URL must name a direct HTTP model endpoint")
+    headers = {"Authorization": f"Bearer {key}"} if key is not None else {}
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    opener = urllib.request.build_opener(_NoRedirect())
+    try:
+        with opener.open(request, timeout=10) as response:
+            return response.status
+    except urllib.error.HTTPError as response:
+        with response:
+            return response.code
+
+
+def read_backend_key(path: str) -> str:
+    with Path(path).open("rb") as source:
+        raw = source.read(16385)
+    key = raw.decode("ascii").strip()
+    if len(raw) > 16384 or not key or any(not 33 <= ord(c) <= 126 for c in key):
+        raise ValueError("BACKEND_KEY_FILE must contain one nonempty raw key")
+    return key
+
+
 class Harness:
     def __init__(
         self,
@@ -961,6 +1088,9 @@ class Harness:
         artifact_dir: str = DEFAULT_ARTIFACT_DIR,
         agent_b: str | None = None,
         release_b: str | None = None,
+        model_capture_logs: Callable[[float], Awaitable[str]] | None = None,
+        model_url: str = "",
+        backend_key_file: str = "",
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -974,6 +1104,8 @@ class Harness:
         self.post = post
         self.artifact_dir = artifact_dir  # the runner's artifact store, mounted read-only
         self.agent_b, self.release_b = agent_b, release_b  # the second agent T26 needs
+        self.model_capture_logs = model_capture_logs
+        self.model_url, self.backend_key_file = model_url, backend_key_file
 
     async def run_session(
         self,
@@ -1095,6 +1227,42 @@ class Harness:
             "name": "token route refusals",
             "result": summarize(cases),
             "cases": cases,
+        }
+
+    async def t6(self) -> dict:
+        key = read_backend_key(self.backend_key_file)
+        try:
+            unauthenticated = await asyncio.to_thread(model_status, self.model_url, None)
+            authenticated = await asyncio.to_thread(model_status, self.model_url, key)
+        finally:
+            del key
+        checks = {
+            "unauthenticated_401": unauthenticated == 401,
+            "authenticated_200": authenticated == 200,
+        }
+        return {
+            "id": "T6",
+            "name": "model engine requires backend credential",
+            "result": "pass" if all(checks.values()) else "fail",
+            "checks": checks,
+            "evidence": {
+                "unauthenticated_status": unauthenticated,
+                "authenticated_status": authenticated,
+            },
+        }
+
+    async def t7(self) -> dict:
+        started = time.time()
+        run = await self.run_session(t4_case())
+        captures = []
+        if self.model_capture_logs is not None:
+            captures = parse_capture_log(
+                await self.model_capture_logs(max(1.0, time.time() - started + 5))
+            )
+        return {
+            "id": "T7",
+            "name": "model request uses backend key",
+            **evaluate_t7(run, captures, await self.gateway_since(started)),
         }
 
     async def t8(self) -> dict:
@@ -1268,6 +1436,11 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
         artifact_dir=os.environ.get("ARTIFACT_DIR", DEFAULT_ARTIFACT_DIR),
         agent_b=args.agent_b,
         release_b=args.release_b,
+        model_capture_logs=pod_log_reader(
+            core, MODEL_CAPTURE_NAMESPACE, MODEL_CAPTURE_LABEL, MODEL_CAPTURE_CONTAINER
+        ),
+        model_url=os.environ.get("T6_MODEL_URL", ""),
+        backend_key_file=os.environ.get("BACKEND_KEY_FILE", ""),
     )
     return await harness.run(args.tests)
 

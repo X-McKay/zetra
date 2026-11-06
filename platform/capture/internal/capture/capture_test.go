@@ -150,3 +150,56 @@ func TestHandlerRecordsRequestsWithoutBearer(t *testing.T) {
 		t.Fatalf("%+v", rec)
 	}
 }
+
+func TestBackendKeyComparisonNeverRecordsCredential(t *testing.T) {
+	key := "test-engine-static-key"
+	for _, tc := range []struct {
+		name, auth string
+		match      bool
+	}{
+		{"match", "Bearer " + key, true},
+		{"wrong", "Bearer wrong-static-key", false},
+		{"missing", "", false},
+		{"other_scheme", "Basic " + key, false},
+		{"agent_jwt", "Bearer " + jwt(map[string]any{"jti": "agent-jti"}), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") != tc.auth {
+					t.Error("authorization changed")
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer backend.Close()
+			u, _ := url.Parse(backend.URL)
+			out := &syncBuffer{}
+			srv := httptest.NewServer(HandlerWithBackendKey(u, out, key))
+			defer srv.Close()
+			req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/chat/completions", nil)
+			req.Header.Set("Authorization", tc.auth)
+			req.Header.Set("X-Agent-Session-Id", "model-session")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+			line := out.line(t)
+			var rec map[string]any
+			if err := json.Unmarshal([]byte(line), &rec); err != nil {
+				t.Fatal(err)
+			}
+			if rec["backend_key_match"] != tc.match {
+				t.Fatalf("match flag: %v", rec["backend_key_match"])
+			}
+			if rec["path"] != "/v1/chat/completions" || rec["status"] != float64(200) {
+				t.Fatal("wrong request metadata")
+			}
+			if strings.Contains(line, key) || strings.Contains(line, "wrong-static-key") || strings.Contains(line, "eyJ") {
+				t.Fatal("credential in capture output")
+			}
+			if tc.match && rec["bearer"].(map[string]any)["error"] != "not_a_jwt" {
+				t.Fatal("static key was mistaken for JWT")
+			}
+		})
+	}
+}

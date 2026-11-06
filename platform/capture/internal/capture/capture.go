@@ -6,6 +6,7 @@
 package capture
 
 import (
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -19,14 +20,15 @@ import (
 
 // Record is one forwarded request as the backend saw it.
 type Record struct {
-	TS         string            `json:"ts"`
-	Method     string            `json:"method"`
-	Host       string            `json:"host"` // the Host header as it arrived
-	Path       string            `json:"path"`
-	Status     int               `json:"status"`
-	DurationMS int64             `json:"ms"`
-	Agent      map[string]string `json:"x_agent"` // every x-agent-* header, lower-cased names
-	Bearer     *Bearer           `json:"bearer"`  // nil when the request carried no bearer
+	TS              string            `json:"ts"`
+	Method          string            `json:"method"`
+	Host            string            `json:"host"` // the Host header as it arrived
+	Path            string            `json:"path"`
+	Status          int               `json:"status"`
+	DurationMS      int64             `json:"ms"`
+	Agent           map[string]string `json:"x_agent"`                     // every x-agent-* header, lower-cased names
+	Bearer          *Bearer           `json:"bearer"`                      // nil when the request carried no bearer
+	BackendKeyMatch *bool             `json:"backend_key_match,omitempty"` // configured static key only
 }
 
 // Bearer is the identifying subset of a JWT's claims; never the token.
@@ -118,6 +120,13 @@ func (w *statusWriter) Flush() {
 // original travels as X-Forwarded-Host and in the record. FlushInterval -1 keeps streamed
 // (SSE) responses flowing.
 func Handler(upstream *url.URL, out io.Writer) http.Handler {
+	return HandlerWithBackendKey(upstream, out, "")
+}
+
+// HandlerWithBackendKey additionally compares the incoming bearer to a mounted backend
+// key. Only the boolean comparison is recorded, never the key or a hash of it. An empty
+// key disables comparison for existing MCP deployments.
+func HandlerWithBackendKey(upstream *url.URL, out io.Writer, backendKey string) http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(upstream)
@@ -129,6 +138,14 @@ func Handler(upstream *url.URL, out io.Writer) http.Handler {
 	var mu sync.Mutex
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := Observe(r)
+		if backendKey != "" {
+			auth := r.Header.Get("Authorization")
+			match := false
+			if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+				match = subtle.ConstantTimeCompare([]byte(strings.TrimSpace(auth[7:])), []byte(backendKey)) == 1
+			}
+			rec.BackendKeyMatch = &match
+		}
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		proxy.ServeHTTP(sw, r)

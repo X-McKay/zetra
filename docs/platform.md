@@ -17,14 +17,41 @@ supported until the platform's Phase B conformance tests pass on a cluster.
 | `platform/agent-runtime` | 11 | `agent_runtime` sandbox SDK baked into agent images |
 | `platform/aps` | 9 | Agent Policy Service (Go): ext_authz, token and grants API, Redis ledger and vault, settlement |
 | `platform/runner` | 10 | Session Runner, cleanup reconciler, AES-GCM payload codec |
-| `platform/capture` | 15.2, 15.4 | Conformance capture proxy: a sidecar in front of a backend that records what the backend received (method, path, `x-agent-*` headers, the bearer's `sub`, `act.sub`, `aud`, `azp`, `jti`), never the token or a body; T7, T8, T10, T11, T12 compare by `jti` |
-| `platform/runner` (`runner/conformance.py`) | 15 | Phase B conformance harness: `agent-conformance` submits sessions of the conformance agent, reads their boundaries from Temporal history and the APS log, and writes a JSON report (T4, T5, T8, T19 so far) |
+| `platform/capture` | 15.2, 15.4 | Conformance capture proxy: records method, path, status, `x-agent-*` headers and identifying JWT claims, never the token or a body. An optional mounted static key adds only a `backend_key_match` boolean for T7. |
+| `platform/runner` (`runner/conformance.py`) | 15 | Phase B conformance harness: `agent-conformance` submits conformance sessions, reads committed boundaries, APS/gateway logs and upstream captures, and writes a JSON report (T4, T5, T6, T7, T8, T11, T12, T19, T26). |
 
 Each directory is its own project with its own lock. `just platform-check` runs
 every project's lint and tests; tests that need a cluster are marked `cluster`
 and are named after the conformance test they cover. Nothing here has run on a
 cluster yet; the items in spec 17.3 must be confirmed there before Phase A is
 accepted. Deployment manifests live in Kubani.
+
+## Model authentication qualification (T6/T7)
+
+Select `agent-conformance --release RELEASE --tests T6,T7` from the harness Job
+in `agent-platform`. T6 requires `T6_MODEL_URL` to be the full direct engine URL
+(for example `http://llm-engine.vllm.svc.cluster.local:8000/v1/models`) and
+`BACKEND_KEY_FILE` to name a read-only file containing the raw engine key. The
+harness adds the Bearer scheme, makes an unauthenticated request followed by an
+authenticated request, and requires 401 then 200. It does not follow redirects
+or retain response bodies. Configure the temporary NetworkPolicy exception at
+this harness vantage point; sandbox network denial does not establish T6.
+
+T7 runs a normal conformance session through the runner and reads the `capture`
+container on `app=vllm` pods in namespace `vllm`, separately from MCP capture.
+The model capture sidecar must have `CAPTURE_BACKEND_KEY_FILE` pointing to a
+read-only copy of the same raw key the gateway presents. A configured missing,
+empty or invalid file stops startup. Omit the variable to retain the existing
+MCP capture behavior. The proxy compares the incoming bearer locally and emits
+only `backend_key_match`, never a key or key hash.
+
+Passing T7 requires session-correlated POST `/v1/chat/completions` records with
+status 200, a matching backend key and no JWT `jti`; the static bearer must be
+reported as `not_a_jwt`. The gateway must record an accepted agent identity on
+`/models/llm-main/v1/chat/completions`, and both committed model boundaries and
+gateway access logs must contain nonzero token usage. Missing capture, identity
+or usage evidence fails the test. The harness ServiceAccount needs pod/log read
+access in `vllm`; the GitOps deployment owns that RBAC and the key mounts.
 
 ## Keyless signing (private Sigstore)
 
