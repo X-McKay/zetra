@@ -10,12 +10,13 @@ workflows and reads their history, so it runs as a one-shot Job with the runner 
 
 Tests covered so far (the Phase B gate is 22; the rest are added batch by batch):
 
-- T4: a sandbox obtains an agent token. The first model call of any session goes through
-  the gateway token route, so the task is `probe_files`, whose result reports the claims of
-  the cached token. The APS log must show "token issued" for exactly that pod.
+- T4: a sandbox obtains an agent token. Read the cached token's decoded allowlisted claims
+  from probe_files in the verified committed snapshot, require exact spec claims, and join
+  its JTI to APS issuance for the current sandbox generation.
 - T5: the token route refuses every other grant, client or assertion before the IdP sees it.
-  Cases that a sandbox can express are posted from inside one (`probe_http`); the two that
-  need a real projected token from a non-sandbox pod are posted by the harness itself.
+  Sandbox-expressible cases use probe_http. The harness also presents its issuer-audience
+  token, its API-audience token authenticated by SelfSubjectReview, and a genuine signed,
+  unexpired human fixture. Missing or unverifiable fixtures cannot establish a pass.
 - T6: the harness calls the model engine directly without a credential and with a mounted
   raw backend key. Only HTTP statuses are retained: expected 401 then 200.
 - T7: a normal conformance session completes a model call through the gateway. The model
@@ -81,6 +82,14 @@ from temporalio.converter import DataConverter
 
 from runner.activities import pod_name
 from runner.submit import submit
+from runner.token_conformance import (
+    allowlisted_claims,
+    api_assertion_identity,
+    load_jwks,
+    read_assertion,
+    verify_api_fixture,
+    verify_human_fixture,
+)
 from runner.types import TOKEN_PATTERNS, BoundaryOut, SessionInput, SessionResult
 
 APS_NAMESPACE = "agent-platform"
@@ -95,7 +104,8 @@ ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 GRANT_TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange"
 DEFAULT_APS_URL = "http://agent-policy-service.agent-platform.svc.cluster.local:9002"
 DEFAULT_ISSUER_TOKEN_PATH = "/var/run/secrets/issuer-audience/token"
-DEFAULT_APS_TOKEN_PATH = "/var/run/secrets/agent-policy-service/token"
+DEFAULT_API_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+DEFAULT_API_SUBJECT = "system:serviceaccount:agent-platform:conformance-harness"
 SESSION_TIMEOUT = 900.0
 # The MCP route (spec 8.8, 9.3): the conformance Agent's bundle admits one kubernetes tool;
 # pods_get is in the gateway's role policy for the backend but not in the bundle, so the APS
@@ -330,6 +340,28 @@ def read_stashed_token(artifact_dir: str, snapshot: str) -> str:
 
 
 def read_t19_probe_result(artifact_dir: str, snapshot: str) -> dict:
+    return _read_probe_result(artifact_dir, snapshot, "probe_mcp")
+
+
+def read_t4_claims(artifact_dir: str, snapshot: str) -> dict:
+    probe = _read_probe_result(artifact_dir, snapshot, "probe_files")
+    files = probe.get("files")
+    if not isinstance(files, list):
+        raise ValueError("missing file evidence")
+    runtime = [
+        item
+        for item in files
+        if isinstance(item, dict) and item.get("path") == "/sandbox/state/token.json"
+    ]
+    if len(runtime) != 1:
+        raise ValueError("expected one runtime token file")
+    claims = runtime[0].get("claims")
+    if not isinstance(claims, list) or len(claims) != 1 or not isinstance(claims[0], dict):
+        raise ValueError("expected one runtime token")
+    return allowlisted_claims(claims[0])
+
+
+def _read_probe_result(artifact_dir: str, snapshot: str, tool: str) -> dict:
     """Read only the probe's raw tool result from the final accepted, verified snapshot.
 
     The boundary summary is model prose and may be truncated. The snapshot's state.json
@@ -360,12 +392,12 @@ def read_t19_probe_result(artifact_dir: str, snapshot: str) -> dict:
             calls.update(
                 call["id"]
                 for call in message.get("tool_calls", [])
-                if call.get("function", {}).get("name") == "probe_mcp"
+                if call.get("function", {}).get("name") == tool
             )
         elif message.get("role") == "tool" and message.get("tool_call_id") in calls:
             results.append(json.loads(message["content"]))
     if len(results) != 1 or not isinstance(results[0], dict):
-        raise ValueError("expected one probe_mcp result")
+        raise ValueError("expected one probe result")
     return results[0]
 
 
@@ -383,12 +415,14 @@ def t19_case(tenant: str, rounds: int = T19_ROUNDS) -> SandboxCase:
     )
 
 
-def t5_direct_cases(issuer_token_path: str, aps_token_path: str) -> list[DirectCase]:
+def t5_direct_cases(
+    issuer_token_path: str, api_token_path: str, human_token_path: str = ""
+) -> list[DirectCase]:
     return [
         # A valid projected token of a non-sandbox ServiceAccount: reviewed, then refused.
         DirectCase("non_sandbox_pod", issuer_token_path, 403),
-        # A projected token for another audience never authenticates as an assertion.
-        DirectCase("wrong_audience", aps_token_path, 401),
+        DirectCase("api_audience", api_token_path, 401),
+        DirectCase("human_token", human_token_path, 401),
     ]
 
 
@@ -594,7 +628,16 @@ def status_from_summary(summary: str) -> int | None:
 # --- evaluation (pure, so the pass criteria are unit-testable) --------------------------------
 
 
-def evaluate_t4(run: SessionRun, aps_lines: list[dict], tenant: str) -> dict:
+def evaluate_t4(
+    run: SessionRun,
+    aps_lines: list[dict],
+    tenant: str,
+    claims: dict | None = None,
+    *,
+    agent: str = "conformance",
+    issuer: str = "",
+    read_error: str | None = None,
+) -> dict:
     # Any generation of this session's sandbox: a replaced sandbox (spec 10.5) asks again.
     prefix = sandbox_prefix(run.session_id)
     issued = [
@@ -605,21 +648,47 @@ def evaluate_t4(run: SessionRun, aps_lines: list[dict], tenant: str) -> dict:
         and line.get("namespace") == tenant
     ]
     probes = run.tool_boundaries("probe_files")
+    data = claims or {}
+    audience = data.get("aud")
+    iat, exp = data.get("iat"), data.get("exp")
+    jti = data.get("jti")
     checks = {
         "session_completed": run.outcome == "COMPLETED",
         "probe_files_ran": bool(probes),
         "token_issued_for_pod": len(issued) >= 1,
         "one_token_per_sandbox": len(issued) == 1,
-        "claims_reported": "agent-gateway" in run.final_summary,
+        "claims_from_snapshot": claims is not None and read_error is None,
+        "audiences": isinstance(audience, list)
+        and all(isinstance(a, str) for a in audience)
+        and {"agent-gateway", "agent-policy-service"}.issubset(audience),
+        "client_type": data.get("client_type") == "agent",
+        "agent_id": data.get("agent_id") == f"{tenant}/{agent}",
+        "issuer": bool(issuer) and data.get("iss") == issuer,
+        "lifetime_300_seconds": type(iat) is int and type(exp) is int and exp - iat == 300,
+        "jti_matches_issuance": isinstance(jti, str)
+        and bool(jti)
+        and any(
+            d.get("jti") == jti
+            and d.get("agent_id") == f"{tenant}/{agent}"
+            and d.get("pod") == run.pod
+            for d in issued
+        ),
+        "all_aps_logs_readable": not unreadable_pods(aps_lines),
     }
-    required = ("session_completed", "probe_files_ran", "token_issued_for_pod")
+    required = [key for key in checks if key != "one_token_per_sandbox"]
     return {
         "result": "pass" if all(checks[k] for k in required) else "fail",
         "checks": checks,
         "evidence": {
             "session": asdict(run),
+            "claims": scrub(allowlisted_claims(data)),
+            "snapshot_read_error": read_error,
             "token_issued": [
-                {k: v for k, v in line.items() if k in ("time", "agent_id", "pod", "namespace")}
+                {
+                    k: v
+                    for k, v in line.items()
+                    if k in ("time", "agent_id", "pod", "namespace", "jti")
+                }
                 for line in issued
             ],
             "aps_log_unreadable": unreadable_pods(aps_lines),
@@ -1110,13 +1179,27 @@ def evaluate_t5_direct(case: DirectCase, status: int | None, body: str, error: s
     checks = {"status_expected": status == case.expect_status, "no_token_in_reply": True}
     if "access_token" in body:
         checks["no_token_in_reply"] = False
+    try:
+        reply = json.loads(body)
+    except ValueError:
+        reply = None
+    oauth_error = reply.get("error") if isinstance(reply, dict) else None
+    if case.name in ("api_audience", "human_token"):
+        checks["invalid_client"] = (
+            isinstance(reply, dict) and reply.get("error") == "invalid_client"
+        )
     return {
         "case": case.name,
         "expected_status": case.expect_status,
         "observed_status": status,
         "result": "pass" if all(checks.values()) and error is None else "fail",
         "checks": checks,
-        "evidence": {"body": scrub(body[:512]), "error": error},
+        "evidence": {
+            "oauth_error": oauth_error
+            if oauth_error in ("invalid_client", "forbidden", "unsupported_grant_type")
+            else None,
+            "error": error,
+        },
     }
 
 
@@ -1187,7 +1270,7 @@ class Harness:
         gateway_logs: Callable[[float], Awaitable[str]] | None = None,
         aps_url: str = DEFAULT_APS_URL,
         issuer_token_path: str = DEFAULT_ISSUER_TOKEN_PATH,
-        aps_token_path: str = DEFAULT_APS_TOKEN_PATH,
+        api_token_path: str = DEFAULT_API_TOKEN_PATH,
         session_timeout: float = SESSION_TIMEOUT,
         post: Callable[[str, dict[str, str]], tuple[int, str]] = post_token_form,
         artifact_dir: str = DEFAULT_ARTIFACT_DIR,
@@ -1197,6 +1280,13 @@ class Harness:
         model_url: str = "",
         backend_key_file: str = "",
         admission=None,
+        issuer: str = "",
+        api_subject: str = DEFAULT_API_SUBJECT,
+        human_token_path: str = "",
+        human_subject: str = "",
+        human_username: str = "",
+        human_client_id: str = "agent-cli",
+        human_jwks_url: str = "",
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1205,7 +1295,7 @@ class Harness:
         self.gateway_logs = gateway_logs  # the agents Gateway access log
         self.aps_url = aps_url
         self.issuer_token_path = issuer_token_path
-        self.aps_token_path = aps_token_path
+        self.api_token_path = api_token_path
         self.session_timeout = session_timeout
         self.post = post
         self.artifact_dir = artifact_dir  # the runner's artifact store, mounted read-only
@@ -1213,6 +1303,14 @@ class Harness:
         self.model_capture_logs = model_capture_logs
         self.model_url, self.backend_key_file = model_url, backend_key_file
         self.admission = admission
+        self.issuer = issuer
+        self.api_subject = api_subject
+        self.human_token_path = human_token_path
+        self.human_subject, self.human_username = human_subject, human_username
+        self.human_client_id = human_client_id
+        self.human_jwks_url = (
+            human_jwks_url or issuer.rstrip("/") + "/protocol/openid-connect/certs"
+        )
 
     async def run_session(
         self,
@@ -1287,32 +1385,59 @@ class Harness:
             # The log may lag the session by a moment, and a pod read may have failed.
             await asyncio.sleep(3)
             lines = await self.aps_lines_since(started)
+        claims, read_error = None, None
+        try:
+            claims = await asyncio.to_thread(read_t4_claims, self.artifact_dir, run.snapshot)
+        except (OSError, ValueError, KeyError, TypeError, tarfile.TarError) as exc:
+            read_error = type(exc).__name__
         return {
             "id": "T4",
             "name": "sandbox token issuance",
-            **evaluate_t4(run, lines, self.tenant),
+            **evaluate_t4(
+                run,
+                lines,
+                self.tenant,
+                claims,
+                agent=self.agent,
+                issuer=self.issuer,
+                read_error=read_error,
+            ),
         }
 
     async def t5(self) -> dict:
         cases = []
-        for case in t5_sandbox_cases(self.tenant, self.agent):
-            started = time.time()
-            run = await self.run_session(case)
-            lines = await self.aps_lines_since(started)
-            cases.append(evaluate_t5_sandbox(case, run, lines))
+        # Use short-lived mounted credentials before spending minutes on sandbox sessions.
         cid = client_id(self.tenant, self.agent)
-        for direct in t5_direct_cases(self.issuer_token_path, self.aps_token_path):
+        for direct in t5_direct_cases(
+            self.issuer_token_path, self.api_token_path, self.human_token_path
+        ):
+            proof = None
             try:
-                assertion = Path(direct.assertion_path).read_text(encoding="utf-8").strip()
-            except OSError as e:
+                assertion = read_assertion(direct.assertion_path)
+                if direct.name == "api_audience":
+                    authenticated_as = await asyncio.to_thread(api_assertion_identity, assertion)
+                    proof = verify_api_fixture(
+                        assertion, authenticated_as, self.api_subject, self.issuer
+                    )
+                elif direct.name == "human_token":
+                    jwks = await asyncio.to_thread(load_jwks, self.human_jwks_url)
+                    proof = verify_human_fixture(
+                        assertion,
+                        jwks,
+                        self.issuer,
+                        self.human_subject,
+                        self.human_username,
+                        self.human_client_id,
+                    )
+            except Exception as e:  # noqa: BLE001 - unusable fixtures are evidence, never token text
                 cases.append(
                     {
                         "case": direct.name,
                         "expected_status": direct.expect_status,
                         "observed_status": None,
                         "result": "error",
-                        "checks": {},
-                        "evidence": {"error": f"assertion unreadable: {type(e).__name__}"},
+                        "checks": {"fixture_verified": False},
+                        "evidence": {"fixture_error": type(e).__name__},
                     }
                 )
                 continue
@@ -1328,7 +1453,16 @@ class Harness:
                 error = None
             except (OSError, urllib.error.URLError) as e:
                 status, body, error = None, "", type(e).__name__
-            cases.append(evaluate_t5_direct(direct, status, body, error))
+            result = evaluate_t5_direct(direct, status, body, error)
+            if proof is not None:
+                result["checks"]["fixture_verified"] = True
+                result["evidence"]["fixture_claims"] = scrub(proof)
+            cases.append(result)
+        for case in t5_sandbox_cases(self.tenant, self.agent):
+            started = time.time()
+            run = await self.run_session(case)
+            lines = await self.aps_lines_since(started)
+            cases.append(evaluate_t5_sandbox(case, run, lines))
         return {
             "id": "T5",
             "name": "token route refusals",
@@ -1570,7 +1704,7 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
         gateway_logs=pod_log_reader(core, GATEWAY_NAMESPACE, GATEWAY_LABEL, GATEWAY_CONTAINER),
         aps_url=os.environ.get("APS_URL", DEFAULT_APS_URL),
         issuer_token_path=os.environ.get("ISSUER_TOKEN_PATH", DEFAULT_ISSUER_TOKEN_PATH),
-        aps_token_path=os.environ.get("APS_TOKEN_PATH", DEFAULT_APS_TOKEN_PATH),
+        api_token_path=os.environ.get("API_TOKEN_PATH", DEFAULT_API_TOKEN_PATH),
         session_timeout=args.session_timeout,
         artifact_dir=os.environ.get("ARTIFACT_DIR", DEFAULT_ARTIFACT_DIR),
         agent_b=args.agent_b,
@@ -1581,6 +1715,13 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
         model_url=os.environ.get("T6_MODEL_URL", ""),
         backend_key_file=os.environ.get("BACKEND_KEY_FILE", ""),
         admission=admission,
+        issuer=os.environ.get("ISSUER_URL", ""),
+        api_subject=os.environ.get("T5_API_SUBJECT", DEFAULT_API_SUBJECT),
+        human_token_path=os.environ.get("T5_HUMAN_TOKEN_FILE", ""),
+        human_subject=os.environ.get("T5_HUMAN_SUBJECT", ""),
+        human_username=os.environ.get("T5_HUMAN_USERNAME", ""),
+        human_client_id=os.environ.get("T5_HUMAN_CLIENT_ID", "agent-cli"),
+        human_jwks_url=os.environ.get("T5_HUMAN_JWKS_URL", ""),
     )
     return await harness.run(args.tests)
 

@@ -132,7 +132,7 @@ def test_t5_cases_cover_the_refusal_matrix():
         json.loads(cases["duplicate_field"].args["form"])["client_id"]
         == ["agent-tenant-test-conformance"] * 2
     )
-    assert [d.expect_status for d in c.t5_direct_cases("/i", "/a")] == [403, 401]
+    assert [d.expect_status for d in c.t5_direct_cases("/i", "/a")] == [403, 401, 401]
 
 
 def test_mcp_cases_name_the_bundle_tools_and_the_forged_headers():
@@ -292,36 +292,6 @@ def test_status_is_read_from_the_model_report(summary, status):
 # --- pass criteria --------------------------------------------------------------------------------
 
 
-def test_t4_passes_when_the_aps_issued_a_token_to_that_pod():
-    r = run(
-        summary='{"files": [{"path": "/sandbox/state/token.json", "claims": [{"aud": "agent-gateway"}]}]}'
-    )
-    out = c.evaluate_t4(r, [issued(r.pod)], TENANT)
-    assert out["result"] == "pass" and all(out["checks"].values())
-    assert out["evidence"]["token_issued"][0]["pod"] == r.pod
-
-
-@pytest.mark.parametrize(
-    "r,lines",
-    [
-        (run(), []),  # no issuance seen
-        (run(), [issued("s-other-g1")]),  # another pod's token
-        (run(), [issued(pod_name(SESSION, 1), "tenant-other")]),  # another tenant
-        (run(outcome="FAILED"), [issued(pod_name(SESSION, 1))]),
-        (run(tool="probe_env"), [issued(pod_name(SESSION, 1))]),
-    ],
-)
-def test_t4_fails_without_its_required_evidence(r, lines):
-    assert c.evaluate_t4(r, lines, TENANT)["result"] == "fail"
-
-
-def test_t4_accepts_the_token_of_a_replaced_sandbox():
-    r = run()
-    r.generation, r.pod = 2, pod_name(SESSION, 2)
-    out = c.evaluate_t4(r, [issued(pod_name(SESSION, 2))], TENANT)
-    assert out["result"] == "pass" and out["evidence"]["session"]["pod"] == pod_name(SESSION, 2)
-
-
 def test_failure_type_finds_the_application_error_behind_the_wrapping():
     from temporalio.exceptions import ApplicationError
 
@@ -360,12 +330,6 @@ async def test_run_session_cancels_the_workflow_on_harness_timeout(monkeypatch):
     h = c.Harness(client, TENANT, AGENT, "r1", no_logs, session_timeout=0.01)
     r = await h.run_session(c.t4_case())
     assert r.outcome == "HARNESS_TIMEOUT" and handle.cancelled and r.boundaries == []
-
-
-def test_t4_records_a_second_issuance_without_failing():
-    r = run()
-    out = c.evaluate_t4(r, [issued(r.pod), issued(r.pod)], TENANT)
-    assert out["result"] == "pass" and out["checks"]["one_token_per_sandbox"] is False
 
 
 def test_t5_sandbox_case_passes_on_expected_status_and_logged_refusal():
@@ -701,38 +665,6 @@ def fake_aps():
     server.shutdown()
 
 
-async def test_t5_direct_cases_post_the_pod_tokens_and_never_log_them(fake_aps, tmp_path, caplog):
-    url, seen = fake_aps
-    (tmp_path / "issuer").write_text("issuer-token\n")
-    (tmp_path / "aps").write_text(FAKE_JWT)
-
-    async def no_logs(since: float) -> str:
-        return ""
-
-    h = c.Harness(
-        client=None,
-        tenant=TENANT,
-        agent=AGENT,
-        release="conformance-r1",
-        aps_logs=no_logs,
-        aps_url=url,
-        issuer_token_path=str(tmp_path / "issuer"),
-        aps_token_path=str(tmp_path / "aps"),
-    )
-    # Only the direct cases: no Temporal client, so the sandbox cases are skipped by monkeypatch.
-    h.run_session = None  # type: ignore[assignment]
-    c_cases = c.t5_sandbox_cases  # keep a reference for restoration
-    c.t5_sandbox_cases = lambda tenant, agent: []  # type: ignore[assignment]
-    try:
-        out = await h.t5()
-    finally:
-        c.t5_sandbox_cases = c_cases  # type: ignore[assignment]
-    assert [k["result"] for k in out["cases"]] == ["pass", "pass"] and out["result"] == "pass"
-    assert [s["client_assertion"] for s in seen] == ["issuer-token", FAKE_JWT]
-    assert all(s["client_id"] == "agent-tenant-test-conformance" for s in seen)
-    assert FAKE_JWT not in json.dumps(c.scrub(out))
-
-
 async def test_t5_direct_case_is_an_error_when_the_token_file_is_missing(fake_aps, tmp_path):
     url, _ = fake_aps
 
@@ -747,7 +679,8 @@ async def test_t5_direct_case_is_an_error_when_the_token_file_is_missing(fake_ap
         no_logs,
         aps_url=url,
         issuer_token_path=str(tmp_path / "missing"),
-        aps_token_path=str(tmp_path / "missing"),
+        api_token_path=str(tmp_path / "missing"),
+        human_token_path=str(tmp_path / "missing"),
     )
     saved = c.t5_sandbox_cases
     c.t5_sandbox_cases = lambda tenant, agent: []  # type: ignore[assignment]

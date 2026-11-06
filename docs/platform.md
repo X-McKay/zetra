@@ -26,6 +26,43 @@ and are named after the conformance test they cover. Nothing here has run on a
 cluster yet; the items in spec 17.3 must be confirmed there before Phase A is
 accepted. Deployment manifests live in Kubani.
 
+## Token qualification (T4/T5)
+
+T4 reads the existing `probe_files` tool result from the hash-verified final
+committed snapshot. The runtime token cache itself is excluded from snapshots;
+only its decoded, allowlisted claims are consumed. Passing requires both
+`agent-gateway` and `agent-policy-service` audiences, `client_type: agent`, the
+exact configured tenant/agent, a 300-second `exp - iat`, the exact `ISSUER_URL`,
+and a JTI matching APS issuance for the final sandbox generation. Model prose
+cannot substitute for these claims, and unreadable APS logs fail the gate.
+
+T5 retains the six sandbox refusal probes and the non-sandbox issuer-audience
+case. Direct cases run before the sandbox sessions so those sessions do not
+consume a short-lived human fixture's lifetime. Its API-audience case uses `API_TOKEN_PATH`, defaulting to
+`/var/run/secrets/kubernetes.io/serviceaccount/token`. It first authenticates
+that exact token to the Kubernetes SelfSubjectReview API and verifies its
+unexpired, pod-bound ServiceAccount claims. `T5_API_SUBJECT` defaults to
+`system:serviceaccount:agent-platform:conformance-harness`. An APS-audience
+token is not accepted as a substitute.
+
+The human case requires a genuine unexpired Keycloak access token mounted
+read-only at `T5_HUMAN_TOKEN_FILE`. Set `T5_HUMAN_SUBJECT` and
+`T5_HUMAN_USERNAME` to the expected human identity; `T5_HUMAN_CLIENT_ID`
+defaults to `agent-cli`. The harness verifies RS256 against the configured
+issuer's signing keys, exact issuer/identity/client, access-token type and
+lifetime, and rejects agent, service-account or delegated tokens. `T5_HUMAN_JWKS_URL`
+defaults to `${ISSUER_URL}/protocol/openid-connect/certs`; an explicit internal
+Keycloak URL is supported for the trusted harness. No bearer is sent to JWKS,
+redirects are refused, and an unavailable key source fails without fallback.
+GitOps owns the narrow API/Keycloak network access and read-only fixture mount.
+
+Both the API and human assertions must receive exactly 401 `invalid_client`
+from the APS token route. Missing, expired, invalid or unverifiable fixtures
+are explicit errors, so T5 cannot pass in full without the human fixture. Only
+allowlisted claims, statuses, fixed error labels and error classes enter the
+report; raw assertions and arbitrary response bodies do not. Earlier eight-case
+T5 passes and issuance-only T4 passes retain their narrower historical meaning.
+
 ## Model authentication qualification (T6/T7)
 
 Select `agent-conformance --release RELEASE --tests T6,T7` from the harness Job

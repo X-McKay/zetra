@@ -59,6 +59,16 @@ for the required mounts, vantage point and capture permissions.
 The capture image build uses the target OS and architecture explicitly, so an
 ARM64 model-side image can be built on an AMD64 builder without emulation.
 
+T4 now requires exact runtime token claims from the verified committed
+snapshot, including both audiences, issuer, agent identity, client type,
+300-second lifetime and a JTI tied to the current sandbox generation. T5
+authenticates the actual API-audience assertion to Kubernetes first and requires
+a signed, unexpired, explicitly configured human fixture for its human-token
+case. Both must receive 401 `invalid_client`; missing human evidence cannot
+produce a full T5 pass. Previous T4/T5 harness passes did not establish these
+stronger checks. New live qualification is required; the local tests use
+controlled API/JWKS endpoints and do not constitute genuine live human evidence.
+
 T19 now requires the full 50-cycle MCP alternation in ten seconds with one
 pinned token, plus two allowed/forbidden model-route cycles. The harness reads
 actual HTTP statuses and monotonic timing from the accepted snapshot's tool
