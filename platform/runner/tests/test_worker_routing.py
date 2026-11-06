@@ -99,3 +99,22 @@ def test_existing_legacy_deployment_environment_remains_unversioned(monkeypatch)
     monkeypatch.setenv("WORKER_BUILD_ID", "")
     monkeypatch.setenv("WORKER_DEPLOYMENT", "session-runner-tenant-test")
     assert worker._deployment("tenant-test", "sessions") is None
+
+
+@pytest.mark.asyncio
+async def test_governed_submission_preserves_t28_rpc_timeout_extension():
+    from datetime import timedelta
+    from unittest.mock import AsyncMock
+    from runner.submit import submit
+    from tests.test_worker_versioning import TemporalService
+
+    service = TemporalService()
+    service.current = "new"
+    client = Mock(namespace="agents-tenant-test", workflow_service=service)
+    client.start_workflow = AsyncMock()
+    timeout = timedelta(seconds=4)
+    await submit(client, session(worker_pool="governed-v1"), rpc_timeout=timeout)
+    assert client.start_workflow.call_args.kwargs["rpc_timeout"] == timeout
+    assert (
+        client.start_workflow.call_args.kwargs["task_queue"] == "sessions-tenant-test-governed-v1"
+    )
