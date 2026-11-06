@@ -73,4 +73,4 @@ refunds expiry; malformed/unknown backend fields cannot invalidate the 300 bound
 - Final integrated runner suite:453passed; Ruff clean. APS full Go tests/vet and
   complete agent repository justcheck passed again on rebased main.
 
-Final independent-review disposition and PR publication remain pending.
+Independent review complete: no remaining material findings; reviewer independently ran all36 budget evaluator/runtime tests. PR publication is next.
