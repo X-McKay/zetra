@@ -14,7 +14,7 @@ from temporalio.client import Client, WorkflowHandle
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 
-from runner.types import InvalidInput, SessionInput, SessionResult
+from runner.types import WORKER_POOLS, InvalidInput, SessionInput, SessionResult
 from runner.workflow import EXECUTION_TIMEOUT, SessionWorkflow
 
 
@@ -22,6 +22,18 @@ async def submit(
     client: Client, inp: SessionInput, *, rpc_timeout: timedelta | None = None
 ) -> WorkflowHandle[SessionWorkflow, SessionResult]:
     inp.validate()
+    if inp.worker_pool != "legacy":
+        from runner.types import worker_deployment
+        from runner.worker_versioning import UNVERSIONED, GuardError, VersioningOperator
+
+        if client.namespace != f"agents-{inp.tenant}":
+            raise GuardError("governed submission namespace differs from tenant")
+        operator = VersioningOperator(client.workflow_service, None, tenant=inp.tenant)
+        current, _ = await operator.routing(
+            worker_deployment(inp.tenant, "sessions", inp.worker_pool)
+        )
+        if current == UNVERSIONED:
+            raise GuardError("governed queue has not been promoted")
     try:
         return await client.start_workflow(
             SessionWorkflow.run,
@@ -50,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     task.add_argument("--task-file", type=Path)
     parser.add_argument("--max-boundaries", type=int, default=64)
     parser.add_argument("--seed", default=None, help="snapshot key to restore into generation 1")
+    parser.add_argument("--worker-pool", choices=WORKER_POOLS, default="legacy")
     args = parser.parse_args(argv)
     try:
         raw = args.task_file.read_text() if args.task_file else args.task
@@ -62,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             task=json.loads(raw),
             max_boundaries=args.max_boundaries,
             seed=args.seed,
+            worker_pool=args.worker_pool,
         )
         inp.validate()
     except (InvalidInput, ValueError) as e:

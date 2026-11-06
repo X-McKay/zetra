@@ -1039,3 +1039,53 @@ Deploy the new controller and runner images together before qualification: the
 controller receipt and preflight failure details are both required. Source tests
 exercise event dispatch, exact-UID API options, evaluator controls and cleanup;
 they do not establish live repair latency or full T28 acceptance.
+
+## Worker Versioning: disjoint-pool adapter milestone (2026-11-06)
+
+Historical SessionInput payloads omit `worker_pool`; decoding defaults to
+`legacy`, retaining `sessions-<tenant>` and unversioned workers. Explicit
+`governed-v1` uses `sessions-<tenant>-governed-v1` and its separate deployment
+`session-runner-<tenant>-governed-v1`. Cleanup has corresponding disjoint queues.
+`agent-session-submit --worker-pool governed-v1` refuses an unpromoted route or
+wrong tenant namespace. Legacy workers reject version/build environment settings;
+governed workers require the exact role deployment and a build, with PINNED
+behavior. Governed workers never automatically create/change the legacy Schedule.
+
+The Python `VersioningOperator` permits only governed role deployments, validates
+fresh conflict-token routing with no ramp, and requires exact Ready candidate
+Pod/image ownership plus recent Pod-bound Workflow and Activity pollers. It also
+requires retained Ready legacy workers, unversioned legacy queues and their fresh
+pollers. The initial promotion therefore changes only a distinct queue, without
+an assertion-only same-queue migration bypass. Mutation is journaled pending
+before the RPC; timeouts/readback ambiguity remain uncertain without retries.
+`KubernetesInventory` binds Deployment -> ReplicaSet -> Pod UIDs, exact disjoint
+selectors, complete rollout, configured version and installed image digest.
+
+`CleanupScheduleOperator` changes only the future action task queue, preserving
+opaque input payloads, action options, interval/policy/state, memo and search
+attributes through raw protobufs. It requires expected queue, Schedule fingerprint
+and an exact nonzero eight-byte conflict counter. The pinned
+[Temporal1.29.1 frontend](https://github.com/temporalio/temporal/blob/v1.29.1/service/frontend/workflow_handler.go)
+treats shorter counters as zero; the
+[scheduler](https://github.com/temporalio/temporal/blob/v1.29.1/service/worker/scheduler/workflow.go)
+allows zero to bypass conflict checking. Stale updates are acknowledged at the
+RPC boundary but asynchronously ignored by the scheduler. An RPC acknowledgment
+is never treated as an applied update: exact readback is required. Queue rollback
+requires the retained legacy workers and preserves all other Schedule fields.
+
+[Local Temporal1.29.1 evidence](qualification/worker-versioning-local-2026-11-06.json)
+shows an old in-flight workflow still executing both Activities on legacy, a new
+workflow pinned to governed, stale deployment CAS FAILED_PRECONDITION, ignored
+stale Schedule state and an identical Schedule after queue roundtrip. Its
+Kubernetes inventory is explicitly synthetic; exact ownership has separate unit
+regressions. Initial local assertions exposed server normalization of created
+Schedules and the asynchronous Schedule update acknowledgment; comparison was
+corrected to the actual described initial Schedule and stale-update state,
+respectively. Those diagnostic assertion failures are not qualification passes.
+
+This milestone is an adapter implementation, not platform acceptance. No live
+queue, worker, Schedule, image, release or Kubernetes object was changed. Exact
+current-worker discovery, operational CLI, replay/drain/rollback evidence,
+inactive disjoint manifests and seven-day retention/query qualification remain.
+Legacy workers, old queues and histories must stay until their callers and
+histories are separately drained. Empty visibility is not submission closure.
