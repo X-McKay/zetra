@@ -151,6 +151,14 @@ def test_three_separate_complete_cases_pass(case):
     assert evaluate_case(case, data(case))["result"] == "pass"
 
 
+def test_blocked_delete_rejects_duration_below_production_deadline():
+    d = data("blocked_deletion")
+    next(h for h in d["history"] if h.get("activity") == "delete_sandbox")["duration"] = 109
+    assert not evaluate_case("blocked_deletion", d)["checks"][
+        "ordinary_recovery_stopped_not_confirmed"
+    ]
+
+
 @pytest.mark.parametrize(
     "case,fault",
     [

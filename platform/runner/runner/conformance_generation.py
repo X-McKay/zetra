@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from runner.activities import DELETE_DEADLINE
 from runner.conformance_generation_control import FINALIZER
 
 
@@ -135,7 +136,7 @@ def evaluate_case(case, data):
                     h.get("activity") == "delete_sandbox"
                     and h.get("result") == "NOT_CONFIRMED"
                     and finite(h.get("duration"))
-                    and h["duration"] >= 108
+                    and h["duration"] >= DELETE_DEADLINE
                     for h in history
                 ),
                 "never_provisioned_generation_2": not g2
