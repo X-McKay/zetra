@@ -484,3 +484,142 @@ def test_incomplete_or_wrong_http_evidence_never_passes(change):
         ]
         != "pass"
     )
+
+
+def test_cancel_observation_latency_is_informational_but_both_replicas_required():
+    items = [{**i, "reason": "deny.session_inactive"} for i in observations()]
+    result = r.denial_evidence(
+        items, {"aps-1", "aps-2"}, 1_000_000_000, "deny.session_inactive", None
+    )
+    assert result["result"] == "pass"
+    assert "observed_within_bound" not in result["checks"]
+    assert result["evidence"]["both_replicas_upper_ms"] == 3100
+    assert result["evidence"]["limit_ms"] is None
+    assert (
+        r.denial_evidence(
+            items[:1], {"aps-1", "aps-2"}, 1_000_000_000, "deny.session_inactive", None
+        )["result"]
+        == "fail"
+    )
+
+
+@pytest.mark.parametrize(
+    "later_timestamp, expected",
+    [
+        ("2026-11-06T17:45:08.600Z", "pass"),
+        ("2026-11-06T17:45:09.566Z", "fail"),
+        (None, "fail"),
+    ],
+)
+async def test_cancel_waits_for_same_replica_pair_and_gates_from_real_stop(
+    monkeypatch, later_timestamp, expected
+):
+    # Run 19: the first decision's millisecond bin overlaps the nanosecond stop;
+    # its negative point delta is ambiguous. A later same-replica pair is required.
+    stop = {"time": "2026-11-06T17:45:08.565989092Z", "source_pod": "aps-1"}
+    items = [
+        {
+            "ts": "2026-11-06T17:45:08.565Z",
+            "source_pod": "aps-1",
+            "reason": "deny.session_inactive",
+            "status": 403,
+            "observed_ns": 3_500_000_000,
+        },
+        {
+            "ts": "2026-11-06T17:45:08.580Z",
+            "source_pod": "aps-2",
+            "reason": "deny.session_inactive",
+            "status": 403,
+            "observed_ns": 3_583_326_000,
+        },
+    ]
+
+    class Evidence:
+        replicas = {"aps-1": "uid-1", "aps-2": "uid-2"}
+        stops = {"first": stop}
+        waits = 0
+
+        def items(self):
+            return items
+
+        async def wait(self, predicate, timeout):
+            self.waits += 1
+            if self.waits == 1:
+                assert predicate(items)  # both actual 403s, after a slow cancel
+            else:
+                assert not predicate(items)  # a stop log alone cannot finish sampling
+                if later_timestamp is None:
+                    raise TimeoutError("no unambiguous same-replica pair")
+                items.append({**items[0], "ts": later_timestamp, "observed_ns": 3_600_000_000})
+                assert predicate(items)  # valid pair, even if it fails the one-second bound
+
+    pod = {
+        "metadata": {"name": "s-0123456789abcdef-g1", "uid": "ba443cb1-ce1e-4001-b6a9-709fe43c3459"}
+    }
+    store = PolicyStore()
+    store.events = lambda: [
+        {
+            "involvedObject": {"kind": "Policy", "name": r.HOLD_POLICY, "uid": "policy-uid"},
+            "related": {
+                "kind": "Pod",
+                "name": pod["metadata"]["name"],
+                "uid": "ba443cb1-ce1e-4001-b6a9-709fe43c3459",
+            },
+            "reason": "PolicyViolation",
+            "action": "Resource Blocked",
+            "message": f"[{r.HOLD_RULE}] fail (blocked)",
+        }
+    ]
+
+    async def live():
+        return {"uid": "ba443cb1-ce1e-4001-b6a9-709fe43c3459"}
+
+    async def no_op(*args):
+        pass
+
+    monkeypatch.setattr(r.time, "monotonic_ns", lambda: 1_000_000_000)
+    monkeypatch.setattr(r.asyncio, "sleep", no_op)
+    evidence = Evidence()
+    active = SimpleNamespace(
+        pod=pod, evidence=evidence, assert_live=live, handle=SimpleNamespace(cancel=no_op)
+    )
+    harness = r.RevocationHarness(store, None, None, "signed", allow_mutations=True)
+    result = await harness._cancel(active, {})
+    assert evidence.waits == 2
+    assert result["result"] == expected
+    assert result["checks"]["real_403_from_both_replicas"]
+    assert result["checks"]["delete_policy_restored"]
+    assert "observed_within_bound" not in result["checks"]
+    assert result["evidence"]["cancel_to_403"]["both_replicas_upper_ms"] == 2583.326
+    timing = result["evidence"]["stop_to_403"]
+    assert timing["stop_events"] == [stop]
+    if later_timestamp is None:
+        assert timing["same_replica_upper_ms"] is None
+        assert not result["checks"]["same_replica_stop_event_and_http_403"]
+    else:
+        assert timing["same_replica_upper_ms"] == pytest.approx(
+            35.010908 if expected == "pass" else 1001.010908
+        )
+
+
+@pytest.mark.parametrize("later_source", ["aps-1", "aps-2"])
+def test_later_idempotent_stop_cannot_reset_original_stop_bound(later_source):
+    stops = [
+        {"time": "2026-11-06T19:00:00.000000000Z", "source_pod": "aps-1"},
+        {"time": "2026-11-06T19:00:02.000000000Z", "source_pod": later_source},
+    ]
+    decisions = [
+        {
+            "ts": "2026-11-06T19:00:02.100Z",
+            "source_pod": later_source,
+            "status": 403,
+            "reason": "deny.session_inactive",
+        }
+    ]
+    result = r.stop_timing(list(reversed(stops)), decisions)
+    assert result["result"] == "fail"
+    assert result["evidence"]["stop"] == stops[0]
+    if later_source == "aps-1":
+        assert result["evidence"]["same_replica_upper_ms"] == 2101
+    else:
+        assert result["evidence"]["same_replica_upper_ms"] is None

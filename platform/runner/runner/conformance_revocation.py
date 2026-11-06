@@ -356,7 +356,9 @@ async def deletion_hold(ops, name: str, uid: str):
             await settled(restore())
 
 
-def denial_evidence(items, replicas: set[str], started_ns: int, reason: str, limit: float) -> dict:
+def denial_evidence(
+    items, replicas: set[str], started_ns: int, reason: str, limit: float | None
+) -> dict:
     first = {}
     for item in sorted(items, key=lambda i: i.get("observed_ns", 0)):
         source = item.get("source_pod")
@@ -371,15 +373,16 @@ def denial_evidence(items, replicas: set[str], started_ns: int, reason: str, lim
     checks = {
         "two_ready_replicas": len(replicas) == 2,
         "real_403_from_both_replicas": set(first) == replicas,
-        "observed_within_bound": upper_ms is not None and upper_ms <= limit * 1000,
     }
+    if limit is not None:
+        checks["observed_within_bound"] = upper_ms is not None and upper_ms <= limit * 1000
     return {
         "result": "pass" if all(checks.values()) else "fail",
         "checks": checks,
         "evidence": {
             "first_by_replica": first,
             "both_replicas_upper_ms": upper_ms,
-            "limit_ms": limit * 1000,
+            "limit_ms": limit * 1000 if limit is not None else None,
         },
     }
 
@@ -393,21 +396,30 @@ def epoch_ns(value: str) -> int:
 
 
 def stop_timing(stops, items) -> dict:
-    candidates = []
+    valid_stops = []
     for stop in stops:
-        for item in items:
-            if (
-                item.get("source_pod") != stop.get("source_pod")
-                or item.get("status") != 403
-                or item.get("reason") != "deny.session_inactive"
-            ):
-                continue
-            try:
-                delta = epoch_ns(item["ts"]) - epoch_ns(stop["time"])
-            except (KeyError, ValueError, TypeError):
-                continue
-            if delta >= 0:
-                candidates.append((delta, stop, item))
+        try:
+            stamp = epoch_ns(stop["time"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if stop.get("source_pod"):
+            valid_stops.append((stamp, stop))
+    # A later idempotent stop must never reset the session's one-second clock.
+    anchor = min(valid_stops, key=lambda s: s[0]) if valid_stops else None
+    candidates = []
+    for item in items if anchor else []:
+        if (
+            item.get("source_pod") != anchor[1]["source_pod"]
+            or item.get("status") != 403
+            or item.get("reason") != "deny.session_inactive"
+        ):
+            continue
+        try:
+            delta = epoch_ns(item["ts"]) - anchor[0]
+        except (KeyError, ValueError, TypeError):
+            continue
+        if delta >= 0:
+            candidates.append((delta, item))
     earliest = min(candidates, key=lambda c: c[0]) if candidates else None
     # Decision timestamps are millisecond-truncated; add one millisecond so this is
     # an upper bound on the same replica's actual event interval.
@@ -421,8 +433,9 @@ def stop_timing(stops, items) -> dict:
         "evidence": {
             "same_replica_stop_to_403_ms": earliest[0] / 1e6 if earliest else None,
             "same_replica_upper_ms": upper_ms,
-            "stop": earliest[1] if earliest else None,
-            "denial": earliest[2] if earliest else None,
+            "stop_events": stops,
+            "stop": anchor[1] if anchor else None,
+            "denial": earliest[1] if earliest else None,
         },
     }
 
@@ -705,8 +718,21 @@ class RevocationHarness:
             start = time.monotonic_ns()
             cancel_epoch = time.time_ns()
             await active.handle.cancel()
-            deny = await self._deny(active, start, "deny.session_inactive", 1)
-            await active.evidence.wait(lambda _: bool(active.evidence.stops), timeout=10)
+            # Cancellation scheduling and log delivery are reported separately. T15's
+            # one-second bound starts at the actual APS stop, not the cancel request.
+            deny = await self._deny(active, start, "deny.session_inactive", None)
+            try:
+                await active.evidence.wait(
+                    lambda items: stop_timing(list(active.evidence.stops.values()), items)[
+                        "checks"
+                    ]["same_replica_stop_event_and_http_403"],
+                    timeout=10,
+                )
+            except TimeoutError:
+                # Keep the unmatched stop records and fail the timing gates below.
+                # A truncated decision earlier than the stop is never accepted;
+                # continue sampling for an unambiguously later same-replica response.
+                pass
             stopped = stop_timing(list(active.evidence.stops.values()), active.evidence.items())
             after = await active.assert_live()
             event = None
