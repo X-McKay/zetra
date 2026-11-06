@@ -293,3 +293,32 @@ async def test_real_history_failure_details_bind_preflight_uid(monkeypatch):
     assert actual["failure"]["details"] == detail
     assert actual["activities"] == ["preflight"]
     assert actual["outcome"] == "FAILED" and actual["pods_absent"] is True
+
+
+@pytest.mark.parametrize(
+    "mode,required,accepted",
+    [
+        ("agent", None, True),
+        ("on-behalf-of", False, True),
+        ("on-behalf-of", True, False),
+        ("on-behalf-of", None, False),
+        ("unknown", False, False),
+    ],
+)
+def test_gate_accepts_only_release_modes_that_need_no_grant(mode, required, accepted):
+    status = {"ready": True, "identityMode": mode}
+    if required is not None:
+        status["delegationRequired"] = required
+    custom = NS(
+        get_namespaced_custom_object=lambda *args, **kwargs: {
+            "spec": {"agent": "conformance"},
+            "status": status,
+        }
+    )
+    core = NS(list_namespaced_pod=lambda *args, **kwargs: NS(items=[]))
+    ops = runtime.PolicyRepairOps(core, None, custom, "digest")
+    if accepted:
+        ops.gate("conformance", "signed")
+    else:
+        with pytest.raises(ValueError):
+            ops.gate("conformance", "signed")

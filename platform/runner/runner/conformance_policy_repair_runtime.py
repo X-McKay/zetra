@@ -63,9 +63,17 @@ class PolicyRepairOps:
         if (
             rel.get("spec", {}).get("agent") != agent
             or rel.get("status", {}).get("ready") is not True
-            or rel.get("status", {}).get("identityMode") != "agent"
+            or not (
+                rel.get("status", {}).get("identityMode") == "agent"
+                or (
+                    rel.get("status", {}).get("identityMode") == "on-behalf-of"
+                    and rel.get("status", {}).get("delegationRequired") is False
+                )
+            )
         ):
-            raise ValueError("T28 requires exact Ready agent-mode release")
+            raise ValueError(
+                "T28 requires exact Ready release that permits a session without a grant"
+            )
         if self.pods():
             raise ValueError("T28 requires an exclusive tenant with no sandbox Pods")
 

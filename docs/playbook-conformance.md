@@ -997,7 +997,9 @@ Run only in a root-approved exclusive window with no sandbox Pods or other
 sessions, releases, Flux changes, manual reconciles or policy mutations. The
 expected digest must come from the reviewed canonical four-policy renderer,
 not from accepting whatever the live namespace currently contains. The fixture
-must be an existing signed Ready agent-mode `conformance` release. The operator
+must be an existing signed Ready `conformance` release permitting a session without
+a grant: agent mode, or on-behalf-of with `delegationRequired` explicitly false.
+Required delegation and missing/unknown fallback status are refused. The operator
 needs create/read/list/delete for NetworkPolicies in `tenant-test`, existing
 session observation permissions and read-only access to the Registry Controller
 Pod/logs in `agent-platform`; do not grant broad policy mutation access to the
