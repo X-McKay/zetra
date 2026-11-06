@@ -245,3 +245,73 @@ trusted cleanup to confirm Pod absence. The operator owns independent cleanup
 after Job failure. See [platform](platform.md#active-session-revocation-qualification-t15t20)
 for permissions, timing semantics and setup. No live T15/T20 pass is claimed by
 this implementation.
+
+## Exact budget qualification (T13/T13b, implementation pending live evidence)
+
+The opt-in budget harness uses the signed `conformance-budget-day` and
+`conformance-budget-session` fixtures with the dedicated
+[`platform/budget-backend`](../platform/budget-backend/README.md). This qualifies the
+production gateway/APS/Redis budget path with an enforced300-token bound and actual
+100-byte-token responses. It is not evidence for Qwen accounting. Production backend
+catalogue bounds remain unchanged. No live pass is claimed by unit tests or image builds.
+
+T13 requires exactly2000 tokens/day, a clean trusted ledger baseline, eighteen
+successful100-token responses followed by APS `deny.budget_exhausted`429. At1800 spent,
+a300 reserve cannot fit. During a fixed120-second guest pause an authorized operator
+must delete the exact two old gateway pods. The harness's read-only watcher prints
+`T13 awaiting gateway replacement` and their names/UIDs to stderr, waits at most100
+seconds for both old UIDs to disappear and two new Ready pods with unchanged container
+configuration/image IDs, then verifies that the next request still receives APS429.
+The watcher performs no deletion, Deployment patch, status write or ledger reset.
+
+T13b requires1000 tokens/session, two concurrent sessions under the same agent and
+independent trusted session ledgers. After100 spent, ten concurrent attempts (successful
+backend responses held5seconds) must produce exactly three allows and seven APS budget
+refusals, with all ten distinct decisions before the first response and a trusted
+100-spent/900-inflight observation. Actual100-token settlements must appear per decision
+within5seconds. Four further responses bring session1 to800 spent; it is refused,
+actually writes local state.usage0, is refused again, commits that zeroed checkpoint,
+and deliberately emits one malformed wire response. Normal runner deletion, generation
+fencing, creation and committed-snapshot restore into generation2 must occur in order;
+the restored local usage remains0 and the retry is still refused. Session2 succeeds
+before and after this sequence and remains active across it. Exact HTTP statuses,
+SHA256-verified committed state, trusted Temporal events, APS/backend logs and ledger
+observations must agree. Missing/unreadable/duplicate evidence, wrong bounds, local rate
+limiting, nonzero baselines, late settlement, late restart, overspend or missing recovery
+cannot pass. No refused request is retried until success.
+
+The APS observation endpoint is disabled by default. Enabling requires both
+`APS_BUDGET_OBSERVER_SUBJECT=system:serviceaccount:agent-platform:conformance-harness`
+and `APS_BUDGET_OBSERVER_AGENTS=conformance-budget-day,conformance-budget-session`.
+GET `/v1/conformance/budgets/{session}?agent={fixture}` authenticates that exact subject
+using Kubernetes TokenReview with audience `agent-policy-service`, checks trusted
+first-writer session ownership in `tenant-test`, and exposes numeric session/day totals
+and generation. No arbitrary Redis key, secret, mutation or reset operation is exposed.
+Reads use the existing ledger expiry semantics and can charge expired reservations in
+full; “read-only API” does not mean Redis remains byte-for-byte unchanged.
+
+Run with `--tests T13 --budget-day-release <signed-ready-release>` or
+`--tests T13b --budget-session-release <signed-ready-release>`. These tests are excluded
+from default batches. The harness uses `APS_URL`, the projected `APS_TOKEN_PATH` with
+APS audience, and its read-only `ARTIFACT_DIR`. Backend logs default to namespace
+`agent-platform`, label `app.kubernetes.io/name=budget-backend`, container
+`budget-backend`; namespace/label can be set via `BUDGET_BACKEND_NAMESPACE` and
+`BUDGET_BACKEND_LABEL`. Existing Kubernetes RBAC must permit reads of those pod logs,
+the agents Gateway pods, fixture Agents/AgentReleases and the relevant sessions. No
+Redis credentials go into the harness or sandbox. A used daily fixture cannot be
+silently rerun from zero: wait for a new UTC day or separately document any explicit
+operator reset outside qualification. The harness has no reset capability.
+
+The APS Redis late-settlement regression now charges an expired reservation in full
+at its130-second deadline even when settlement arrives before any Reserve/Ledger sweep.
+Previously Redis refunded that hold to actual usage; the Memory store already behaved
+correctly. Both stores are tested at the deadline and after it.
+
+Production multi-completion risk remains a separate gate: agentgateway v1.7.0's
+[request type](https://github.com/agentgateway/agentgateway/blob/26f5aebe99a36a037fe54f8080a608aca5547e15/crates/llm/src/types/completions.rs)
+preserves unknown fields with serde(flatten), including `n`, and its
+[OpenAI forwarding path](https://github.com/agentgateway/agentgateway/blob/26f5aebe99a36a037fe54f8080a608aca5547e15/crates/agentgateway/src/llm/mod.rs)
+serializes that request. Existing GitOps model pins do not restrict `n`; vLLM supports
+multiple completions. A single-sequence maxModelLen reservation is therefore not yet
+proven to bound aggregate production usage. The deterministic backend's n=1 rejection
+must never be presented as a fix or qualification for the production routes.

@@ -661,6 +661,11 @@ func TestDecisionLogFieldsAndRedaction(t *testing.T) {
 	if x, ok := e["exchange"].(map[string]any); !ok || x["upstream_jti"] != "d41a" {
 		t.Errorf("exchange field %v", e["exchange"])
 	}
+	var inference map[string]any
+	_ = json.Unmarshal([]byte(strings.Split(out, "\n")[1]), &inference)
+	if inference["reserved_tokens"] != float64(32768) {
+		t.Fatalf("reserved amount missing: %v", inference)
+	}
 	// A denial before the pod step leaves later fields null.
 	var d map[string]any
 	_ = json.Unmarshal([]byte(strings.Split(strings.TrimSpace(out), "\n")[3]), &d)

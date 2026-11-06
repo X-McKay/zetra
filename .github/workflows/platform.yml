@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [aps, capture]
+        project: [aps, capture, budget-backend]
     defaults:
       run:
         working-directory: platform/${{ matrix.project }}

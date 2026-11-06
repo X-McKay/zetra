@@ -89,6 +89,8 @@ type Store interface {
 	// TouchSession records the session's tenant and agent (first writer wins) and optional grant handle.
 	TouchSession(ctx context.Context, session, tenant, agent, grantHandle string) error
 	SessionTenant(ctx context.Context, session string) (string, bool, error)
+	// SessionOwner returns only trusted first-writer session identity metadata.
+	SessionOwner(ctx context.Context, session string) (tenant, agent string, err error)
 	ListSessions(ctx context.Context, olderThan time.Time) ([]SessionInfo, error)
 }
 
