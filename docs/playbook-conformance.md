@@ -470,3 +470,69 @@ remains discoverable too. All APS tests and `go vet` pass. This repairs discover
 actual T24 fault runs must still prove initial genuine grants and final Pod,
 active-generation, vault and grant-record absence within ten minutes. The ordinary
 GET-grant route's 404 after vault deletion is not sufficient absence evidence.
+
+### Observed checkpoint failure points (T23)
+
+T23 uses a separate signed `conformance-checkpoint` fixture and an ephemeral
+worker running the same pinned runner image on a unique queue. Its workflow is
+ordinary `SessionWorkflow`. Test-only wrappers pause real exec/activity/storage
+paths; they never manufacture an activity outcome, history or checkpoint. The
+fixture performs one ordinary SDK MCP read at boundary1, with fixed stage
+metadata on stderr, and keeps remote response contents out of evidence.
+
+The operator creates `agent-platform/conformance-checkpoint-control` with
+`data.config` containing JSON of exactly this shape (every ID is a fresh UUIDv4):
+
+```json
+{"version":1,"run_id":"RUN-UUID","tenant":"tenant-test","agent":"conformance-checkpoint","release":"SIGNED-READY-RELEASE","queue":"conformance-checkpoint-RUN-UUID","sessions":{"control-before":"UUID1","a":"UUID2","b":"UUID3","c":"UUID4","d":"UUID5","e":"UUID6","control-after":"UUID7"}}
+```
+
+The original ConfigMap UID and entire run binding remain fixed. Both harness and
+worker need only get/patch on that exact ConfigMap; updates test UID,
+resourceVersion and original config, change one key, and verify the receipt.
+The harness retains its normal read-only Pod/log and exact-release permissions.
+It has no Pod mutation or exec rights. The temporary worker uses the normal
+session-runner identity; all fault commands bind the session, generation,
+boundary, observed Pod UID and unique gate ID. Only the worker deletes the exact
+Pod using an API UID precondition, then confirms404 before returning to the
+ordinary activity. Every production replacement still confirms DELETED before
+set_generation/create_sandbox.
+
+Run the worker with `python -m runner.conformance_checkpoint_worker
+--allow-checkpoint-faults`. Label it as a session-runner in tenant-test, with
+`agentplatform.io/checkpoint-run: RUN-UUID`. The harness requires exactly one
+Ready test worker, no restarts, and the same pinned image/imageID as the Ready
+production workers before and after the exclusive batch. Use normal worker
+Temporal/APS identity mounts and the artifact PVC. Run the harness in
+agent-platform with its own identity, Temporal certificate/payload key and a
+read-only artifact PVC:
+
+```sh
+python -m runner.conformance --tenant tenant-test --release PRIMARY-RELEASE \
+  --tests T23 --checkpoint-fixture-release SIGNED-READY-RELEASE \
+  --allow-checkpoint-faults --session-timeout 300 --report /tmp/report.json
+```
+
+Each case first commits boundary0; boundary1 does the target read; boundary2
+completes. Case a kills before the real exec starts. Case b observes the real read
+completion before `.done`. Case c observes `.done` and the completed boundary
+activity before snapshotting. Case d pauses after a real first storage chunk;
+the candidate object can become durable but Pod loss makes SnapshotFailed and
+must not advance progress. Case e observes the accepted boundary1 checkpoint
+before boundary2 exec, so boundary1 never repeats. Cases a–d restore boundary0;
+e restores boundary1. The report records repeated-read counts, not assumptions
+about read idempotence.
+
+Qualification requires actual decoded Temporal event order, hash-verified
+checkpoint metadata and `.done`, source-bound stage observations, and complete
+unique selected-session transport IDs across APS, gateway and MCP capture.
+Initialize/control transport is correlated separately and never counted as a
+tool read. Missing/orphan/duplicate records fail. Healthy controls precede and
+follow all five faults, and every session must finish with stop=OK,
+delete=DELETED, grant=OK and no Pod remaining. A partial or failed batch is
+retained; it cannot be rerun with the same bound session IDs to hide evidence.
+
+Operator cleanup independently removes the temporary worker, ConfigMap and RBAC
+after completion or failure, and confirms no bound sessions or Pods remain.
+Use new root-created bindings for a new run. Local unit and real Temporal-history
+adapter tests verify the implementation; they do not constitute a live T23 pass.

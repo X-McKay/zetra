@@ -1295,6 +1295,7 @@ class Harness:
         revocation=None,
         budget=None,
         fail_closed=None,
+        checkpoint=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1323,6 +1324,7 @@ class Harness:
         self.revocation = revocation
         self.budget = budget
         self.fail_closed = fail_closed
+        self.checkpoint = checkpoint
 
     async def run_session(
         self,
@@ -1627,6 +1629,8 @@ class Harness:
                     target = self.budget
                 if t in REVOCATION_TESTS:
                     target = self.revocation
+                if t == "T23":
+                    target = self.checkpoint
                 if t == "T17":
                     target = self.fail_closed
                 if target is None:
@@ -1845,6 +1849,18 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             harness.artifact_dir,
             timeout=args.session_timeout,
         )
+    if "T23" in args.tests:
+        from runner.conformance_checkpoint_runtime import CheckpointHarness, KubernetesCheckpoint
+
+        harness.checkpoint = CheckpointHarness(
+            KubernetesCheckpoint(core, k8s.CustomObjectsApi(), args.tenant),
+            temporal,
+            harness,
+            args.checkpoint_fixture_release,
+            harness.artifact_dir,
+            allow_mutations=args.allow_checkpoint_faults,
+            timeout=args.session_timeout,
+        )
     return await harness.run(args.tests)
 
 
@@ -1895,10 +1911,26 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--budget-session-release", help="signed conformance-budget-session release for T13b"
     )
+    parser.add_argument(
+        "--checkpoint-fixture-release", help="signed Ready conformance-checkpoint release for T23"
+    )
+    parser.add_argument(
+        "--allow-checkpoint-faults",
+        action="store_true",
+        help="T23: authorize exact operator-bound checkpoint gates",
+    )
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)
-    supported = (*TESTS, *ADMISSION_TESTS, *PROTOCOL_TESTS, *REVOCATION_TESTS, *BUDGET_TESTS, "T17")
+    supported = (
+        *TESTS,
+        *ADMISSION_TESTS,
+        *PROTOCOL_TESTS,
+        *REVOCATION_TESTS,
+        *BUDGET_TESTS,
+        "T17",
+        "T23",
+    )
     known = {t.upper(): t for t in supported}
     args.tests = [
         known.get(t.strip().upper(), t.strip().upper()) for t in args.tests.split(",") if t.strip()
@@ -1906,6 +1938,16 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     unknown = [t for t in args.tests if t not in supported]
     if unknown:
         parser.error(f"unknown tests {unknown}; known: {', '.join(supported)}")
+    if "T23" in args.tests and not (
+        args.tests == ["T23"]
+        and args.tenant == "tenant-test"
+        and args.checkpoint_fixture_release
+        and args.allow_checkpoint_faults
+        and args.session_timeout >= 300
+    ):
+        parser.error(
+            "T23 requires exclusive selection, tenant-test, signed fixture, --allow-checkpoint-faults and --session-timeout >=300"
+        )
     if "T17" in args.tests and not (
         args.tests == ["T17"]
         and args.tenant == "tenant-test"
