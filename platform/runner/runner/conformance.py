@@ -26,9 +26,10 @@ Tests covered so far (the Phase B gate is 22; the rest are added batch by batch)
   call must carry the sandbox's own agent, session and principal, and no forged value may
   appear anywhere in the decision log. (Spec 15 also wants a capture at the MCP server; the
   backends here log no headers, so that half is recorded as not captured.)
-- T19: no decision is cached. One `probe_mcp` session alternates an allowed and a forbidden
-  tool with one token; the APS decision log must show one decision per request, with distinct
-  decision ids, in exact alternation (allow, deny.route_not_permitted, ...).
+- T19: no decision is cached. One fixed token covers 50 allowed/forbidden MCP cycles within
+  ten seconds, followed by two allowed/forbidden model-route cycles. Actual HTTP statuses
+  come from the raw tool result in the accepted snapshot, never the model's summary. Trace
+  ids join each request to one distinct APS decision; every decision must name that token.
 - T11: an agent-mode session's upstream token. The capture proxy in front of the kubernetes
   MCP server (zetra platform/capture) records what the server received; every bearer for the
   session must carry the agent's own subject (the inbound token's `sub`, read from the
@@ -56,7 +57,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -103,7 +106,8 @@ MCP_BACKEND = "kubernetes"
 MCP_ALLOWED_TOOL = "pods_list_in_namespace"
 MCP_FORBIDDEN_TOOL = "pods_get"
 DENY_ROUTE = "deny.route_not_permitted"
-T19_ROUNDS = 5
+T19_ROUNDS = 50
+T19_MODEL_ROUNDS = 2
 # T8: values a sandbox might forge; none may survive into a decision or reach an upstream.
 FORGED_HEADERS = {
     "x-agent-id": "tenant-test/other",
@@ -325,6 +329,46 @@ def read_stashed_token(artifact_dir: str, snapshot: str) -> str:
         return member.read().decode("utf-8").strip()
 
 
+def read_t19_probe_result(artifact_dir: str, snapshot: str) -> dict:
+    """Read only the probe's raw tool result from the final accepted, verified snapshot.
+
+    The boundary summary is model prose and may be truncated. The snapshot's state.json
+    retains the tool result itself; no prompts, token cache or other state is returned.
+    """
+    if not re.fullmatch(r"[0-9a-f]{64}", snapshot):
+        raise ValueError("invalid snapshot key")
+    path = Path(artifact_dir) / snapshot[:2] / snapshot
+    with path.open("rb") as source:
+        digest, size = hashlib.sha256(), 0
+        while chunk := source.read(1 << 20):
+            size += len(chunk)
+            if size > 64 << 20:
+                raise ValueError("snapshot too large")
+            digest.update(chunk)
+        if digest.hexdigest() != snapshot:
+            raise ValueError("snapshot digest mismatch")
+        source.seek(0)
+        with tarfile.open(fileobj=source, mode="r:") as archive:
+            members = [m for m in archive if m.name == "state/state.json"]
+            if len(members) != 1 or not members[0].isfile() or members[0].size > 1 << 20:
+                raise ValueError("missing or invalid snapshot state")
+            state = json.load(archive.extractfile(members[0]))
+    calls = set()
+    results = []
+    for message in state["messages"]:
+        if message.get("role") == "assistant":
+            calls.update(
+                call["id"]
+                for call in message.get("tool_calls", [])
+                if call.get("function", {}).get("name") == "probe_mcp"
+            )
+        elif message.get("role") == "tool" and message.get("tool_call_id") in calls:
+            results.append(json.loads(message["content"]))
+    if len(results) != 1 or not isinstance(results[0], dict):
+        raise ValueError("expected one probe_mcp result")
+    return results[0]
+
+
 def t19_case(tenant: str, rounds: int = T19_ROUNDS) -> SandboxCase:
     return SandboxCase(
         "alternating_tools",
@@ -333,6 +377,7 @@ def t19_case(tenant: str, rounds: int = T19_ROUNDS) -> SandboxCase:
             "tool": MCP_ALLOWED_TOOL,
             "alt_tool": MCP_FORBIDDEN_TOOL,
             "rounds": str(rounds),
+            "model_routes": "true",
             "args": json.dumps({"namespace": tenant}, separators=(",", ":")),
         },
     )
@@ -885,33 +930,92 @@ def evaluate_t12(run: SessionRun, aps_lines: list[dict], captures: list[dict], t
     }
 
 
-def evaluate_t19(run: SessionRun, aps_lines: list[dict], rounds: int = T19_ROUNDS) -> dict:
-    calls = mcp_calls_of(run, aps_lines)
-    observed = [(c.get("tool"), c.get("reason")) for c in calls]
-    expected = [(MCP_ALLOWED_TOOL, "allow"), (MCP_FORBIDDEN_TOOL, DENY_ROUTE)] * rounds
-    ids = [c.get("decision_id") for c in calls]
+def evaluate_t19(
+    run: SessionRun, aps_lines: list[dict], probe: dict | None, read_error: str | None = None
+) -> dict:
+    data = probe if isinstance(probe, dict) else {}
+    requests = data.get("requests")
+    requests = (
+        requests
+        if isinstance(requests, list) and all(isinstance(r, dict) for r in requests)
+        else []
+    )
+    models = data.get("models")
+    models = models if isinstance(models, list) and all(isinstance(r, dict) for r in models) else []
+    elapsed, jti = data.get("elapsed_ms"), data.get("token_jti")
+    mcp = mcp_calls_of(run, aps_lines)
+    model_traces = {r.get("trace_id") for r in models if isinstance(r.get("trace_id"), str)}
+    inference = [
+        d
+        for d in aps_lines
+        if d.get("route") == "inference"
+        and str(d.get("pod", "")).startswith(sandbox_prefix(run.session_id))
+        and d.get("trace_id") in model_traces
+    ]
+
+    def correlate(requests, decisions, count):
+        traces = [r.get("trace_id") for r in requests]
+        valid = len(traces) == count and all(
+            isinstance(t, str) and re.fullmatch(r"[0-9a-f]{32}", t) for t in traces
+        )
+        valid = bool(valid and len(set(traces)) == count)
+        groups = [[d for d in decisions if d.get("trace_id") == t] for t in traces]
+        return [d for group in groups for d in group], valid and len(decisions) == count and all(
+            len(g) == 1 for g in groups
+        )
+
+    mcp_ordered, mcp_correlated = correlate(requests, mcp, 2 * T19_ROUNDS)
+    model_ordered, model_correlated = correlate(models, inference, 2 * T19_MODEL_ROUNDS)
+    decisions = mcp_ordered + model_ordered
+    ids = [d.get("decision_id") for d in decisions]
+    expected_mcp = [(MCP_ALLOWED_TOOL, "allow"), (MCP_FORBIDDEN_TOOL, DENY_ROUTE)] * T19_ROUNDS
+    expected_models = [("llm-main", "allow"), ("llm-fast", DENY_ROUTE)] * T19_MODEL_ROUNDS
+    valid_time = type(elapsed) in (int, float) and math.isfinite(elapsed) and 0 <= elapsed <= 10_000
     checks = {
         "session_completed": run.outcome == "COMPLETED",
-        "probe_mcp_ran": bool(run.tool_boundaries("probe_mcp")),
-        "one_decision_per_request": len(observed) == 2 * rounds,
-        "exact_alternation": observed == expected,
-        "distinct_decision_ids": len(set(ids)) == len(ids),
-        "probe_reported_alternation": "deny" in run.final_summary and "ok" in run.final_summary,
+        "one_probe_mcp_boundary": len(run.tool_boundaries("probe_mcp")) == 1,
+        "probe_read_from_snapshot": probe is not None and read_error is None,
+        "all_aps_logs_readable": not unreadable_pods(aps_lines),
+        "mcp_within_10_seconds": valid_time,
+        "mcp_http_statuses": [r.get("status") for r in requests] == [200, 403] * T19_ROUNDS,
+        "mcp_results": data.get("calls") == ["ok", "deny"] * T19_ROUNDS,
+        "one_mcp_decision_per_request": mcp_correlated,
+        "exact_mcp_alternation": [(d.get("tool"), d.get("reason")) for d in mcp_ordered]
+        == expected_mcp,
+        "model_http_statuses": [(r.get("backend"), r.get("status")) for r in models]
+        == [("llm-main", 200), ("llm-fast", 403)] * T19_MODEL_ROUNDS,
+        "one_model_decision_per_request": model_correlated,
+        "exact_model_alternation": [(d.get("backend"), d.get("reason")) for d in model_ordered]
+        == expected_models,
+        "distinct_decision_ids": len(ids) == 2 * (T19_ROUNDS + T19_MODEL_ROUNDS)
+        and all(isinstance(i, str) and i for i in ids)
+        and len(set(ids)) == len(ids),
+        "one_token": isinstance(jti, str)
+        and bool(jti)
+        and bool(decisions)
+        and all(d.get("token_jti") == jti for d in decisions),
     }
-    required = (
-        "session_completed",
-        "probe_mcp_ran",
-        "one_decision_per_request",
-        "exact_alternation",
-        "distinct_decision_ids",
-    )
+    fields = (*DECISION_FIELDS, "backend", "trace_id", "token_jti")
     return {
-        "result": "pass" if all(checks[k] for k in required) else "fail",
+        "result": "pass" if all(checks.values()) else "fail",
         "checks": checks,
         "evidence": {
             "session": asdict(run),
-            "rounds": rounds,
-            "decisions": [{k: c.get(k) for k in DECISION_FIELDS} for c in calls],
+            "rounds": T19_ROUNDS,
+            "model_rounds": T19_MODEL_ROUNDS,
+            "snapshot_read_error": read_error,
+            "elapsed_ms": elapsed
+            if type(elapsed) in (int, float) and math.isfinite(elapsed)
+            else None,
+            "token_jti": jti,
+            "mcp_requests": [
+                {k: r.get(k) for k in ("tool", "status", "trace_id")} for r in requests
+            ],
+            "model_requests": [
+                {k: r.get(k) for k in ("backend", "status", "trace_id")} for r in models
+            ],
+            "mcp_decisions": [{k: d.get(k) for k in fields} for d in mcp_ordered],
+            "model_decisions": [{k: d.get(k) for k in fields} for d in model_ordered],
             "aps_log_unreadable": unreadable_pods(aps_lines),
         },
     }
@@ -1338,7 +1442,18 @@ class Harness:
         started = time.time()
         run = await self.run_session(t19_case(self.tenant))
         lines = await self.aps_lines_since(started)
-        return {"id": "T19", "name": "no decision caching", **evaluate_t19(run, lines)}
+        try:
+            probe = await asyncio.to_thread(
+                read_t19_probe_result, self.artifact_dir, run.snapshot or ""
+            )
+            read_error = None
+        except (OSError, ValueError, KeyError, TypeError, tarfile.TarError) as exc:
+            probe, read_error = None, type(exc).__name__
+        return {
+            "id": "T19",
+            "name": "no decision caching",
+            **evaluate_t19(run, lines, probe, read_error),
+        }
 
     async def run(self, tests: list[str]) -> dict:
         started = utcnow()

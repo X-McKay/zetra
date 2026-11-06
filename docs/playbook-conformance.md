@@ -59,6 +59,14 @@ for the required mounts, vantage point and capture permissions.
 The capture image build uses the target OS and architecture explicitly, so an
 ARM64 model-side image can be built on an AMD64 builder without emulation.
 
+T19 now requires the full 50-cycle MCP alternation in ten seconds with one
+pinned token, plus two allowed/forbidden model-route cycles. The harness reads
+actual HTTP statuses and monotonic timing from the accepted snapshot's tool
+result and correlates all 104 requests with distinct APS decisions and token
+`jti`. Model settlement pauses are outside the MCP interval, and 429s remain
+failures. Prior five-cycle runs do not establish this stronger gate; the changed
+conformance agent and harness require a new live qualification run.
+
 ## Review hardening
 
 Worker release allowlists restrict active operations while preserving revoked-release
