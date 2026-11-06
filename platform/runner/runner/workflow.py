@@ -338,37 +338,49 @@ class CleanupReconcilerWorkflow:
                     generation=o.pod.generation,
                     deleting_since=since,
                 )
-        deleted = await asyncio.gather(
-            *[
-                workflow.execute_activity(
-                    act.delete_orphan,
-                    o,
-                    schedule_to_close_timeout=timedelta(seconds=600),
-                    start_to_close_timeout=timedelta(seconds=120),
-                    heartbeat_timeout=timedelta(seconds=30),
-                    retry_policy=TRANSIENT,
-                )
-                for o in orphans
-            ],
-            return_exceptions=True,
-        )
         ended = [
             s
             for s in inputs.sessions
             if session_workflow_id(tenant, s.agent, s.session_id) in closed
         ]
-        stopped = await asyncio.gather(
-            *[
-                workflow.execute_activity(
-                    act.close_session,
-                    ClosedSession(tenant, s),
-                    start_to_close_timeout=timedelta(seconds=30),
-                    retry_policy=FEW,
-                )
-                for s in ended
-            ],
-            return_exceptions=True,
-        )
+
+        async def delete_orphans():
+            return await asyncio.gather(
+                *[
+                    workflow.execute_activity(
+                        act.delete_orphan,
+                        o,
+                        schedule_to_close_timeout=timedelta(seconds=600),
+                        start_to_close_timeout=timedelta(seconds=120),
+                        heartbeat_timeout=timedelta(seconds=30),
+                        retry_policy=TRANSIENT,
+                    )
+                    for o in orphans
+                ],
+                return_exceptions=True,
+            )
+
+        async def stop_sessions():
+            return await asyncio.gather(
+                *[
+                    workflow.execute_activity(
+                        act.close_session,
+                        ClosedSession(tenant, s),
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=FEW,
+                    )
+                    for s in ended
+                ],
+                return_exceptions=True,
+            )
+
+        if workflow.patched("reconciler-independent-cleanup-v1"):
+            # A blocked Pod delete must not postpone revocation of its session.
+            deleted, stopped = await asyncio.gather(delete_orphans(), stop_sessions())
+        else:
+            # Retain the original command ordering when replaying older histories.
+            deleted = await delete_orphans()
+            stopped = await stop_sessions()
         summary = {
             "orphans_deleted": sum(1 for r in deleted if r == "DELETED"),
             "orphans_unconfirmed": sum(1 for r in deleted if r != "DELETED"),

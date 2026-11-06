@@ -315,3 +315,29 @@ serializes that request. Existing GitOps model pins do not restrict `n`; vLLM su
 multiple completions. A single-sequence maxModelLen reservation is therefore not yet
 proven to bound aggregate production usage. The deterministic backend's n=1 rejection
 must never be presented as a fix or qualification for the production routes.
+
+### Closed-session cleanup before T24 qualification
+
+The cleanup reconciler now inspects every APS-held session on its five-minute
+schedule and checks the actual Temporal execution before acting. The former
+fifteen-minute age filter could leave a newly terminated workflow's grant and
+generation beyond T24's ten-minute bound. Running workflows remain untouched.
+Pod deletion and session revocation start independently, as do stop and grant
+deletion; failure outcomes are recorded and retried. A Temporal patch marker
+preserves the original activity ordering when replaying older cleanup histories.
+
+APS stop atomically removes the active generation and retains its stopped
+tombstone. Generation updates check that tombstone atomically, so a delayed
+activity cannot recreate active state after stop. The replacement path still
+requires confirmed deletion before provisioning a new generation.
+
+A pending-stop receipt keeps partially cleaned sessions discoverable until
+vault deletion, exchanged-token deletion, reservation release and the final
+receipt write all succeed. Late vault refreshes/deposits and exchange-cache
+writes also reject the stopped tombstone atomically, preventing in-flight
+requests from recreating credential state after cleanup.
+
+Local Redis/memory races, HTTP lifecycle tests and Temporal history replays cover
+these fixes. They do not constitute live T24 qualification: the retained live
+report must measure each fault's cleanup within ten minutes and independently
+confirm Pod absence, no grant and no active generation.

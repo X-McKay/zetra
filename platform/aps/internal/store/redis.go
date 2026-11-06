@@ -91,13 +91,59 @@ if redis.call('EXISTS', KEYS[1]) == 1 then redis.call('HSET', KEYS[1], 'inflight
 return 1
 `)
 
-// setGenScript sets an active generation that must not decrease. KEYS: gen key. ARGV: gen, ttl_s.
+// setGenScript records a monotonic generation only for a live session.
+// KEYS: generation, stopped tombstone. ARGV: gen, ttl_s.
 var setGenScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[2]) == 1 then return 0 end
 local cur = redis.call('GET', KEYS[1])
 if cur and tonumber(cur) > tonumber(ARGV[1]) then return 0 end
 redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
 return 1
 `)
+
+// Stopping removes active state but retains a tombstone that fences delayed
+// generation activities. Both this operation and setGenScript are atomic.
+var stopScript = redis.NewScript(`
+redis.call('SET', KEYS[2], '1', 'EX', ARGV[1])
+redis.call('SET', KEYS[3], '1', 'EX', ARGV[1])
+redis.call('DEL', KEYS[1])
+return 1
+`)
+
+// Guard the write and index update in the same transaction as the stopped check:
+// a refresh or exchange already in flight must not resurrect credentials.
+// KEYS: vault, stopped, vault index. ARGV: blob, ttl_ms, session, only_if_absent.
+var writeVaultScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[2]) == 1 then return -1 end
+if ARGV[4] == '1' and redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+if ARGV[2] == '0' then
+  redis.call('SET', KEYS[1], ARGV[1])
+else
+  redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+end
+redis.call('SADD', KEYS[3], ARGV[3])
+return 1
+`)
+
+// KEYS: exchanged token, its session index, stopped. ARGV: blob, ttl_ms, index_ttl_s.
+var writeExchangedScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[3]) == 1 then return 0 end
+if ARGV[2] == '0' then
+  redis.call('SET', KEYS[1], ARGV[1])
+else
+  redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+end
+redis.call('SADD', KEYS[2], KEYS[1])
+redis.call('EXPIRE', KEYS[2], ARGV[3])
+return 1
+`)
+
+func ttlMilliseconds(ttl time.Duration) int64 {
+	if ttl > 0 {
+		return max(1, ttl.Milliseconds())
+	}
+	return ttl.Milliseconds()
+}
 
 // Redis is the multi-replica Store.
 type Redis struct {
@@ -124,7 +170,7 @@ func (r *Redis) PinJTI(ctx context.Context, jti, podUID string, exp time.Time) (
 }
 
 func (r *Redis) SetGeneration(ctx context.Context, session string, gen int) error {
-	n, err := setGenScript.Run(ctx, r.C, []string{"gen:" + session}, gen, int(SessionStateTTL.Seconds())).Int()
+	n, err := setGenScript.Run(ctx, r.C, []string{"gen:" + session, "stopped:" + session}, gen, int(SessionStateTTL.Seconds())).Int()
 	if err != nil {
 		return err
 	}
@@ -147,7 +193,11 @@ func (r *Redis) ActiveGeneration(ctx context.Context, session string) (int, bool
 }
 
 func (r *Redis) MarkStopped(ctx context.Context, session string) error {
-	return r.C.Set(ctx, "stopped:"+session, "1", SessionStateTTL).Err()
+	return stopScript.Run(ctx, r.C, []string{"gen:" + session, "stopped:" + session, "stop-pending:" + session}, int(SessionStateTTL.Seconds())).Err()
+}
+
+func (r *Redis) CompleteStop(ctx context.Context, session string) error {
+	return r.C.Del(ctx, "stop-pending:"+session).Err()
 }
 
 func (r *Redis) IsStopped(ctx context.Context, session string) (bool, error) {
@@ -164,15 +214,19 @@ func (r *Redis) getBytes(ctx context.Context, key string) ([]byte, bool, error) 
 }
 
 func (r *Redis) PutVault(ctx context.Context, session string, blob []byte, ttl time.Duration) (bool, error) {
-	ok, err := r.C.SetNX(ctx, "vault:"+session, blob, ttl).Result()
-	if err == nil && ok {
-		err = r.C.SAdd(ctx, "vault:index", session).Err()
+	n, err := writeVaultScript.Run(ctx, r.C, []string{"vault:" + session, "stopped:" + session, "vault:index"}, blob, ttlMilliseconds(ttl), session, 1).Int()
+	if err == nil && n == -1 {
+		return false, ErrStopped
 	}
-	return ok, err
+	return n == 1, err
 }
 
 func (r *Redis) SetVault(ctx context.Context, session string, blob []byte, ttl time.Duration) error {
-	return r.C.Set(ctx, "vault:"+session, blob, ttl).Err()
+	n, err := writeVaultScript.Run(ctx, r.C, []string{"vault:" + session, "stopped:" + session, "vault:index"}, blob, ttlMilliseconds(ttl), session, 0).Int()
+	if err == nil && n == -1 {
+		return ErrStopped
+	}
+	return err
 }
 
 func (r *Redis) GetVault(ctx context.Context, session string) ([]byte, bool, error) {
@@ -220,12 +274,10 @@ func (r *Redis) DeleteGrant(ctx context.Context, handle string) error {
 
 func (r *Redis) PutExchanged(ctx context.Context, session, key string, blob []byte, ttl time.Duration) error {
 	k := "xchg:" + session + ":" + key
-	_, err := r.C.TxPipelined(ctx, func(p redis.Pipeliner) error {
-		p.Set(ctx, k, blob, ttl)
-		p.SAdd(ctx, "xchg:idx:"+session, k)
-		p.Expire(ctx, "xchg:idx:"+session, SessionStateTTL)
-		return nil
-	})
+	n, err := writeExchangedScript.Run(ctx, r.C, []string{k, "xchg:idx:" + session, "stopped:" + session}, blob, ttlMilliseconds(ttl), int(SessionStateTTL.Seconds())).Int()
+	if err == nil && n == 0 {
+		return ErrStopped
+	}
 	return err
 }
 
@@ -336,10 +388,15 @@ func (r *Redis) ListSessions(ctx context.Context, olderThan time.Time) ([]Sessio
 		if info.Stopped, err = r.IsStopped(ctx, id); err != nil {
 			return nil, err
 		}
+		if n, err := r.C.Exists(ctx, "stop-pending:"+id).Result(); err != nil {
+			return nil, err
+		} else {
+			info.CleanupPending = n == 1
+		}
 		if info.Reservations, err = r.C.ZCount(ctx, SessionLedger(id)+":res", strconv.FormatInt(now, 10), "+inf").Result(); err != nil {
 			return nil, err
 		}
-		if info.Generation == nil && !info.HasGrant && info.Reservations == 0 {
+		if info.Generation == nil && !info.HasGrant && info.Reservations == 0 && !info.CleanupPending {
 			r.C.ZRem(ctx, "sessions", id) // nothing held any more
 			continue
 		}

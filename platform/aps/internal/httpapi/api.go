@@ -509,6 +509,10 @@ func (a *API) stopSession(w http.ResponseWriter, r *http.Request, c *caller) {
 		oauthError(w, http.StatusInternalServerError, "server_error")
 		return
 	}
+	if err := a.Store.CompleteStop(ctx, session); err != nil {
+		oauthError(w, http.StatusInternalServerError, "server_error")
+		return
+	}
 	a.log().Info("session stopped", "session_id", session)
 	writeJSON(w, http.StatusOK, map[string]any{"session_id": session, "stopped": true})
 }

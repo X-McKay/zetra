@@ -227,6 +227,143 @@ func TestPinFirstWriterWins(t *testing.T) {
 	})
 }
 
+func TestStopRemovesGenerationAndFencesLateActivities(t *testing.T) {
+	backends(t, func(t *testing.T, s Store, c *clock) {
+		ctx := context.Background()
+		if err := s.SetGeneration(ctx, sess, 1); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.MarkStopped(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		if g, ok, err := s.ActiveGeneration(ctx, sess); err != nil || ok {
+			t.Fatalf("stopped generation retained: %d %v %v", g, ok, err)
+		}
+		for _, generation := range []int{1, 2} {
+			if err := s.SetGeneration(ctx, sess, generation); !errors.Is(err, ErrConflict) {
+				t.Fatalf("late generation %d: %v", generation, err)
+			}
+		}
+		if stopped, err := s.IsStopped(ctx, sess); err != nil || !stopped {
+			t.Fatalf("stop tombstone lost: %v %v", stopped, err)
+		}
+	})
+}
+
+func TestStopAndGenerationRaceCannotLeaveActiveGeneration(t *testing.T) {
+	backends(t, func(t *testing.T, s Store, c *clock) {
+		ctx := context.Background()
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for i := 0; i < 20; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				if err := s.SetGeneration(ctx, sess, 2); err != nil && !errors.Is(err, ErrConflict) {
+					t.Error(err)
+				}
+			}()
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if err := s.MarkStopped(ctx, sess); err != nil {
+				t.Error(err)
+			}
+		}()
+		close(start)
+		wg.Wait()
+		if _, ok, err := s.ActiveGeneration(ctx, sess); err != nil || ok {
+			t.Fatalf("generation survived stop race: %v %v", ok, err)
+		}
+	})
+}
+
+func TestStoppedSessionCannotRegainVaultOrExchangeState(t *testing.T) {
+	backends(t, func(t *testing.T, s Store, c *clock) {
+		ctx := context.Background()
+		if err := s.MarkStopped(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.PutVault(ctx, sess, []byte("late deposit"), time.Hour); err == nil {
+			t.Fatal("stopped session accepted a new vault deposit")
+		}
+		if err := s.SetVault(ctx, sess, []byte("late refresh"), time.Hour); err == nil {
+			t.Fatal("stopped session accepted a late vault refresh")
+		}
+		if err := s.PutExchanged(ctx, sess, "backend", []byte("late exchange"), time.Hour); err == nil {
+			t.Fatal("stopped session accepted a late exchanged token")
+		}
+		if _, held, _ := s.GetVault(ctx, sess); held {
+			t.Fatal("vault state recreated after stop")
+		}
+		if _, held, _ := s.GetExchanged(ctx, sess, "backend"); held {
+			t.Fatal("exchange state recreated after stop")
+		}
+	})
+}
+
+func TestPendingStopSurvivesDiscoveryUntilCompletionReceipt(t *testing.T) {
+	backends(t, func(t *testing.T, s Store, c *clock) {
+		ctx := context.Background()
+		_ = s.TouchSession(ctx, sess, "tenant-a", "investigator", "")
+		_ = s.SetGeneration(ctx, sess, 1)
+		if err := s.MarkStopped(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		list, err := s.ListSessions(ctx, c.Now())
+		if err != nil || len(list) != 1 || !list[0].CleanupPending || list[0].Generation != nil {
+			t.Fatalf("pending stop receipt lost: %+v %v", list, err)
+		}
+		if err := s.CompleteStop(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		list, err = s.ListSessions(ctx, c.Now())
+		if err != nil || len(list) != 0 {
+			t.Fatalf("completed stop retained: %+v %v", list, err)
+		}
+	})
+}
+
+func TestStopAndCredentialWriteRaceLeavesNoCredentialState(t *testing.T) {
+	backends(t, func(t *testing.T, s Store, c *clock) {
+		ctx := context.Background()
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for i := 0; i < 20; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				_, e1 := s.PutVault(ctx, sess, []byte("deposit"), time.Hour)
+				e2 := s.SetVault(ctx, sess, []byte("refresh"), time.Hour)
+				e3 := s.PutExchanged(ctx, sess, "backend", []byte("exchange"), time.Hour)
+				for _, err := range []error{e1, e2, e3} {
+					if err != nil && !errors.Is(err, ErrStopped) {
+						t.Error(err)
+					}
+				}
+			}()
+		}
+		close(start)
+		if err := s.MarkStopped(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		if err := errors.Join(s.DeleteVault(ctx, sess), s.DeleteExchanged(ctx, sess)); err != nil {
+			t.Fatal(err)
+		}
+		wg.Wait()
+		if _, held, _ := s.GetVault(ctx, sess); held {
+			t.Fatal("vault resurrected by in-flight write")
+		}
+		if _, held, _ := s.GetExchanged(ctx, sess, "backend"); held {
+			t.Fatal("cache resurrected by in-flight write")
+		}
+	})
+}
+
 func TestVaultStoppedAndSessions(t *testing.T) {
 	backends(t, func(t *testing.T, s Store, c *clock) {
 		ctx := context.Background()
