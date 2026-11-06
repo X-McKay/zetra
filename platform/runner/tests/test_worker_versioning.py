@@ -287,11 +287,21 @@ async def test_timeout_after_mutation_is_reconciled_but_never_retried_or_reporte
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad", ["BAD", "bad.build", "bad:build", "bad_build", "x" * 41])
-async def test_routing_rejects_malformed_current_build_ids(bad):
+@pytest.mark.parametrize("representation", ["structured", "legacy_string"])
+async def test_routing_rejects_malformed_current_build_ids(bad, representation):
     from runner.worker_versioning import GuardError, VersioningOperator
 
     service = TemporalService()
     service.current = bad
+    if representation == "legacy_string":
+        original = service.describe_worker_deployment
+
+        async def legacy_string(request, **kwargs):
+            value = await original(request, **kwargs)
+            value.worker_deployment_info.routing_config.ClearField("current_deployment_version")
+            return value
+
+        service.describe_worker_deployment = legacy_string
     operator = VersioningOperator(
         service, HealthyInventory(), tenant="tenant-test", now=lambda: NOW
     )
