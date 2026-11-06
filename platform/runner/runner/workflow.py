@@ -69,6 +69,9 @@ class SessionWorkflow:
     @workflow.run
     async def run(self, inp: SessionInput) -> SessionResult:
         started = workflow.time()
+        # A seeded session starts generation 1 from a tenant snapshot (10.2 `seed`); later
+        # generations continue from this session's own committed snapshots as before.
+        self.snapshot = inp.seed
         _record(
             "session_started",
             tenant=inp.tenant,

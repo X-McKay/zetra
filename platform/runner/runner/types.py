@@ -56,6 +56,11 @@ class SessionInput:
     grant_handle: str | None
     task: Any
     max_boundaries: int = MAX_BOUNDARIES
+    # A workspace snapshot of this tenant's artifact store to restore into generation 1 before
+    # the first boundary (the key is content-addressed, so it names one exact archive). The
+    # store is per tenant, so a seed never crosses tenants; within a tenant it is the caller's
+    # choice, like the task. The conformance harness uses it for T26.
+    seed: str | None = None
 
     @property
     def workflow_id(self) -> str:
@@ -94,6 +99,12 @@ class SessionInput:
             raise InvalidInput("task must be JSON") from None
         if len(encoded.encode("utf-8")) > MAX_TASK_BYTES:
             raise InvalidInput("task exceeds 64 KiB")
+        if self.seed is not None and not (
+            isinstance(self.seed, str)
+            and len(self.seed) == 64
+            and all(c in "0123456789abcdef" for c in self.seed)
+        ):
+            raise InvalidInput("seed must be a SHA-256 hex digest of a workspace snapshot")
         fields_text = " ".join(
             [self.tenant, self.agent, self.release, self.session_id, self.grant_handle or ""]
         )
