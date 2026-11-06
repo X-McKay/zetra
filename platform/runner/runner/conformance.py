@@ -1296,6 +1296,7 @@ class Harness:
         budget=None,
         fail_closed=None,
         checkpoint=None,
+        lifecycle=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1325,6 +1326,7 @@ class Harness:
         self.budget = budget
         self.fail_closed = fail_closed
         self.checkpoint = checkpoint
+        self.lifecycle = lifecycle
 
     async def run_session(
         self,
@@ -1633,6 +1635,8 @@ class Harness:
                     target = self.checkpoint
                 if t == "T17":
                     target = self.fail_closed
+                if t == "T24":
+                    target = self.lifecycle
                 if target is None:
                     raise ValueError("selected test requires its Kubernetes adapter")
                 results.append(await getattr(target, t.lower())())
@@ -1861,6 +1865,22 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             allow_mutations=args.allow_checkpoint_faults,
             timeout=args.session_timeout,
         )
+    if "T24" in args.tests:
+        from runner.conformance_lifecycle_control import Control
+        from runner.conformance_lifecycle_runtime import (
+            LifecycleHarness,
+            LifecycleObserver,
+            LifecycleOps,
+        )
+
+        control = Control(core)
+        harness.lifecycle = LifecycleHarness(
+            temporal,
+            LifecycleOps(core, k8s.CustomObjectsApi(), k8s.AppsV1Api(), control),
+            control,
+            LifecycleObserver(),
+            args.lifecycle_fixture_release,
+        )
     return await harness.run(args.tests)
 
 
@@ -1888,6 +1908,14 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--observe-aps-outage",
         action="store_true",
         help="T17: observe operator-controlled APS outage; never mutate",
+    )
+    parser.add_argument(
+        "--lifecycle-fixture-release", help="T24 signed Ready conformance-lifecycle release"
+    )
+    parser.add_argument(
+        "--observe-lifecycle-faults",
+        action="store_true",
+        help="T24: observe root-controlled faults on exact isolated fixture sessions",
     )
     parser.add_argument("--protocol-fixture-agent", help="dedicated signed T25 protocol fixture")
     parser.add_argument("--protocol-fixture-release", help="that fixture's approved Ready release")
@@ -1930,6 +1958,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         *BUDGET_TESTS,
         "T17",
         "T23",
+        "T24",
     )
     known = {t.upper(): t for t in supported}
     args.tests = [
@@ -1958,6 +1987,15 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     ):
         parser.error(
             "T17 requires exclusive selection, tenant-test, explicit signed fixture, 16-hex marker and --observe-aps-outage (duration 60..240)"
+        )
+    if "T24" in args.tests and not (
+        args.tests == ["T24"]
+        and args.tenant == "tenant-test"
+        and args.lifecycle_fixture_release
+        and args.observe_lifecycle_faults
+    ):
+        parser.error(
+            "T24 requires exclusive selection, tenant-test, explicit signed lifecycle fixture and --observe-lifecycle-faults"
         )
     if "T25" in args.tests and not (
         args.protocol_fixture_agent == "conformance-protocol"

@@ -33,6 +33,7 @@ type resRecord struct {
 type memSession struct {
 	tenant, agent, handle string
 	since                 time.Time
+	expires               time.Time
 }
 
 // Memory is a single-replica Store.
@@ -304,11 +305,12 @@ func (m *Memory) Ledger(_ context.Context, key string) (int64, int64, error) {
 func (m *Memory) TouchSession(_ context.Context, session, tenant, agent, handle string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	s, ok := m.sessions[session]
+	s, ok := m.session(session)
 	if !ok {
 		s = &memSession{since: m.Now()}
 		m.sessions[session] = s
 	}
+	s.expires = m.Now().Add(SessionStateTTL)
 	if s.tenant == "" {
 		s.tenant = tenant
 	}
@@ -324,7 +326,7 @@ func (m *Memory) TouchSession(_ context.Context, session, tenant, agent, handle 
 func (m *Memory) SessionTenant(_ context.Context, session string) (string, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	s, ok := m.sessions[session]
+	s, ok := m.session(session)
 	if !ok || s.tenant == "" {
 		return "", false, nil
 	}
@@ -335,7 +337,11 @@ func (m *Memory) ListSessions(_ context.Context, olderThan time.Time) ([]Session
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []SessionInfo
-	for id, s := range m.sessions {
+	for id := range m.sessions {
+		s, ok := m.session(id)
+		if !ok {
+			continue
+		}
 		if s.since.After(olderThan) {
 			continue
 		}
@@ -355,7 +361,7 @@ func (m *Memory) ListSessions(_ context.Context, olderThan time.Time) ([]Session
 		_, info.CleanupPending = m.get("stop-pending:" + id)
 		info.Reservations = int64(len(m.ledger(SessionLedger(id)).res))
 		if info.Generation == nil && !info.HasGrant && info.Reservations == 0 && !info.CleanupPending {
-			delete(m.sessions, id) // nothing held any more
+			// Retain bounded ownership metadata for post-cleanup observation.
 			continue
 		}
 		out = append(out, info)
@@ -367,8 +373,50 @@ func (m *Memory) ListSessions(_ context.Context, olderThan time.Time) ([]Session
 func (m *Memory) SessionOwner(_ context.Context, session string) (string, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if s, ok := m.sessions[session]; ok {
+	if s, ok := m.session(session); ok {
 		return s.tenant, s.agent, nil
 	}
 	return "", "", nil
+}
+
+// session retains the same 24-hour ownership lifetime as Redis's session hash.
+// Caller holds mu; ordinary lazy expiration is not a cleanup receipt.
+func (m *Memory) session(id string) (*memSession, bool) {
+	s, ok := m.sessions[id]
+	if ok && !m.Now().Before(s.expires) {
+		delete(m.sessions, id)
+		return nil, false
+	}
+	return s, ok
+}
+
+func (m *Memory) ObserveLifecycle(_ context.Context, session string) (LifecycleObservation, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.session(session)
+	if !ok || s.tenant == "" || s.agent == "" {
+		return LifecycleObservation{}, false, nil
+	}
+	out := LifecycleObservation{Tenant: s.tenant, Agent: s.agent}
+	if v, held := m.get("gen:" + session); held {
+		out.Generation = atoi(string(v))
+		out.GenerationPresent = true
+	}
+	_, out.Stopped = m.get("stopped:" + session)
+	_, out.CleanupPending = m.get("stop-pending:" + session)
+	ttl := func(key string) (bool, int64) {
+		if _, held := m.get(key); !held {
+			return false, 0
+		}
+		exp := m.kv[key].exp
+		if exp.IsZero() {
+			return true, -1
+		}
+		return true, int64(exp.Sub(m.Now()) / time.Second)
+	}
+	out.VaultPresent, out.VaultTTLSeconds = ttl("vault:" + session)
+	if s.handle != "" {
+		out.GrantPresent, out.GrantTTLSeconds = ttl("grant:" + s.handle)
+	}
+	return out, true, nil
 }

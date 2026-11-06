@@ -51,6 +51,21 @@ type SessionInfo struct {
 	CleanupPending bool      `json:"-"`
 }
 
+// LifecycleObservation contains presence and TTL metadata only, never credentials.
+// TTL -1 means present without an expiry; 0 means absent or less than one second.
+type LifecycleObservation struct {
+	Tenant            string `json:"tenant"`
+	Agent             string `json:"agent"`
+	Generation        int    `json:"generation"`
+	GenerationPresent bool   `json:"generation_present"`
+	Stopped           bool   `json:"stopped"`
+	CleanupPending    bool   `json:"cleanup_pending"`
+	GrantPresent      bool   `json:"grant_present"`
+	VaultPresent      bool   `json:"vault_present"`
+	GrantTTLSeconds   int64  `json:"grant_ttl_seconds"`
+	VaultTTLSeconds   int64  `json:"vault_ttl_seconds"`
+}
+
 type Store interface {
 	Ping(ctx context.Context) error
 
@@ -99,6 +114,9 @@ type Store interface {
 	// SessionOwner returns only trusted first-writer session identity metadata.
 	SessionOwner(ctx context.Context, session string) (tenant, agent string, err error)
 	ListSessions(ctx context.Context, olderThan time.Time) ([]SessionInfo, error)
+	// ObserveLifecycle atomically reads trusted owner and cleanup state. Unknown or
+	// expired owner metadata is not proof of cleanup. It performs no cleanup writes.
+	ObserveLifecycle(ctx context.Context, session string) (LifecycleObservation, bool, error)
 }
 
 // SessionLedger and AgentLedger are the ledger keys of 9.3 step 10.
