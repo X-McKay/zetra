@@ -17,6 +17,7 @@ from pathlib import Path
 BACKEND = "llm-budget-conformance"
 TESTS = ("T13", "T13b")
 AGENTS = {"day": "conformance-budget-day", "session": "conformance-budget-session"}
+DAY_AGENTS = (AGENTS["day"], "conformance-budget-day-retry")
 UUID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 TRACE = re.compile(r"[0-9a-f]{32}\Z")
@@ -77,6 +78,13 @@ def gateway_replaced(restart, denied_at, retry_at):
         and all(p.get("ready") is True and p.get("image_id") for p in before + after)
         and {p["image_id"] for p in before} == {p["image_id"] for p in after}
         and restart.get("old_uids_absent") is True
+        and restart.get("completed") is True
+        and type(restart.get("emitted_ns")) is int
+        and restart["emitted_ns"] > 0
+        and type(restart.get("deadline_seconds")) is int
+        and restart["deadline_seconds"] == 100
+        and type(restart.get("elapsed_seconds")) in (int, float)
+        and 0 <= restart["elapsed_seconds"] < 100
         and isinstance(restart.get("configuration_before"), str)
         and bool(SHA.fullmatch(restart["configuration_before"]))
         and restart["configuration_before"] == restart.get("configuration_after")
@@ -87,8 +95,16 @@ def gateway_replaced(restart, denied_at, retry_at):
     )
 
 
-def evaluate_budget(*, case, sessions, aps, backend, observations, restart=None):
-    agent = AGENTS[case]
+def budget_agent(case, agent=None):
+    selected = AGENTS[case] if agent is None else agent
+    allowed = DAY_AGENTS if case == "day" else (AGENTS["session"],)
+    if selected not in allowed:
+        raise ValueError("budget identity is not an explicit dedicated fixture")
+    return selected
+
+
+def evaluate_budget(*, case, sessions, aps, backend, observations, restart=None, agent=None):
+    agent = budget_agent(case, agent)
     primary = sessions[0] if sessions else {}
     report = primary.get("budget", {})
     calls = report.get("calls", [])
@@ -356,6 +372,7 @@ def evaluate_budget(*, case, sessions, aps, backend, observations, restart=None)
         "checks": checks,
         "evidence": {
             "scope": "dedicated byte-token backend; budget path only, not Qwen accounting",
+            "agent": agent,
             "reserve_tokens": 300,
             "actual_tokens_per_call": 100,
             "tokens_per_day": 2000 if case == "day" else 2000000,

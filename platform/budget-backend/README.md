@@ -24,7 +24,7 @@ Required environment:
 - `BUDGET_BACKEND_KEY_FILE`: mounted nonempty raw printable-ASCII backend key. Missing,
   unreadable or malformed configured keys fail startup. Keys never appear in logs.
 - `BUDGET_BACKEND_AGENTS`: explicit comma-separated subset of
-  `tenant-test/conformance-budget-day,tenant-test/conformance-budget-session`.
+  `tenant-test/conformance-budget-day,tenant-test/conformance-budget-day-retry,tenant-test/conformance-budget-session`. The retry identity has the same enforced bounds and its own untouched ledger; it is never generated automatically.
 - `BUDGET_BACKEND_ADDR`: optional listener, default `:8080`.
 
 Only POST `/v1/chat/completions` performs inference. It requires the static backend

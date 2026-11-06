@@ -30,7 +30,7 @@ func config() (string, []string, error) {
 	}
 	agents := strings.Split(os.Getenv("BUDGET_BACKEND_AGENTS"), ",")
 	for _, agent := range agents {
-		if !slices.Contains([]string{"tenant-test/conformance-budget-day", "tenant-test/conformance-budget-session"}, agent) {
+		if !slices.Contains([]string{"tenant-test/conformance-budget-day", "tenant-test/conformance-budget-day-retry", "tenant-test/conformance-budget-session"}, agent) {
 			return "", nil, errors.New("explicit budget fixture allowlist required")
 		}
 	}

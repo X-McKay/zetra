@@ -711,3 +711,46 @@ A missing receipt, wrong UID, changed configuration, unavailable history, linger
 Pod/key/grant, stale worker, deadline breach or incomplete fault record fails the
 case. Genuine human grant authorization is an external prerequisite; an empty or
 fabricated initial grant never qualifies this test.
+
+### Explicit T13 retry ledger and failure evidence
+
+`--budget-day-agent conformance-budget-day-retry --budget-day-release <signed-ready-release>`
+selects one additional fixed identity for T13. The default remains
+`conformance-budget-day`; arbitrary aliases and use with other tests are refused.
+The retry fixture retains exactly 2000 tokens/day and 200000/session and the same
+enforced 300-byte-token backend reservation. All APS decisions, backend captures
+and observer rows must match the selected identity. Its initial ledger must be
+zero. The original failed run's ledger remains untouched; this adds no reset API,
+limit increase, automatic daily identity, or qualification of Qwen accounting.
+APS and the dedicated backend require the exact retry identity in their fixed
+configured allowlists; gateway JWT policy, signed Agent/AgentRelease and read-only
+harness access must match it too.
+
+After the real first APS budget refusal, a recorded one-second response barrier
+precedes stderr `T13 awaiting gateway replacement`
+with `test=T13`, exact `agent` and `session_id`, original Pod identities, strict
+integer `emitted_ns` from `time.time_ns()`, and unchanged `deadline_seconds=100`.
+The external operator pins the active Job/Pod UIDs, requires two original Ready
+gateways and a fresh event with at least 30 seconds left, and rechecks active UIDs
+and the emission deadline before each UID-bound deletion. No mutation is
+permitted after the Job ends or the event deadline passes. Root controls this
+operator and records its launch, polling, event and mutation receipts.
+
+The barrier is operational coordination, not proof of HTTP completion. The final
+committed request's `finished_at` must still be no later than the actual watch
+`started_at`; a guest response slower than the barrier can fail this strict check.
+Budget timestamps retain full UTC microseconds, so same-second ordering is not
+lost. Neither this pause nor timestamp precision changes the 100-second window.
+
+The read-only watcher also keeps `started_at`, local elapsed time, last observed
+inventory and a completion flag. An inventory response arriving at or after the
+100-second bound fails even if the new Pods are Ready. Successful evidence must
+show completed replacement within that bound and before the fixture's actual
+post-restart request. On any collection/orchestration error, the report retains
+the phase (including `denial_response_barrier`), its barrier receipt, bound
+session/release IDs, already observed ledgers, allowlisted
+decision correlation metadata and partial restart evidence. It records only the
+exception class, never arbitrary log/response/exception text. Evidence is frozen
+at failure without extra network collection; settled independent session cleanup
+cannot rewrite an error into a pass. Missing committed fixture or complete logs
+remain missing; partial observations never qualify the test.

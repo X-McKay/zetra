@@ -1797,6 +1797,7 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             args.budget_day_release,
             args.budget_session_release,
             os.environ.get("ARTIFACT_DIR", DEFAULT_ARTIFACT_DIR),
+            day_agent=args.budget_day_agent,
         )
     harness = Harness(
         temporal,
@@ -1933,6 +1934,14 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="temporarily revoke approval/drift the explicit fixture, then restore",
     )
+    from runner.conformance_budget import DAY_AGENTS
+
+    parser.add_argument(
+        "--budget-day-agent",
+        choices=DAY_AGENTS,
+        default=DAY_AGENTS[0],
+        help="T13: explicit original or fixed retry ledger identity; never resets a ledger",
+    )
     parser.add_argument(
         "--budget-day-release", help="signed conformance-budget-day release for T13"
     )
@@ -2028,6 +2037,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
             parser.error(
                 "admission mutations must use a separate agent, never the primary conformance agent"
             )
+    if args.budget_day_agent != DAY_AGENTS[0] and "T13" not in args.tests:
+        parser.error("--budget-day-agent retry identity requires T13")
     if "T13" in args.tests and not args.budget_day_release:
         parser.error("T13 requires --budget-day-release and external gateway pod replacement")
     if "T13b" in args.tests and not args.budget_session_release:
