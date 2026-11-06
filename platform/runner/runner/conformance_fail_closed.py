@@ -58,6 +58,89 @@ def empty(o):
     )
 
 
+def annotation_hash(value):
+    return hashlib.sha256(json.dumps(value, separators=(",", ":")).encode()).hexdigest()
+
+
+PHASES = ("pause", "down", "up", "resume")
+RECEIPT_FIELDS = {
+    "schema",
+    "marker",
+    "deployment_uid",
+    "original_replicas",
+    "original_generation",
+    "original_annotation_sha",
+}
+PHASE_FIELDS = {
+    "started_ns",
+    "acknowledged_ns",
+    "resource_version_before",
+    "resource_version",
+    "generation_before",
+    "generation",
+    "replicas_before",
+    "replicas",
+    "annotation_sha_before",
+    "annotation_sha",
+    "changed",
+}
+
+
+def operator_states(receipt, first, marker):
+    """Validate four immutable mutation receipts; RVs may advance between phases."""
+    if (
+        set(receipt) != RECEIPT_FIELDS | set(PHASES)
+        or receipt.get("schema") != "t17-v2"
+        or receipt.get("marker") != marker
+        or not first.get("uid")
+        or receipt.get("deployment_uid") != first["uid"]
+        or receipt.get("original_replicas") != 2
+        or receipt.get("original_generation") != first.get("generation")
+        or receipt.get("original_annotation_sha") != first.get("annotation_sha")
+        or not SHA.fullmatch(str(first.get("annotation_sha", "")))
+        or type(first.get("generation")) is not int
+        or first["generation"] < 1
+    ):
+        return []
+    original = first["annotation_sha"]
+    paused = annotation_hash("disabled")
+    prior = (first["generation"], 2, original)
+    # Each state can be observed from its PATCH start until the next PATCH ack.
+    states, earliest, previous_ack = [], 0, 0
+    for name, replicas, annotation in (
+        ("pause", 2, paused),
+        ("down", 0, paused),
+        ("up", 2, paused),
+        ("resume", 2, original),
+    ):
+        row = receipt[name]
+        if not isinstance(row, dict) or set(row) != PHASE_FIELDS:
+            return []
+        start, ack = row["started_ns"], row["acknowledged_ns"]
+        changed = name in ("down", "up") or annotation != prior[2]
+        if (
+            type(start) is not int
+            or type(ack) is not int
+            or not 0 <= previous_ack < start <= ack
+            or any(
+                not isinstance(row[key], str) or not row[key]
+                for key in ("resource_version_before", "resource_version")
+            )
+            or row["changed"] is not changed
+            or (row["generation_before"], row["replicas_before"], row["annotation_sha_before"])
+            != prior
+            or (row["generation"], row["replicas"], row["annotation_sha"])
+            != (prior[0] + int(changed), replicas, annotation)
+            or (row["resource_version_before"] == row["resource_version"]) is changed
+        ):
+            return []
+        states.append((earliest, ack, prior))
+        earliest, previous_ack = start, ack
+        prior = (row["generation"], replicas, annotation)
+    states.append((earliest, float("inf"), prior))
+    return states
+
+
 def evaluate(*, probe, marker, duration, receipt, observations, gateway, logs_readable, session):
     rows = probe.get("requests", [])
     down, up = receipt.get("down", {}), receipt.get("up", {})
@@ -65,6 +148,7 @@ def evaluate(*, probe, marker, duration, receipt, observations, gateway, logs_re
     un, ua = up.get("started_ns", 0), up.get("acknowledged_ns", 0)
     origin = probe.get("origin_ns", 0)
     first, last = (observations[0], observations[-1]) if observations else ({}, {})
+    states = operator_states(receipt, first, marker)
     initial_ids = {p.get("uid") for p in first.get("pods", [])}
     final_ids = {p.get("uid") for p in last.get("pods", [])}
     starts = [r.get("started_ns", 0) for r in rows]
@@ -74,19 +158,7 @@ def evaluate(*, probe, marker, duration, receipt, observations, gateway, logs_re
         "completed_generation_one_cleanup": session.get("outcome") == "COMPLETED"
         and session.get("generation") == 1
         and session.get("cleanup") == {"stop": "OK", "delete": "DELETED", "grant": "OK"},
-        "explicit_operator_receipts": set(receipt)
-        == {"schema", "marker", "deployment_uid", "original_replicas", "down", "up"}
-        and receipt.get("schema") == "t17-v1"
-        and receipt.get("marker") == marker
-        and receipt.get("deployment_uid") == first.get("uid")
-        and bool(first.get("uid"))
-        and receipt.get("original_replicas") == 2
-        and 0 < dn <= da < un <= ua
-        and bool(down.get("resource_version"))
-        and bool(up.get("resource_version"))
-        and down.get("resource_version") != up.get("resource_version")
-        and down.get("generation", 0) == first.get("generation", 0) + 1
-        and up.get("generation", 0) == down.get("generation", 0) + 1,
+        "explicit_operator_receipts": bool(states),
         "exact_probe_and_count": probe.get("schema") == "t17-v1"
         and probe.get("marker") == marker
         and probe.get("duration_seconds") == duration
@@ -130,23 +202,24 @@ def evaluate(*, probe, marker, duration, receipt, observations, gateway, logs_re
         "two_new_ready_replicas_restored": restored(last)
         and len(final_ids) == 2
         and not initial_ids & final_ids
-        and last.get("generation") == up.get("generation")
+        and last.get("generation") == receipt.get("resume", {}).get("generation")
+        and last.get("annotation_sha") == receipt.get("original_annotation_sha")
         and {p.get("image_id") for p in first.get("pods", [])}
         == {p.get("image_id") for p in last.get("pods", [])},
         "all_gateway_logs_readable": logs_readable is True,
     }
-    phase_consistent = bool(observations)
+    phase_consistent = bool(observations) and bool(states)
     for observation in observations:
-        if observation.get("started_ns", 0) >= ua:
-            replicas, generation = 2, up.get("generation")
-        elif da <= observation.get("started_ns", 0) and observation.get("observed_ns", 0) < un:
-            replicas, generation = 0, down.get("generation")
-        elif observation.get("observed_ns", 0) < dn:
-            replicas, generation = 2, first.get("generation")
-        else:
-            continue  # a read overlapping a recorded mutation can see either version
-        phase_consistent &= (
-            observation.get("replicas") == replicas and observation.get("generation") == generation
+        observed_state = (
+            observation.get("generation"),
+            observation.get("replicas"),
+            observation.get("annotation_sha"),
+        )
+        phase_consistent &= any(
+            observed_state == state
+            and observation.get("observed_ns", 0) >= earliest
+            and observation.get("started_ns", 0) <= latest
+            for earliest, latest, state in states
         )
     checks["only_recorded_replica_changes"] = phase_consistent
     relevant = [g for g in gateway if str(g.get("trace.id", "")).startswith(marker)]

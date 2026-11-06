@@ -10,6 +10,24 @@ from runner.conformance_fail_closed import evaluate, read_evidence
 
 N = 1_000_000_000
 MARKER = "a" * 16
+ORIGINAL = hashlib.sha256(b"null").hexdigest()
+PAUSED = hashlib.sha256(b'"disabled"').hexdigest()
+
+
+def phase(second, generation, replicas_before, replicas, before_sha, after_sha):
+    return dict(
+        started_ns=second * N,
+        acknowledged_ns=int((second + 0.1) * N),
+        resource_version_before=str(generation * 10),
+        resource_version=str(generation * 10 + 1),
+        generation_before=generation,
+        generation=generation + 1,
+        replicas_before=replicas_before,
+        replicas=replicas,
+        annotation_sha_before=before_sha,
+        annotation_sha=after_sha,
+        changed=True,
+    )
 
 
 def evidence():
@@ -59,11 +77,28 @@ def evidence():
                 observed_ns=int((second + 0.01) * N),
                 uid="deployment",
                 resource_version="1" if second < 110 else "2" if second < 132 else "3",
-                generation=1 if second < 110 else 2 if second < 132 else 3,
-                observed_generation=1 if second < 110 else 2 if second < 132 else 3,
+                generation=6
+                if second < 108
+                else 7
+                if second < 110
+                else 8
+                if second < 132
+                else 9
+                if second < 135
+                else 10,
+                observed_generation=6
+                if second < 108
+                else 7
+                if second < 110
+                else 8
+                if second < 132
+                else 9
+                if second < 135
+                else 10,
                 replicas=count,
                 ready_replicas=len(pods),
                 spec_sha="a" * 64,
+                annotation_sha=PAUSED if 108 <= second < 135 else ORIGINAL,
                 pods=pods,
                 endpoints=[dict(uid=p["uid"], ready=True) for p in pods],
             )
@@ -81,22 +116,16 @@ def evidence():
         marker=MARKER,
         duration=60,
         receipt=dict(
-            schema="t17-v1",
+            schema="t17-v2",
             marker=MARKER,
             deployment_uid="deployment",
             original_replicas=2,
-            down=dict(
-                started_ns=110 * N,
-                acknowledged_ns=int(110.1 * N),
-                resource_version="2",
-                generation=2,
-            ),
-            up=dict(
-                started_ns=132 * N,
-                acknowledged_ns=int(132.1 * N),
-                resource_version="3",
-                generation=3,
-            ),
+            original_generation=6,
+            original_annotation_sha=ORIGINAL,
+            pause=phase(108, 6, 2, 2, ORIGINAL, PAUSED),
+            down=phase(110, 7, 2, 0, PAUSED, PAUSED),
+            up=phase(132, 8, 0, 2, PAUSED, PAUSED),
+            resume=phase(135, 9, 2, 2, PAUSED, ORIGINAL),
         ),
         observations=observations,
         gateway=logs,
@@ -237,3 +266,68 @@ def test_unrecorded_operator_state_never_passes(change):
     else:
         data["receipt"]["surprise"] = "not-reviewed"
     assert evaluate(**data)["result"] == "fail"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "missing_pause",
+        "missing_resume",
+        "legacy",
+        "hash",
+        "chain",
+        "phase_order",
+        "unknown_phase_field",
+        "overlap_unrecorded",
+        "final_generation",
+    ],
+)
+def test_annotation_receipts_are_required_and_strict(change):
+    data = evidence()
+    if change.startswith("missing_"):
+        data["receipt"].pop(change.removeprefix("missing_"))
+    elif change == "legacy":
+        data["receipt"]["schema"] = "t17-v1"
+    elif change == "hash":
+        data["receipt"]["pause"]["annotation_sha"] = ORIGINAL
+    elif change == "chain":
+        data["receipt"]["down"]["generation_before"] = 6
+    elif change == "phase_order":
+        data["receipt"]["pause"]["acknowledged_ns"] = 111 * N
+    elif change == "unknown_phase_field":
+        data["receipt"]["pause"]["unrecorded"] = True
+    elif change == "overlap_unrecorded":
+        data["observations"][13]["generation"] = 99  # overlap pause PATCH
+    else:
+        data["observations"][-1]["generation"] = 9
+    assert evaluate(**data)["result"] == "fail"
+
+
+def test_status_resource_version_changes_between_phases_are_allowed():
+    data = evidence()
+    data["receipt"]["down"]["resource_version_before"] = "999"
+    data["receipt"]["down"]["resource_version"] = "1000"
+    assert evaluate(**data)["result"] == "pass"
+
+
+def test_already_disabled_annotation_has_explicit_noop_phases():
+    data = evidence()
+    data["receipt"]["original_annotation_sha"] = PAUSED
+    for name, generation in (("pause", 6), ("down", 6), ("up", 7), ("resume", 8)):
+        row = data["receipt"][name]
+        row.update(
+            generation_before=generation,
+            generation=generation + int(name in ("down", "up")),
+            annotation_sha_before=PAUSED,
+            annotation_sha=PAUSED,
+            changed=name in ("down", "up"),
+        )
+        if not row["changed"]:
+            row["resource_version"] = row["resource_version_before"]
+    for row in data["observations"]:
+        second = row["started_ns"] / N
+        row.update(
+            generation=6 if second < 110 else 7 if second < 132 else 8, annotation_sha=PAUSED
+        )
+        row["observed_generation"] = row["generation"]
+    assert evaluate(**data)["result"] == "pass"

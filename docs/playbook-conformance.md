@@ -368,20 +368,30 @@ The harness never changes replicas or Flux. The operator prepares ConfigMap
 `agent-platform/conformance-aps-outage-control`, with `data.receipt.json`:
 
 ```json
-{"schema":"t17-v1","marker":"0123456789abcdef","deployment_uid":"ACTUAL-APS-UID","original_replicas":2}
+{"schema":"t17-v2","marker":"0123456789abcdef","deployment_uid":"ACTUAL-APS-UID","original_replicas":2,"original_generation":6,"original_annotation_sha":"SHA256-OF-JSON-ANNOTATION-OR-NULL"}
 ```
 
-The ConfigMap UID is pinned. The operator uses Deployment UID/resourceVersion
-preconditions to change replicas and appends `down`, then `up`, once each:
+The ConfigMap UID is pinned. With Deployment UID/resourceVersion preconditions,
+the operator appends `pause`, `down`, `up`, then `resume`, once each. Each phase
+contains Unix-nanosecond `started_ns`/`acknowledged_ns`, actual
+`resource_version_before`/`resource_version`, `generation_before`/`generation`,
+`replicas_before`/`replicas`, `annotation_sha_before`/`annotation_sha`, and the
+boolean `changed`. The annotation digest is SHA256 of its compact JSON scalar
+(or `null` when absent); no annotation value enters the report.
 
-```json
-{"started_ns":1793980000000000000,"acknowledged_ns":1793980000100000000,"resource_version":"ACTUAL-PATCH-RESPONSE-RV","generation":2}
-```
+Deployment metadata annotation changes increment generation as well as replica
+changes. The regression preserves run27's observed sequence 6→7→8→9→10. Each
+phase must link the preceding generation, replica count and annotation digest;
+a change advances generation by exactly one. If the original annotation was
+already `disabled`, pause and resume are explicit no-ops with unchanged generation
+and resourceVersion. Actual resourceVersions are required per phase, but controller
+status writes may legitimately advance them between phases and observations.
+Previously written receipt fields cannot change. Reads overlapping a recorded
+mutation must match one of the recorded adjacent states; no unknown state is
+ignored. Final Ready evidence must match the resume generation and original
+annotation digest. Older `t17-v1` receipts remain historical evidence and can be
+restored by the operator, but cannot qualify a new run.
 
-Times are Unix nanoseconds immediately before the scale request and after its
-response. Generation/resourceVersion come from that response. Previously written
-receipt fields cannot change. The response resourceVersion is retained as
-operator evidence; controller status updates can advance it before observation.
 The harness independently verifies Deployment UID/generations, unchanged spec
 excluding replicas, Pod UIDs/image IDs and ready/not-ready Endpoints. Operator,
 observer and sandbox clocks must be synchronized; the probe also compares wall
