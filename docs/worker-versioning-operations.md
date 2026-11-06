@@ -36,6 +36,19 @@ The report always says `retirement_allowed: false`: a point observation cannot
 prove continuous seven-day query/replay availability, and this CLI has no worker
 retirement command. Preserve all compatible workers and artifacts.
 
+`history-receipt --role ROLE --build-id BUILD --image PIN --workflow-id ID
+--run-id UUID` projects only actual WorkflowTaskCompleted structured versions and
+ActivityTaskStarted build/identity fields, bound to exact retained Pod UIDs/images
+and fresh versioned pollers before/after the read. It never outputs event payloads
+or unmatched identity/version strings. A failed correlation exits1. The deprecated
+WorkerVersionStamp.use_versioning flag is false for the observed Deployment-based
+workers; it is not substituted for structured deployment versions, exact Activity
+build IDs and owned poller identities. The
+[real local receipt](qualification/worker-versioning-history-receipt-local-2026-11-06.json)
+contains four correlated Workflow tasks and two Activity starts. Its initial
+strict-flag assertion failed and led to a regression matching the actual pinned
+API; no missing version/identity evidence was accepted.
+
 `replay --role ROLE --build-id BUILD --workflow-id ID --run-id UUID` verifies an
 exact closed run's queue and structured version before fetching history. It
 replays privately against this installed code with the tenant codec; raw history

@@ -181,3 +181,61 @@ async def test_replay_refuses_unbound_or_open_history_before_fetching_payloads(b
     with pytest.raises(GuardError):
         await ops.replay(client, DEPLOYMENT, "new", "workflow", "run")
     client.get_workflow_handle.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "broken", [None, "activity_build", "activity_identity", "workflow_version"]
+)
+async def test_history_receipt_correlates_real_started_events_without_payload_output(broken):
+    from types import SimpleNamespace as N
+    from unittest.mock import AsyncMock, Mock
+    from temporalio.api.history.v1 import HistoryEvent
+
+    class Service(TemporalService):
+        async def describe_workflow_execution(self, request, **kwargs):
+            return api.DescribeWorkflowExecutionResponse(
+                workflow_execution_info={
+                    "execution": {"workflow_id": "workflow", "run_id": "run"},
+                    "task_queue": "sessions-tenant-test-governed-v1",
+                    "status": 2,
+                    "close_time": timestamp(),
+                    "versioning_info": {
+                        "deployment_version": {"deployment_name": DEPLOYMENT, "build_id": "new"}
+                    },
+                }
+            )
+
+    events = [
+        HistoryEvent(
+            event_id=1,
+            workflow_task_completed_event_attributes={
+                "identity": "1@worker-new",
+                "deployment_version": {
+                    "deployment_name": DEPLOYMENT,
+                    "build_id": "other" if broken == "workflow_version" else "new",
+                },
+            },
+        ),
+        HistoryEvent(
+            event_id=2,
+            activity_task_started_event_attributes={
+                "identity": "1@foreign" if broken == "activity_identity" else "1@worker-new",
+                "worker_version": {
+                    "build_id": "other" if broken == "activity_build" else "new",
+                    "use_versioning": False,
+                },
+            },
+        ),
+    ]
+    history = N(events=events, to_json=lambda: "private-history")
+    client = N(
+        namespace="agents-tenant-test",
+        get_workflow_handle=Mock(return_value=N(fetch_history=AsyncMock(return_value=history))),
+    )
+    ops = WorkerOperations(
+        VersioningOperator(Service(), HealthyInventory(), tenant="tenant-test", now=lambda: NOW)
+    )
+    result = await ops.history_receipt(client, DEPLOYMENT, "new", IMAGE, "workflow", "run")
+    assert result["result"] == ("pass" if broken is None else "fail")
+    assert "private-history" not in str(result)

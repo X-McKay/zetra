@@ -81,6 +81,15 @@ async def dispatch(args, operator, client):
         return await ops.drain(
             worker_deployment(operator.tenant, args.role, "governed-v1"), args.build_id
         )
+    if args.command == "history-receipt":
+        return await ops.history_receipt(
+            client,
+            worker_deployment(operator.tenant, args.role, "governed-v1"),
+            args.build_id,
+            args.image,
+            args.workflow_id,
+            args.run_id,
+        )
     if args.command == "replay":
         return await ops.replay(
             client,
@@ -122,6 +131,7 @@ def parser():
         "prepare",
         "inspect-drain",
         "replay",
+        "history-receipt",
         "promote",
         "rollback",
         "schedule-inspect",
@@ -129,13 +139,13 @@ def parser():
     ):
         cmd = commands.add_parser(name)
         cmd.add_argument("--output", type=Path)
-        if name in {"current", "prepare", "inspect-drain", "replay"}:
+        if name in {"current", "prepare", "inspect-drain", "replay", "history-receipt"}:
             cmd.add_argument("--role", choices=["sessions", "cleanup"], required=True)
-        if name in {"current", "prepare"}:
+        if name in {"current", "prepare", "history-receipt"}:
             cmd.add_argument("--image", required=True)
         if name == "current":
             cmd.add_argument("--pool", choices=["legacy", "governed-v1"], required=True)
-        if name in {"prepare", "inspect-drain", "replay"}:
+        if name in {"prepare", "inspect-drain", "replay", "history-receipt"}:
             cmd.add_argument("--build-id", required=True)
         if name in MUTATIONS:
             cmd.add_argument("--plan", type=Path, required=True)
@@ -144,7 +154,7 @@ def parser():
             cmd.add_argument("--pool", choices=["legacy", "governed-v1"], required=True)
             cmd.add_argument("--build-id")
             cmd.add_argument("--image")
-        if name == "replay":
+        if name in {"replay", "history-receipt"}:
             cmd.add_argument("--workflow-id", required=True)
             cmd.add_argument("--run-id", required=True)
     return p
@@ -180,7 +190,9 @@ def main(argv=None):
             private_json(args.output, result)
         else:
             print(json.dumps(result, sort_keys=True))
-        return 3 if result.get("status") == "uncertain" else 0
+        if result.get("status") == "uncertain":
+            return 3
+        return 1 if result.get("result") == "fail" else 0
     except GuardError as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2

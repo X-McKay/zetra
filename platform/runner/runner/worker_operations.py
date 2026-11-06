@@ -165,6 +165,91 @@ class WorkerOperations:
             "limitation": "Read-only point observation; retain workers for pinned histories, replay and seven-day query evidence. No scale/delete operation is provided.",
         }
 
+    async def history_receipt(self, client, deployment, build_id, image, workflow_id, run_id):
+        op = self.operator
+        prepared = await op.prepare(deployment, build_id, image)
+        if client.namespace != op.namespace:
+            raise GuardError("history client namespace differs")
+        actual = (
+            await op.call(
+                "describe_workflow_execution",
+                api.DescribeWorkflowExecutionRequest(
+                    namespace=op.namespace, execution={"workflow_id": workflow_id, "run_id": run_id}
+                ),
+            )
+        ).workflow_execution_info
+        version = WorkerDeploymentVersion(deployment_name=deployment, build_id=build_id)
+        if (
+            actual.execution.workflow_id != workflow_id
+            or actual.execution.run_id != run_id
+            or actual.task_queue != op.queue(deployment)
+            or actual.versioning_info.deployment_version != version
+        ):
+            raise GuardError("history receipt is not bound to exact run/queue/version")
+        history = await client.get_workflow_handle(workflow_id, run_id=run_id).fetch_history()
+        raw = history.to_json().encode()
+        if len(history.events) > 100000 or len(raw) > 64 << 20:
+            raise GuardError("history exceeds bounded private inspection")
+        pods = {p["name"] for p in prepared["workers"]["pods"]}
+
+        def owned(identity):
+            pid, sep, name = identity.partition("@")
+            return bool(sep) and pid.isdigit() and name in pods
+
+        workflows = []
+        activities = []
+        workflow_bound = True
+        activity_bound = True
+        for event in history.events:
+            if event.HasField("workflow_task_completed_event_attributes"):
+                value = event.workflow_task_completed_event_attributes
+                workflow_bound = (
+                    workflow_bound and value.deployment_version == version and owned(value.identity)
+                )
+                workflows.append(
+                    {
+                        "event_id": event.event_id,
+                        "identity": value.identity if owned(value.identity) else None,
+                        "deployment": deployment if value.deployment_version == version else None,
+                        "build_id": build_id if value.deployment_version == version else None,
+                    }
+                )
+            if event.HasField("activity_task_started_event_attributes"):
+                value = event.activity_task_started_event_attributes
+                activity_bound = (
+                    activity_bound
+                    and owned(value.identity)
+                    and value.worker_version.build_id == build_id
+                )
+                activities.append(
+                    {
+                        "event_id": event.event_id,
+                        "identity": value.identity if owned(value.identity) else None,
+                        "build_id": build_id if value.worker_version.build_id == build_id else None,
+                    }
+                )
+        after = await op.inventory.candidate(deployment, build_id, image)
+        checks = {
+            "workflow_tasks_bound": bool(workflows) and workflow_bound,
+            "activity_starts_bound": bool(activities) and activity_bound,
+            "same_worker_uids_and_images": after == prepared["workers"],
+        }
+        return {
+            "schema": "worker-history-receipt-v1",
+            "result": "pass" if all(checks.values()) else "fail",
+            "deployment": deployment,
+            "build_id": build_id,
+            "workflow_id": workflow_id,
+            "run_id": run_id,
+            "workflow_status": actual.status,
+            "history_sha256": sha256(raw),
+            "events": len(history.events),
+            "workers": prepared["workers"],
+            "workflow_tasks": workflows,
+            "activity_starts": activities,
+            "checks": checks,
+        }
+
     async def replay(
         self,
         client,
