@@ -250,12 +250,12 @@ def test_aps_log_reader_retries_a_failed_pod_read():
         def __init__(self):
             self.calls = 0
 
-        def list_namespaced_pod(self, ns, label_selector):
+        def list_namespaced_pod(self, ns, label_selector, **kwargs):
             return types.SimpleNamespace(
                 items=[types.SimpleNamespace(metadata=types.SimpleNamespace(name="aps-a"))]
             )
 
-        def read_namespaced_pod_log(self, name, ns, container, since_seconds):
+        def read_namespaced_pod_log(self, name, ns, container, since_seconds, **kwargs):
             self.calls += 1
             if self.calls == 1:
                 raise RuntimeError("transient")
@@ -264,6 +264,72 @@ def test_aps_log_reader_retries_a_failed_pod_read():
     core = Core()
     text = asyncio.run(c.aps_log_reader(core)(5.0))
     assert core.calls == 2 and c.parse_aps_log(text)[0]["msg"] == "token issued"
+
+
+def test_log_window_keeps_early_evidence_when_first_replica_is_slow(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(
+        c, "time", types.SimpleNamespace(monotonic=lambda: now[0], sleep=lambda _: None)
+    )
+
+    class Core:
+        def list_namespaced_pod(self, namespace, **kwargs):
+            return types.SimpleNamespace(
+                items=[
+                    types.SimpleNamespace(metadata=types.SimpleNamespace(name=name))
+                    for name in ("aps-a", "aps-b")
+                ]
+            )
+
+        def read_namespaced_pod_log(self, name, namespace, *, since_seconds, **kwargs):
+            if name == "aps-a":
+                now[0] += 20
+                return ""
+            # The event was four seconds old when collection began.
+            return json.dumps(issued("s-1-g1")) if now[0] - since_seconds <= 96 else ""
+
+    text = asyncio.run(c.aps_log_reader(Core())(5.0))
+    assert [e["jti"] for e in c.parse_aps_log(text)] == ["j1"]
+
+
+@pytest.mark.parametrize("matching_event_arrives", [True, False])
+async def test_t4_unrelated_issuance_does_not_suppress_evidence_retry(
+    monkeypatch, matching_event_arrives
+):
+    session = run()
+    claims = {
+        "jti": "expected",
+        "aud": ["agent-gateway", "agent-policy-service"],
+        "client_type": "agent",
+        "agent_id": f"{TENANT}/{AGENT}",
+        "iss": "https://issuer",
+        "iat": 100,
+        "exp": 400,
+    }
+    reads = []
+
+    async def logs(since):
+        reads.append(since)
+        event = (
+            issued("unrelated-g1")
+            if len(reads) == 1 or not matching_event_arrives
+            else {**issued(session.pod), "jti": "expected", "agent_id": f"{TENANT}/{AGENT}"}
+        )
+        return json.dumps(event)
+
+    async def no_wait(*args):
+        pass
+
+    async def session_run(*args):
+        return session
+
+    harness = c.Harness(None, TENANT, AGENT, "r1", logs, issuer="https://issuer")
+    monkeypatch.setattr(harness, "run_session", session_run)
+    monkeypatch.setattr(c, "read_t4_claims", lambda *args: claims)
+    monkeypatch.setattr(c.asyncio, "sleep", no_wait)
+    result = await harness.t4()
+    assert result["result"] == ("pass" if matching_event_arrives else "fail")
+    assert len(reads) == (2 if matching_event_arrives else c.LOG_READ_ATTEMPTS)
 
 
 def test_aps_log_keeps_decisions_too():
@@ -961,7 +1027,7 @@ async def test_cluster_wiring_uses_engine_env_and_vllm_capture(fake_model, tmp_p
     r, cap, gw = t7_evidence()
 
     class Core:
-        def list_namespaced_pod(self, ns, label_selector):
+        def list_namespaced_pod(self, ns, label_selector, **kwargs):
             name = {
                 ("vllm", "app=vllm"): "model-pod",
                 ("ai-gateway", "app.kubernetes.io/name=agents"): "gateway-pod",
@@ -972,7 +1038,7 @@ async def test_cluster_wiring_uses_engine_env_and_vllm_capture(fake_model, tmp_p
                 else []
             )
 
-        def read_namespaced_pod_log(self, name, ns, since_seconds, container=None):
+        def read_namespaced_pod_log(self, name, ns, since_seconds, container=None, **kwargs):
             if (name, ns, container) == ("model-pod", "vllm", "capture"):
                 return json.dumps(cap)
             if (name, ns, container) == ("gateway-pod", "ai-gateway", None):
