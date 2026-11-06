@@ -131,6 +131,7 @@ STATUS_WORD = re.compile(r"\b([45][0-9]{2})\b")
 TESTS = ("T4", "T5", "T6", "T7", "T8", "T11", "T12", "T19", "T26")
 ADMISSION_TESTS = ("T9a", "T9b", "T22")
 BUDGET_TESTS = ("T13", "T13b")
+DEFAULT_BUDGET_TOKEN_PATH = "/var/run/secrets/agent-policy-service/token"
 PROTOCOL_TESTS = ("T25",)
 REVOCATION_TESTS = ("T15", "T20")
 DEFAULT_ARTIFACT_DIR = "/var/lib/agent-artifacts"
@@ -1754,7 +1755,7 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             KubernetesAdmission(core, k8s.CustomObjectsApi(), args.tenant),
             BudgetObserver(
                 os.environ.get("APS_URL", DEFAULT_APS_URL),
-                os.environ.get("APS_TOKEN_PATH", DEFAULT_APS_TOKEN_PATH),
+                os.environ.get("APS_TOKEN_PATH", DEFAULT_BUDGET_TOKEN_PATH),
             ),
             aps_log_reader(core),
             pod_log_reader(

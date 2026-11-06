@@ -350,6 +350,17 @@ class BudgetHarness:
                 monitor.cancel()
             await asyncio.gather(monitor, return_exceptions=True)
 
+    async def close_all(self, active):
+        async def collect():
+            results = await asyncio.gather(
+                *(self.close(running) for running in active), return_exceptions=True
+            )
+            failures = [r for r in results if isinstance(r, BaseException)]
+            if failures:
+                raise BaseExceptionGroup("budget session cleanup failed", failures)
+
+        await settled(collect())
+
     async def wait_decision(self, session, reason, started, running):
         from runner.conformance import parse_aps_log
 
@@ -424,8 +435,7 @@ class BudgetHarness:
             result["evidence"]["gateway_restart"] = restart
             return {"id": "T13" if case == "day" else "T13b", **result}
         finally:
-            for running in active:
-                await self.close(running)
+            await self.close_all(active)
 
     async def t13(self):
         return await self.run("day")

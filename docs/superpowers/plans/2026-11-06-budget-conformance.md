@@ -64,4 +64,13 @@ refunds expiry; malformed/unknown backend fields cannot invalidate the 300 bound
 - Ruling: cluster UTC timestamps establish settlement<=5s; negative or late intervals
   fail, and the response timestamp precedes writing for a conservative bound.
 
-Independent review, main integration, final checks and PR publication remain pending.
+- Rebased onto main89034e2, preserving T4/T5/admission/T25/revocation adapters.
+- Independent review fixes: all started sessions clean up even if one cleanup fails
+  or is cancelled; extra backend responses and off-route APS decisions for selected
+  sessions fail exact-evidence checks. All regressions failed before fixes.
+- Tightened trusted sample ordering, concurrency-window coverage and monotonic spent;
+  four regressions failed before fixes. Focused budget tests:36passed.
+- Final integrated runner suite:453passed; Ruff clean. APS full Go tests/vet and
+  complete agent repository justcheck passed again on rebased main.
+
+Final independent-review disposition and PR publication remain pending.

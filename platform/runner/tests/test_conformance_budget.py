@@ -282,3 +282,20 @@ def test_observation_timing_and_monotonic_spend_are_required(change):
             3, {**copy.deepcopy(data["observations"][2]), "session": {"spent": 0, "inflight": 0}}
         )
     assert evaluate_budget(**data)["result"] == "fail"
+
+
+@pytest.mark.parametrize("source", ["backend", "other_aps_backend"])
+def test_extra_session_request_evidence_never_passes(source):
+    data = evidence()
+    if source == "backend":
+        extra = copy.deepcopy(data["backend"][0])
+        extra["decision_id"] = uid(999)
+        extra["trace_id"] = "f" * 32
+        data["backend"].append(extra)
+    else:
+        extra = copy.deepcopy(data["aps"][0])
+        extra["decision_id"] = uid(999)
+        extra["trace_id"] = "f" * 32
+        extra["backend"] = "llm-other"
+        data["aps"].append(extra)
+    assert evaluate_budget(**data)["result"] == "fail"

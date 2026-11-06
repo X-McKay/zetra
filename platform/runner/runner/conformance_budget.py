@@ -97,9 +97,7 @@ def evaluate_budget(*, case, sessions, aps, backend, observations, restart=None)
     all_calls = [(s, c) for s in sessions for c in s.get("budget", {}).get("calls", [])]
     ids = {s.get("session_id") for s in sessions}
     decisions = [
-        d
-        for d in aps
-        if d.get("session_id") in ids and d.get("backend") == BACKEND and "reason" in d
+        d for d in aps if d.get("session_id") in ids and "decision_id" in d and "reason" in d
     ]
     traces = [c.get("trace_id") for _, c in all_calls]
     checks = {
@@ -152,6 +150,7 @@ def evaluate_budget(*, case, sessions, aps, backend, observations, restart=None)
         )
         checks["http_and_aps_match"] &= (
             (allow or deny)
+            and d.get("backend") == BACKEND
             and d.get("agent_id") == "tenant-test/" + agent
             and d.get("release") == session.get("release")
             and isinstance(decision, str)
@@ -205,6 +204,12 @@ def evaluate_budget(*, case, sessions, aps, backend, observations, restart=None)
                 "settlement_seconds": delay if delay is not None and math.isfinite(delay) else None,
             }
         )
+    allowed_ids = {d.get("decision_id") for d in matched.values() if d.get("reason") == "allow"}
+    session_captures = [b for b in backend if b.get("session_id") in ids]
+    checks["no_unmatched_backend_requests"] = (
+        len(session_captures) == len(allowed_ids)
+        and {b.get("decision_id") for b in session_captures} == allowed_ids
+    )
     labels = [c.get("label") for c in calls]
     expected = (
         [f"spend-{n}" for n in range(18)] + ["exhausted", "after_restart"]

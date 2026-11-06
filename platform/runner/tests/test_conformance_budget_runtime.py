@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import io
 import json
@@ -136,3 +137,22 @@ async def test_gateway_watch_requires_all_old_pods_gone_and_new_ready(monkeypatc
     monkeypatch.setattr("runner.conformance_budget_runtime.asyncio.sleep", nop)
     got = await watcher.replaced(before)
     assert {p["uid"] for p in got["after"]} == {"new1", "new2"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first_error", [RuntimeError("failed cleanup"), asyncio.CancelledError()])
+async def test_cleanup_attempts_both_sessions_before_propagating_first_error(first_error):
+    from runner.conformance_budget_runtime import BudgetHarness
+
+    harness = object.__new__(BudgetHarness)
+    closed = []
+
+    async def close(item):
+        closed.append(item)
+        if item == "control":
+            raise first_error
+
+    harness.close = close
+    with pytest.raises(BaseExceptionGroup):
+        await harness.close_all(["control", "primary"])
+    assert closed == ["control", "primary"]
