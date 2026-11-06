@@ -1131,6 +1131,15 @@ to this control for the worker/harness. Label its Pod
 pinned worker with unchanged UID/image/imageID/restarts/service account throughout.
 The worker registers the unchanged SessionWorkflow and delegates to real
 production activities. Run no normal queue poller for this temporary queue.
+Trusted worker and APS/gateway log reads pin UID, container/image identity and
+restart/Ready state both before and after reading; changed-source rows are never
+ingested. Temporal histories use the shared capped reader: at most 10,000 events,
+8 MiB exact serialized bytes and 100 pages, with ten-second page RPC deadlines.
+Describe/Schedule/pending reads use five-second RPC deadlines, observations have
+a 30-second bound, and the 960-second case budget encloses every observation.
+Workflow closure is confirmed from bounded history rather than an unbounded
+result long-poll. Separate bounded cleanup still settles on timeout/cancellation;
+the independent root finalizer backstop remains the fault owner.
 
 Harness invocation (only root performs live operations):
 

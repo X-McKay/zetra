@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import sys
 import time
@@ -11,7 +12,7 @@ from pathlib import Path
 
 from kubernetes.client.exceptions import ApiException
 from temporalio.api.enums.v1 import PendingActivityState
-from temporalio.client import ScheduleOverlapPolicy, WorkflowFailureError
+from temporalio.client import ScheduleOverlapPolicy
 from temporalio.common import WorkflowIDReusePolicy
 
 from runner.activities import pod_name
@@ -23,6 +24,62 @@ from runner.conformance_lifecycle_runtime import decode_history
 from runner.conformance_revocation import LiveEvidence
 from runner.types import SessionInput
 from runner.workflow import EXECUTION_TIMEOUT, SessionWorkflow
+from runner.worker_operations import bounded_history
+
+
+RPC_TIMEOUT = timedelta(seconds=5)
+OBSERVATION_TIMEOUT = 30
+CASE_TIMEOUT = 960
+CLEANUP_TIMEOUT = 240
+HISTORY_EVENTS = 10_000
+HISTORY_BYTES = 8 << 20
+HISTORY_PAGES = 100
+
+
+def bounded_observation(function):
+    @functools.wraps(function)
+    async def bounded(*args, **kwargs):
+        async with asyncio.timeout(OBSERVATION_TIMEOUT):
+            return await function(*args, **kwargs)
+
+    return bounded
+
+
+async def read_io(function, *args, **kwargs):
+    async with asyncio.timeout(OBSERVATION_TIMEOUT):
+        return await asyncio.to_thread(function, *args, **kwargs)
+
+
+async def events_for(handle):
+    async with asyncio.timeout(OBSERVATION_TIMEOUT):
+        history, _ = await bounded_history(
+            handle,
+            handle.id,
+            max_events=HISTORY_EVENTS,
+            max_bytes=HISTORY_BYTES,
+            max_pages=HISTORY_PAGES,
+        )
+        return history.events
+
+
+def source_stamp(pod):
+    statuses = pod.status.container_statuses or []
+    if (
+        pod.metadata.deletion_timestamp
+        or pod.status.phase != "Running"
+        or not statuses
+        or not all(s.ready and s.image_id for s in statuses)
+    ):
+        raise ValueError("T21 log source is not Ready and pinned")
+    return {
+        "uid": pod.metadata.uid,
+        "service_account": pod.spec.service_account_name,
+        "images": sorted((c.name, c.image) for c in pod.spec.containers),
+        "containers": sorted(
+            (s.name, s.image_id, s.container_id, s.restart_count, s.ready) for s in statuses
+        ),
+        "ephemeral_containers": len(pod.spec.ephemeral_containers or []),
+    }
 
 
 def raw_log(core, namespace, name, container=None):
@@ -99,6 +156,7 @@ class GenerationOps(KubernetesAdmission):
                 and bool(p.status.container_statuses)
                 and all(s.ready for s in p.status.container_statuses),
                 "restarts": sum(s.restart_count for s in p.status.container_statuses or []),
+                "source_stamp": source_stamp(p),
             }
             for p in pods
         ]
@@ -107,7 +165,10 @@ class GenerationOps(KubernetesAdmission):
         if self.workers() != [worker]:
             raise ValueError("T21 isolated worker changed")
         rows = []
-        for line in raw_log(self.core, "agent-platform", worker["name"], "runner").splitlines():
+        text = raw_log(self.core, "agent-platform", worker["name"], "runner")
+        if self.workers() != [worker]:
+            raise ValueError("T21 isolated worker changed during log read")
+        for line in text.splitlines():
             try:
                 row = json.loads(line[line.index("{") :])
             except (ValueError, TypeError):
@@ -148,16 +209,27 @@ class GenerationOps(KubernetesAdmission):
 
 
 class Traffic(LiveEvidence):
+    def discover(self):
+        super().discover()
+        self.source_stamps = {}
+        for source in self.sources:
+            ns, name, _, kind = source
+            stamp = source_stamp(self.core.read_namespaced_pod(name, ns, _request_timeout=5))
+            if kind == "aps" and stamp["uid"] != self.replicas[name]:
+                raise ValueError("T21 APS replaced during discovery")
+            self.source_stamps[source] = stamp
+
+    @bounded_observation
     async def sample(self):
         async def read(source):
             ns, name, container, kind = source
-            if kind == "aps":
-                pod = await asyncio.to_thread(
-                    self.core.read_namespaced_pod, name, ns, _request_timeout=5
-                )
-                if pod.metadata.uid != self.replicas[name] or pod.metadata.deletion_timestamp:
-                    raise ValueError("T21 APS source replaced")
-            text = await asyncio.to_thread(raw_log, self.core, ns, name, container)
+            before = await read_io(self.core.read_namespaced_pod, name, ns, _request_timeout=5)
+            if source_stamp(before) != self.source_stamps[source]:
+                raise ValueError("T21 log source changed before read")
+            text = await read_io(raw_log, self.core, ns, name, container)
+            after = await read_io(self.core.read_namespaced_pod, name, ns, _request_timeout=5)
+            if source_stamp(after) != self.source_stamps[source]:
+                raise ValueError("T21 log source changed during read")
             observed = time.monotonic_ns()
             if kind == "aps":
                 self.ingest_aps(name, text, observed)
@@ -167,12 +239,20 @@ class Traffic(LiveEvidence):
         await asyncio.gather(*(read(source) for source in self.sources))
 
 
+@bounded_observation
 async def pending_gates(handle, converter, session):
     result = []
-    description = await handle.describe()
+    description = await handle.describe(rpc_timeout=RPC_TIMEOUT)
+    if len(description.raw_description.pending_activities) > 16:
+        raise ValueError("T21 pending-activity bound exceeded")
     for pending in description.raw_description.pending_activities:
         if not pending.HasField("heartbeat_details"):
             continue
+        if (
+            len(pending.heartbeat_details.payloads) > 4
+            or pending.heartbeat_details.ByteSize() > 32768
+        ):
+            raise ValueError("T21 heartbeat bound exceeded")
         for value in await converter.decode(list(pending.heartbeat_details.payloads)):
             if (
                 isinstance(value, dict)
@@ -238,10 +318,11 @@ class GenerationHarness:
             max_boundaries=3,
         )
 
+    @bounded_observation
     async def schedule(self):
         description = await self.client.get_schedule_handle(
             "cleanup-reconciler-tenant-test"
-        ).describe()
+        ).describe(rpc_timeout=RPC_TIMEOUT)
         schedule = description.schedule
         if (
             schedule.state.paused
@@ -254,6 +335,7 @@ class GenerationHarness:
             raise ValueError("T21 requires unchanged ordinary five-minute reconciler Schedule")
         return description
 
+    @bounded_observation
     async def reconciler(self, baseline, inp):
         current = await self.schedule()
         if (
@@ -269,11 +351,11 @@ class GenerationHarness:
             handle = self.client.get_workflow_handle(
                 action.action.workflow_id, run_id=action.action.first_execution_run_id
             )
-            events = [e async for e in handle.fetch_history_events()]
+            events = await events_for(handle)
             decoded = await decode_history(
                 events, self.client.data_converter, inp.session_id, expected_agent=inp.agent
             )
-            description = await handle.describe()
+            description = await handle.describe(rpc_timeout=RPC_TIMEOUT)
             pending_ids = {
                 p.activity_id
                 for p in description.raw_description.pending_activities
@@ -293,8 +375,9 @@ class GenerationHarness:
             )
         return rows
 
+    @bounded_observation
     async def history(self, handle, inp):
-        events = [e async for e in handle.fetch_history_events()]
+        events = await events_for(handle)
         decoded = await decode_history(
             events, self.client.data_converter, inp.session_id, expected_agent=inp.agent
         )
@@ -303,13 +386,14 @@ class GenerationHarness:
                 row["duration"] = row["completed_at"] - row["scheduled_at"]
         return decoded
 
+    @bounded_observation
     async def validate(self):
-        self.control.read()
+        await read_io(self.control.read)
         for agent, key in (
             ("conformance-b", "probe_release"),
             ("conformance-checkpoint", "recovery_release"),
         ):
-            release = await asyncio.to_thread(self.ops.object, "agentreleases", self.cfg[key])
+            release = await read_io(self.ops.object, "agentreleases", self.cfg[key])
             status = release.get("status", {})
             permits_no_grant = status.get("identityMode") == "agent" or (
                 status.get("identityMode") == "on-behalf-of"
@@ -321,7 +405,7 @@ class GenerationHarness:
                 or not permits_no_grant
             ):
                 raise ValueError("T21 requires exact Ready fixtures permitting no-grant sessions")
-        worker = await asyncio.to_thread(self.ops.workers)
+        worker = await read_io(self.ops.workers)
         if (
             len(worker) != 1
             or not worker[0]["ready"]
@@ -341,193 +425,204 @@ class GenerationHarness:
             "worker_receipts": [],
             "cleanup": {"session_closed": False, "pods_absent": False, "finalizer_absent": False},
         }
-        handle = task = traffic = None
+        handle = traffic = None
         began = time.monotonic()
         held_start = None
         try:
-            worker = await self.validate()
-            data["worker_before"] = worker
-            if await asyncio.to_thread(self.ops.pods, inp.session_id):
-                raise ValueError("T21 session already has Pods")
-            schedule = await self.schedule() if case == "blocked_deletion" else None
+            async with asyncio.timeout(CASE_TIMEOUT):
+                worker = await self.validate()
+                data["worker_before"] = worker
+                if await read_io(self.ops.pods, inp.session_id):
+                    raise ValueError("T21 session already has Pods")
+                schedule = await self.schedule() if case == "blocked_deletion" else None
 
-            async def start():
-                nonlocal handle, task
-                try:
-                    handle = await self.client.start_workflow(
-                        SessionWorkflow.run,
-                        inp,
-                        id=inp.workflow_id,
-                        task_queue=self.cfg["queue"],
-                        id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
-                        execution_timeout=EXECUTION_TIMEOUT,
-                        rpc_timeout=timedelta(seconds=5),
-                    )
-                except Exception:
-                    handle = self.client.get_workflow_handle(inp.workflow_id)
-                    task = asyncio.create_task(handle.result())
-                    raise
-                task = asyncio.create_task(handle.result())
+                async def start():
+                    nonlocal handle
+                    try:
+                        handle = await self.client.start_workflow(
+                            SessionWorkflow.run,
+                            inp,
+                            id=inp.workflow_id,
+                            task_queue=self.cfg["queue"],
+                            id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
+                            execution_timeout=EXECUTION_TIMEOUT,
+                            rpc_timeout=timedelta(seconds=5),
+                        )
+                    except Exception:
+                        handle = self.client.get_workflow_handle(inp.workflow_id)
+                        raise
 
-            await settled(start())
-            while time.monotonic() - began < 960:
-                self.control.read()
-                sample_started_ns = time.monotonic_ns()
-                pods = await asyncio.to_thread(self.ops.rows, inp.session_id)
-                if "initial_pod" not in data:
-                    running = [
-                        p
-                        for p in pods
-                        if p["generation"] == 1 and p["phase"] == "Running" and not p["deleting"]
-                    ]
-                    if len(running) == 1:
-                        data["initial_pod"] = running[0]
-                    elif task.done():
-                        raise ValueError("T21 session closed before Running generation 1")
-                    else:
-                        await asyncio.sleep(0.25)
-                        continue
-                if any(
-                    p["generation"] == 1 and p["uid"] != data["initial_pod"]["uid"] for p in pods
-                ):
-                    raise ValueError("T21 generation-1 UID changed")
-                decoded = await self.history(handle, inp)
-                data.update(decoded)
-                data.update(decoded.get("progress") or {})
-                receipts = await asyncio.to_thread(self.ops.receipts, worker, case, inp.session_id)
-                data["worker_receipts"] = receipts
-                if any(r["operation"] == "fence_error" for r in receipts):
-                    raise ValueError("trusted fence operation failed")
-                data["samples"].append({"elapsed": time.monotonic() - began, "pods": pods})
-                if len(data["samples"]) > 4096:
-                    raise ValueError("T21 sample bound exceeded")
-                if case == "fence_only":
-                    if traffic is None:
-                        traffic = Traffic(
-                            self.ops.core,
-                            inp.session_id,
-                            data["initial_pod"]["name"],
-                            marker(inp.session_id),
-                        )
-                        await asyncio.to_thread(traffic.discover)
-                        data["aps_replicas"] = sorted(traffic.replicas)
-                    await traffic.sample()
-                    items = traffic.items()
-                    allowed = [r for r in items if r["status"] == 200 and r["reason"] == "allow"]
-                    if traffic.allowed() and "allowed_requests" not in data:
-                        data["allowed_requests"] = allowed
-                        self.notify(
-                            case, "ready_fence_only", pod=data["initial_pod"], worker=worker
-                        )
-                    denied = [
-                        r
-                        for r in items
-                        if r["status"] == 403 and r["reason"] == "deny.generation_stale"
-                    ]
-                    data["stale_requests"] = denied
-                    if {r["source_pod"] for r in denied} == set(traffic.replicas) and any(
-                        r["operation"] == "fence_generation_2" for r in receipts
-                    ):
-                        data["samples"][-1]["phase"] = "stale_denial"
-                        break
-                    if task.done() or time.monotonic() - began > 240:
-                        raise TimeoutError("T21 genuine fixed-token fencing evidence absent")
-                else:
-                    gates = (
-                        await pending_gates(handle, self.client.data_converter, inp.session_id)
-                        if not task.done()
-                        else []
-                    )
-                    matching = [
-                        g
-                        for g in gates
-                        if g["case"] == case
-                        and g["run_id"] == self.cfg["run_id"]
-                        and g["pod_uid"] == data["initial_pod"]["uid"]
-                        and g["worker_uid"] == worker["uid"]
-                    ]
-                    if matching:
-                        self.notify(
-                            case,
-                            "ready_delete_for_recovery",
-                            pod=data["initial_pod"],
-                            worker=worker,
-                            finalizer=FINALIZER if case == "blocked_deletion" else None,
-                        )
-                    if case == "recovery_control" and task.done():
-                        break
-                    if case == "blocked_deletion" and task.done():
-                        if data.get("outcome") != "NOT_CONFIRMED":
-                            raise ValueError("blocked recovery did not end NOT_CONFIRMED")
-                        if held_start is None:
-                            held_start = time.monotonic()
-                        rows = await self.reconciler(schedule, inp)
-                        data["reconciler"] = rows
-                        pending = [
-                            r
-                            for r in rows
-                            if r["activity"] == "delete_orphan"
-                            and r.get("pod_name") == data["initial_pod"]["name"]
-                            and r.get("pending_started") is True
-                            and r.get("completed_at") is None
-                        ]
-                        receipt = await asyncio.to_thread(
-                            self.control.finalizer_receipt, data["initial_pod"]["uid"]
-                        )
-                        data["finalizer_receipt"] = receipt
-                        if pending and any(
-                            p["uid"] == data["initial_pod"]["uid"]
-                            and FINALIZER in p["finalizers"]
-                            and p["deleting"]
+                await settled(start())
+                while time.monotonic() - began < CASE_TIMEOUT:
+                    await read_io(self.control.read)
+                    sample_started_ns = time.monotonic_ns()
+                    pods = await read_io(self.ops.rows, inp.session_id)
+                    decoded = await self.history(handle, inp)
+                    data.update(decoded)
+                    data.update(decoded.get("progress") or {})
+                    if "initial_pod" not in data:
+                        running = [
+                            p
                             for p in pods
+                            if p["generation"] == 1
+                            and p["phase"] == "Running"
+                            and not p["deleting"]
+                        ]
+                        if len(running) == 1:
+                            data["initial_pod"] = running[0]
+                        elif bool((data.get("terminal") or {}).get("kind")):
+                            raise ValueError("T21 session closed before Running generation 1")
+                        else:
+                            await asyncio.sleep(0.25)
+                            continue
+                    if any(
+                        p["generation"] == 1 and p["uid"] != data["initial_pod"]["uid"]
+                        for p in pods
+                    ):
+                        raise ValueError("T21 generation-1 UID changed")
+                    receipts = await read_io(self.ops.receipts, worker, case, inp.session_id)
+                    data["worker_receipts"] = receipts
+                    if any(r["operation"] == "fence_error" for r in receipts):
+                        raise ValueError("trusted fence operation failed")
+                    data["samples"].append({"elapsed": time.monotonic() - began, "pods": pods})
+                    if len(data["samples"]) > 4096:
+                        raise ValueError("T21 sample bound exceeded")
+                    if case == "fence_only":
+                        if traffic is None:
+                            traffic = Traffic(
+                                self.ops.core,
+                                inp.session_id,
+                                data["initial_pod"]["name"],
+                                marker(inp.session_id),
+                            )
+                            await read_io(traffic.discover)
+                            data["aps_replicas"] = sorted(traffic.replicas)
+                        await traffic.sample()
+                        items = traffic.items()
+                        allowed = [
+                            r for r in items if r["status"] == 200 and r["reason"] == "allow"
+                        ]
+                        if traffic.allowed() and "allowed_requests" not in data:
+                            data["allowed_requests"] = allowed
+                            self.notify(
+                                case, "ready_fence_only", pod=data["initial_pod"], worker=worker
+                            )
+                        denied = [
+                            r
+                            for r in items
+                            if r["status"] == 403 and r["reason"] == "deny.generation_stale"
+                        ]
+                        data["stale_requests"] = denied
+                        if {r["source_pod"] for r in denied} == set(traffic.replicas) and any(
+                            r["operation"] == "fence_generation_2" for r in receipts
                         ):
-                            data["scheduled_gate_before_removal"] = True
-                            data.setdefault("held_before_removal_monotonic_ns", sample_started_ns)
-                            data["held_wait_seconds"] = time.monotonic() - held_start
+                            data["samples"][-1]["phase"] = "stale_denial"
+                            break
+                        if (
+                            bool((data.get("terminal") or {}).get("kind"))
+                            or time.monotonic() - began > 240
+                        ):
+                            raise TimeoutError("T21 genuine fixed-token fencing evidence absent")
+                    else:
+                        gates = (
+                            await pending_gates(handle, self.client.data_converter, inp.session_id)
+                            if not bool((data.get("terminal") or {}).get("kind"))
+                            else []
+                        )
+                        matching = [
+                            g
+                            for g in gates
+                            if g["case"] == case
+                            and g["run_id"] == self.cfg["run_id"]
+                            and g["pod_uid"] == data["initial_pod"]["uid"]
+                            and g["worker_uid"] == worker["uid"]
+                        ]
+                        if matching:
                             self.notify(
                                 case,
-                                "scheduled_delete_pending_remove_finalizer_now",
+                                "ready_delete_for_recovery",
                                 pod=data["initial_pod"],
                                 worker=worker,
-                                finalizer=FINALIZER,
+                                finalizer=FINALIZER if case == "blocked_deletion" else None,
                             )
-                        if receipt and receipt["finalizer_removed"]:
-                            # Root and Pod clocks may differ. Preserve root PATCH
-                            # bounds only as provenance; elapsed uses this harness's
-                            # own earlier observation of the still-held exact Pod.
-                            data["root_removal_clock"] = {
-                                k: receipt[k]
-                                for k in (
-                                    "clock_boot_id",
-                                    "removal_started_ns",
-                                    "removal_acknowledged_ns",
-                                )
-                            }
-                            anchor = data.get("held_before_removal_monotonic_ns")
-                            if type(anchor) is not int:
-                                raise ValueError("finalizer removed without recorded held gate")
-                            data["harness_monotonic_bound"] = True
-                            absent = await asyncio.to_thread(
-                                self.ops.absent, data["initial_pod"]["name"]
-                            )
-                            completed = any(
-                                r["activity"] == "delete_orphan"
-                                and r.get("pod_name") == data["initial_pod"]["name"]
-                                and r.get("result") == "DELETED"
+                        if case == "recovery_control" and bool(
+                            (data.get("terminal") or {}).get("kind")
+                        ):
+                            break
+                        if case == "blocked_deletion" and bool(
+                            (data.get("terminal") or {}).get("kind")
+                        ):
+                            if data.get("outcome") != "NOT_CONFIRMED":
+                                raise ValueError("blocked recovery did not end NOT_CONFIRMED")
+                            if held_start is None:
+                                held_start = time.monotonic()
+                            rows = await self.reconciler(schedule, inp)
+                            data["reconciler"] = rows
+                            pending = [
+                                r
                                 for r in rows
+                                if r["activity"] == "delete_orphan"
+                                and r.get("pod_name") == data["initial_pod"]["name"]
+                                and r.get("pending_started") is True
+                                and r.get("completed_at") is None
+                            ]
+                            receipt = await read_io(
+                                self.control.finalizer_receipt, data["initial_pod"]["uid"]
                             )
-                            timing = removal_timing(receipt, anchor, time.monotonic_ns())
-                            elapsed = timing["reconciler_after_removal_seconds"]
-                            if absent and completed:
-                                data.update(timing)
-                                break
-                            if elapsed > 300:
-                                raise TimeoutError(
-                                    "T21 scheduled deletion confirmation exceeded 300 seconds"
+                            data["finalizer_receipt"] = receipt
+                            if pending and any(
+                                p["uid"] == data["initial_pod"]["uid"]
+                                and FINALIZER in p["finalizers"]
+                                and p["deleting"]
+                                for p in pods
+                            ):
+                                data["scheduled_gate_before_removal"] = True
+                                data.setdefault(
+                                    "held_before_removal_monotonic_ns", sample_started_ns
                                 )
-                await asyncio.sleep(0.25)
-            else:
-                raise TimeoutError("T21 case deadline")
+                                data["held_wait_seconds"] = time.monotonic() - held_start
+                                self.notify(
+                                    case,
+                                    "scheduled_delete_pending_remove_finalizer_now",
+                                    pod=data["initial_pod"],
+                                    worker=worker,
+                                    finalizer=FINALIZER,
+                                )
+                            if receipt and receipt["finalizer_removed"]:
+                                # Root and Pod clocks may differ. Preserve root PATCH
+                                # bounds only as provenance; elapsed uses this harness's
+                                # own earlier observation of the still-held exact Pod.
+                                data["root_removal_clock"] = {
+                                    k: receipt[k]
+                                    for k in (
+                                        "clock_boot_id",
+                                        "removal_started_ns",
+                                        "removal_acknowledged_ns",
+                                    )
+                                }
+                                anchor = data.get("held_before_removal_monotonic_ns")
+                                if type(anchor) is not int:
+                                    raise ValueError("finalizer removed without recorded held gate")
+                                data["harness_monotonic_bound"] = True
+                                absent = await read_io(self.ops.absent, data["initial_pod"]["name"])
+                                completed = any(
+                                    r["activity"] == "delete_orphan"
+                                    and r.get("pod_name") == data["initial_pod"]["name"]
+                                    and r.get("result") == "DELETED"
+                                    for r in rows
+                                )
+                                timing = removal_timing(receipt, anchor, time.monotonic_ns())
+                                elapsed = timing["reconciler_after_removal_seconds"]
+                                if absent and completed:
+                                    data.update(timing)
+                                    break
+                                if elapsed > 300:
+                                    raise TimeoutError(
+                                        "T21 scheduled deletion confirmation exceeded 300 seconds"
+                                    )
+                    await asyncio.sleep(0.25)
+                else:
+                    raise TimeoutError("T21 case deadline")
         except Exception as exc:
             data["error_type"] = type(exc).__name__
         finally:
@@ -542,25 +637,28 @@ class GenerationHarness:
                     )
                 if handle is not None:
                     try:
-                        if task is None or not task.done():
-                            await handle.cancel(rpc_timeout=timedelta(seconds=5))
-                        if task is not None:
-                            try:
-                                await asyncio.wait_for(asyncio.shield(task), 180)
-                            except WorkflowFailureError:
-                                pass
-                        data["cleanup"]["session_closed"] = True
+                        if not (data.get("terminal") or {}).get("kind"):
+                            await handle.cancel(rpc_timeout=RPC_TIMEOUT)
+                        until_closed = time.monotonic() + 180
+                        while time.monotonic() < until_closed:
+                            decoded = await self.history(handle, inp)
+                            data.update(decoded)
+                            data.update(decoded.get("progress") or {})
+                            if (data.get("terminal") or {}).get("kind"):
+                                data["cleanup"]["session_closed"] = True
+                                break
+                            await asyncio.sleep(0.25)
+                        if not data["cleanup"]["session_closed"]:
+                            raise TimeoutError("T21 session closure was not confirmed")
                     except Exception as exc:
                         data["cleanup"]["session_error_type"] = type(exc).__name__
                 until = time.monotonic() + 60
                 while time.monotonic() < until:
-                    rows = await asyncio.to_thread(self.ops.rows, inp.session_id)
+                    rows = await read_io(self.ops.rows, inp.session_id)
                     data["cleanup"]["finalizer_absent"] = not any(
                         FINALIZER in p["finalizers"] for p in rows
                     )
-                    if not rows and await asyncio.to_thread(
-                        self.ops.absent, pod_name(inp.session_id, 1)
-                    ):
+                    if not rows and await read_io(self.ops.absent, pod_name(inp.session_id, 1)):
                         data["cleanup"]["pods_absent"] = True
                         break
                     await asyncio.sleep(0.25)
@@ -571,13 +669,13 @@ class GenerationHarness:
                         data.update(decoded.get("progress") or {})
                     except Exception as exc:
                         data["cleanup"]["history_error_type"] = type(exc).__name__
-                workers = await asyncio.to_thread(self.ops.workers)
+                workers = await read_io(self.ops.workers)
                 if workers != [data.get("worker_before")]:
                     raise ValueError("T21 isolated worker changed at cleanup")
                 data["worker_after"] = workers[0]
 
             try:
-                await settled(close())
+                await settled(asyncio.wait_for(close(), timeout=CLEANUP_TIMEOUT))
             except Exception as exc:
                 data["cleanup"]["error_type"] = type(exc).__name__
         return evaluate_case(case, data)

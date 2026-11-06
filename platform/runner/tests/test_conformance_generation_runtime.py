@@ -202,7 +202,12 @@ async def test_read_only_orchestration_observes_separate_root_protocol_and_close
     async def history(*a):
         value = {
             "history": seed["history"] if state["stage"] != "initial" else [],
-            "terminal": {},
+            "terminal": (
+                {"kind": "CANCELED" if case == "fence_only" else "COMPLETED"}
+                if state["stage"] == "closed"
+                or (case != "fence_only" and state["stage"] != "initial")
+                else {}
+            ),
             "progress": {},
         }
         if case != "fence_only" and state["stage"] != "initial":
@@ -356,8 +361,269 @@ async def test_pending_gate_uses_actual_temporal_heartbeat_protobuf():
     pending = PendingActivityInfo()
     pending.heartbeat_details.payloads.extend(await converter.encode([gate]))
 
-    async def describe():
+    async def describe(**kwargs):
+        assert kwargs["rpc_timeout"].total_seconds() == 5
         return NS(raw_description=NS(pending_activities=[pending]))
 
     assert await pending_gates(NS(describe=describe), converter, sid) == [gate]
     assert await pending_gates(NS(describe=describe), converter, "another-session") == []
+
+
+async def test_history_uses_shared_exact_caps_and_finite_rpc_budget(monkeypatch):
+    from runner import conformance_generation_runtime as runtime
+
+    event = HistoryEvent(event_id=1)
+
+    class Pages:
+        current_page = None
+        next_page_token = None
+
+        async def fetch_next_page(self):
+            self.current_page = [event]
+
+    observed = {}
+
+    def fetch(**kwargs):
+        observed.update(kwargs)
+        return Pages()
+
+    handle = NS(id="workflow", fetch_history_events=fetch)
+    called = {}
+    real = runtime.bounded_history
+
+    async def inspect(*args, **kwargs):
+        called.update(kwargs)
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "bounded_history", inspect)
+    assert await runtime.events_for(handle) == [event]
+    assert called == {"max_events": 10000, "max_bytes": 8 << 20, "max_pages": 100}
+    assert observed["page_size"] == 100 and observed["rpc_timeout"].total_seconds() == 10
+
+
+async def test_hung_history_observation_is_cancelled_with_finite_budget(monkeypatch):
+    import asyncio
+    from runner import conformance_generation_runtime as runtime
+
+    closed = []
+
+    async def hanging(*args, **kwargs):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            closed.append(True)
+
+    monkeypatch.setattr(runtime, "bounded_history", hanging)
+    monkeypatch.setattr(runtime, "OBSERVATION_TIMEOUT", 0.01)
+    with pytest.raises(TimeoutError):
+        await runtime.events_for(NS(id="workflow"))
+    assert closed == [True]
+
+
+@pytest.mark.parametrize("fault", ["uid", "restart", "container", "image"])
+def test_worker_receipt_rejects_source_change_during_log_read(monkeypatch, fault):
+    from kubernetes import client
+    from runner import conformance_generation_runtime as runtime
+    from tests.test_conformance_generation import config
+
+    cfg = config()
+    image = cfg["worker_image"]
+    pod = client.V1Pod(
+        metadata=client.V1ObjectMeta(name="worker", uid="worker-uid"),
+        spec=client.V1PodSpec(
+            containers=[client.V1Container(name="runner", image=image)],
+            service_account_name="session-runner-tenant-test",
+        ),
+        status=client.V1PodStatus(
+            phase="Running",
+            container_statuses=[
+                client.V1ContainerStatus(
+                    name="runner",
+                    image=image,
+                    image_id="image@sha256:" + "a" * 64,
+                    container_id="runtime://old",
+                    ready=True,
+                    restart_count=0,
+                )
+            ],
+        ),
+    )
+    core = NS(list_namespaced_pod=lambda *a, **kw: client.V1PodList(items=[pod]))
+    ops = runtime.GenerationOps(core, None, NS(config=cfg))
+    before = ops.workers()[0]
+
+    def log(*args, **kwargs):
+        if fault == "uid":
+            pod.metadata.uid = "replacement"
+        elif fault == "restart":
+            pod.status.container_statuses[0].restart_count = 1
+        elif fault == "container":
+            pod.status.container_statuses[0].container_id = "runtime://replacement"
+        else:
+            pod.status.container_statuses[0].image_id = "image@sha256:" + "b" * 64
+        return "{}"
+
+    monkeypatch.setattr(runtime, "raw_log", log)
+    with pytest.raises(ValueError, match="during log read"):
+        ops.receipts(before, "fence_only", cfg["sessions"]["fence_only"])
+
+
+@pytest.mark.parametrize("fault", ["uid", "restart", "container"])
+async def test_traffic_does_not_ingest_logs_from_source_changed_after_read(monkeypatch, fault):
+    import copy
+    from kubernetes import client
+    from runner import conformance_generation_runtime as runtime
+
+    pod = client.V1Pod(
+        metadata=client.V1ObjectMeta(name="aps", uid="aps-uid"),
+        spec=client.V1PodSpec(
+            containers=[client.V1Container(name="aps", image="pinned")], service_account_name="aps"
+        ),
+        status=client.V1PodStatus(
+            phase="Running",
+            container_statuses=[
+                client.V1ContainerStatus(
+                    name="aps",
+                    image="pinned",
+                    image_id="image@sha256:" + "a" * 64,
+                    container_id="runtime://old",
+                    ready=True,
+                    restart_count=0,
+                )
+            ],
+        ),
+    )
+    core = NS(read_namespaced_pod=lambda *a, **kw: copy.deepcopy(pod))
+    traffic = runtime.Traffic(core, "session", "g1", "a" * 16)
+    source = ("agent-platform", "aps", "aps", "aps")
+    traffic.sources = [source]
+    traffic.replicas = {"aps": "aps-uid"}
+    traffic.source_stamps = {source: runtime.source_stamp(pod)}
+    ingested = []
+    traffic.ingest_aps = lambda *args: ingested.append(args)
+
+    async def immediate(fn, *args, **kw):
+        return fn(*args, **kw)
+
+    monkeypatch.setattr(runtime.asyncio, "to_thread", immediate)
+
+    def log(*args, **kwargs):
+        if fault == "uid":
+            pod.metadata.uid = "replacement"
+        elif fault == "restart":
+            pod.status.container_statuses[0].restart_count = 1
+        else:
+            pod.status.container_statuses[0].container_id = "runtime://replacement"
+        return "{}"
+
+    monkeypatch.setattr(runtime, "raw_log", log)
+    with pytest.raises(ValueError, match="during read"):
+        await traffic.sample()
+    assert ingested == []
+
+
+async def test_case_deadline_cancels_hung_observation_and_still_restores_root_cleanup(monkeypatch):
+    import asyncio
+    import copy
+    from runner import conformance_generation_runtime as runtime
+    from tests.test_conformance_generation import config, data
+
+    cfg = config()
+    sid = cfg["sessions"]["blocked_deletion"]
+    pod = data("blocked_deletion")["initial_pod"]
+    worker = {"uid": "worker"}
+    state = {"held": False, "closed": False, "reads": 0, "read_cancelled": False}
+    signals = []
+    cancels = []
+
+    async def immediate(fn, *a, **kw):
+        return fn(*a, **kw)
+
+    original_sleep = asyncio.sleep
+
+    async def sleep(_):
+        await original_sleep(0)
+
+    monkeypatch.setattr(runtime.asyncio, "to_thread", immediate)
+    monkeypatch.setattr(runtime.asyncio, "sleep", sleep)
+    monkeypatch.setattr(runtime, "CASE_TIMEOUT", 0.2)
+    monkeypatch.setattr(runtime, "CLEANUP_TIMEOUT", 1)
+
+    async def cancel(**kwargs):
+        cancels.append(kwargs)
+
+    handle = NS(cancel=cancel)
+
+    async def start(*a, **kw):
+        return handle
+
+    def rows(sid):
+        if state["closed"]:
+            return []
+        current = copy.deepcopy(pod)
+        current["finalizers"] = [runtime.FINALIZER] if state["held"] else []
+        return [current]
+
+    ops = NS(
+        core=None,
+        pods=lambda sid: [],
+        rows=rows,
+        receipts=lambda *a: [],
+        workers=lambda: [worker],
+        absent=lambda name: state["closed"],
+    )
+    harness = runtime.GenerationHarness(
+        NS(start_workflow=start, data_converter=DataConverter.default),
+        ops,
+        NS(config=cfg, read=lambda: None),
+    )
+
+    async def validate():
+        return worker
+
+    async def schedule():
+        return None
+
+    async def history(*a):
+        state["reads"] += 1
+        if state["reads"] == 2:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                state["read_cancelled"] = True
+        return {
+            "history": [],
+            "terminal": {"kind": "CANCELED"} if state["closed"] else {},
+            "progress": {},
+        }
+
+    async def gates(*a):
+        return [
+            {
+                "case": "blocked_deletion",
+                "run_id": cfg["run_id"],
+                "pod_uid": "uid1",
+                "worker_uid": "worker",
+            }
+        ]
+
+    def notify(case, phase, **kwargs):
+        signals.append(phase)
+        if phase == "ready_delete_for_recovery":
+            state["held"] = True
+        if phase == "restore_exact_finalizer_now":
+            state.update(held=False, closed=True)
+
+    monkeypatch.setattr(harness, "validate", validate)
+    monkeypatch.setattr(harness, "schedule", schedule)
+    monkeypatch.setattr(harness, "history", history)
+    monkeypatch.setattr(harness, "notify", notify)
+    monkeypatch.setattr(runtime, "pending_gates", gates)
+    report = await harness.case("blocked_deletion")
+    assert report["result"] == "fail" and report["evidence"]["error_type"] == "TimeoutError"
+    assert state["read_cancelled"] and "restore_exact_finalizer_now" in signals
+    assert (
+        report["evidence"]["cleanup"]["pods_absent"]
+        and report["evidence"]["cleanup"]["session_closed"]
+    )
+    assert cancels[0]["rpc_timeout"].total_seconds() == 5
