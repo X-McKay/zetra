@@ -32,8 +32,10 @@ type Config struct {
 	// Backend name -> reserve_tokens (the backend's maxModelLen, 3.7).
 	Catalogue map[string]int
 
-	RunnerSubjects     []string
-	ReconcilerSubjects []string
+	BudgetObserverSubject string
+	BudgetObserverAgents  []string
+	RunnerSubjects        []string
+	ReconcilerSubjects    []string
 
 	GRPCAddr, HTTPAddr, OTLPAddr, MetricsAddr, HealthAddr string
 }
@@ -69,22 +71,34 @@ func list(k, def string) []string {
 
 func Load() (*Config, error) {
 	c := &Config{
-		IssuerURL:          os.Getenv("ISSUER_URL"),
-		Adapter:            env("IDP_ADAPTER", "keycloak"),
-		ClientID:           env("IDP_CLIENT_ID", "agent-policy-service"),
-		CLIClientID:        env("IDP_CLI_CLIENT_ID", "agent-cli"),
-		StoreBackend:       env("APS_STORE", "redis"),
-		RedisAddr:          env("REDIS_ADDR", "redis.agent-platform.svc.cluster.local:6379"),
-		RedisTLS:           env("REDIS_TLS", "true") == "true",
-		RedisCAFile:        os.Getenv("REDIS_CA_FILE"),
-		IdPCAFile:          os.Getenv("IDP_CA_FILE"),
-		RunnerSubjects:     list("APS_RUNNER_SUBJECTS", "system:serviceaccount:agent-platform:session-runner"),
-		ReconcilerSubjects: list("APS_RECONCILER_SUBJECTS", "system:serviceaccount:agent-platform:cleanup-reconciler"),
-		GRPCAddr:           env("APS_GRPC_ADDR", ":9001"),
-		HTTPAddr:           env("APS_HTTP_ADDR", ":9002"),
-		OTLPAddr:           env("APS_OTLP_ADDR", ":4317"),
-		MetricsAddr:        env("APS_METRICS_ADDR", ":9090"),
-		HealthAddr:         env("APS_HEALTH_ADDR", ":8081"),
+		IssuerURL:             os.Getenv("ISSUER_URL"),
+		BudgetObserverSubject: os.Getenv("APS_BUDGET_OBSERVER_SUBJECT"),
+		BudgetObserverAgents:  list("APS_BUDGET_OBSERVER_AGENTS", ""),
+		Adapter:               env("IDP_ADAPTER", "keycloak"),
+		ClientID:              env("IDP_CLIENT_ID", "agent-policy-service"),
+		CLIClientID:           env("IDP_CLI_CLIENT_ID", "agent-cli"),
+		StoreBackend:          env("APS_STORE", "redis"),
+		RedisAddr:             env("REDIS_ADDR", "redis.agent-platform.svc.cluster.local:6379"),
+		RedisTLS:              env("REDIS_TLS", "true") == "true",
+		RedisCAFile:           os.Getenv("REDIS_CA_FILE"),
+		IdPCAFile:             os.Getenv("IDP_CA_FILE"),
+		RunnerSubjects:        list("APS_RUNNER_SUBJECTS", "system:serviceaccount:agent-platform:session-runner"),
+		ReconcilerSubjects:    list("APS_RECONCILER_SUBJECTS", "system:serviceaccount:agent-platform:cleanup-reconciler"),
+		GRPCAddr:              env("APS_GRPC_ADDR", ":9001"),
+		HTTPAddr:              env("APS_HTTP_ADDR", ":9002"),
+		OTLPAddr:              env("APS_OTLP_ADDR", ":4317"),
+		MetricsAddr:           env("APS_METRICS_ADDR", ":9090"),
+		HealthAddr:            env("APS_HEALTH_ADDR", ":8081"),
+	}
+	if c.BudgetObserverSubject != "" || len(c.BudgetObserverAgents) > 0 {
+		if c.BudgetObserverSubject != "system:serviceaccount:agent-platform:conformance-harness" || len(c.BudgetObserverAgents) == 0 {
+			return nil, errors.New("budget observer requires the conformance harness and explicit fixture agents")
+		}
+		for _, agent := range c.BudgetObserverAgents {
+			if agent != "conformance-budget-day" && agent != "conformance-budget-session" {
+				return nil, errors.New("budget observer agent is not a dedicated budget fixture")
+			}
+		}
 	}
 	if c.IssuerURL == "" {
 		return nil, errors.New("ISSUER_URL is required")

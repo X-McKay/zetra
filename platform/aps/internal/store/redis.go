@@ -56,14 +56,16 @@ return 1
 `)
 
 // settleScript replaces a reservation with actual usage on each ledger that still
-// holds it. A reservation already swept was charged in full and stays charged.
-// KEYS: 1 reservation record. ARGV: decision, actual.
-var settleScript = redis.NewScript(`
+// holds it before expiry. Expired reservations stay fully charged, even if no
+// ledger read or new reservation has swept them yet.
+// KEYS: 1 reservation record. ARGV: decision, actual, now_ms.
+var settleScript = redis.NewScript(luaSweep + `
 local r = redis.call('HMGET', KEYS[1], 'sh', 'sz', 'sa', 'ah', 'az', 'aa')
 if not r[1] then return -1 end
 local n = 0
 for i = 0, 1 do
   local h, z, a = r[1 + 3 * i], r[2 + 3 * i], r[3 + 3 * i]
+  sweep(h, z, a, tonumber(ARGV[3]))
   if redis.call('ZREM', z, ARGV[1]) == 1 then
     local amt = tonumber(redis.call('HGET', a, ARGV[1]) or '0')
     redis.call('HDEL', a, ARGV[1])
@@ -257,7 +259,7 @@ func (r *Redis) Reserve(ctx context.Context, res Reservation) error {
 }
 
 func (r *Redis) Settle(ctx context.Context, decision string, actual int64) (bool, error) {
-	n, err := settleScript.Run(ctx, r.C, []string{"budget:res:" + decision}, decision, actual).Int()
+	n, err := settleScript.Run(ctx, r.C, []string{"budget:res:" + decision}, decision, actual, r.Now().UnixMilli()).Int()
 	if err != nil {
 		return false, err
 	}
@@ -344,4 +346,14 @@ func (r *Redis) ListSessions(ctx context.Context, olderThan time.Time) ([]Sessio
 		out = append(out, info)
 	}
 	return out, nil
+}
+
+func (r *Redis) SessionOwner(ctx context.Context, session string) (string, string, error) {
+	v, err := r.C.HMGet(ctx, "session:"+session, "tenant", "agent").Result()
+	if err != nil {
+		return "", "", err
+	}
+	tenant, _ := v[0].(string)
+	agent, _ := v[1].(string)
+	return tenant, agent, nil
 }

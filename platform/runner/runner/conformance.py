@@ -130,6 +130,8 @@ STATUS_JSON = re.compile(r"[\"']?status[\"']?\s*[:=]\s*[\"']?([1-5][0-9]{2})")
 STATUS_WORD = re.compile(r"\b([45][0-9]{2})\b")
 TESTS = ("T4", "T5", "T6", "T7", "T8", "T11", "T12", "T19", "T26")
 ADMISSION_TESTS = ("T9a", "T9b", "T22")
+BUDGET_TESTS = ("T13", "T13b")
+DEFAULT_BUDGET_TOKEN_PATH = "/var/run/secrets/agent-policy-service/token"
 PROTOCOL_TESTS = ("T25",)
 REVOCATION_TESTS = ("T15", "T20")
 DEFAULT_ARTIFACT_DIR = "/var/lib/agent-artifacts"
@@ -1291,6 +1293,7 @@ class Harness:
         human_jwks_url: str = "",
         protocol=None,
         revocation=None,
+        budget=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1317,6 +1320,7 @@ class Harness:
         )
         self.protocol = protocol
         self.revocation = revocation
+        self.budget = budget
 
     async def run_session(
         self,
@@ -1607,6 +1611,8 @@ class Harness:
                     if t in ADMISSION_TESTS
                     else self
                 )
+                if t in BUDGET_TESTS:
+                    target = self.budget
                 if t in REVOCATION_TESTS:
                     target = self.revocation
                 if target is None:
@@ -1735,6 +1741,34 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             args.protocol_fixture_agent,
             args.protocol_fixture_release,
         )
+    budget = None
+    if any(t in BUDGET_TESTS for t in args.tests):
+        from runner.conformance_admission import KubernetesAdmission
+        from runner.conformance_budget_runtime import (
+            BudgetHarness,
+            BudgetObserver,
+            KubernetesGatewayWatch,
+        )
+
+        budget = BudgetHarness(
+            temporal,
+            KubernetesAdmission(core, k8s.CustomObjectsApi(), args.tenant),
+            BudgetObserver(
+                os.environ.get("APS_URL", DEFAULT_APS_URL),
+                os.environ.get("APS_TOKEN_PATH", DEFAULT_BUDGET_TOKEN_PATH),
+            ),
+            aps_log_reader(core),
+            pod_log_reader(
+                core,
+                os.environ.get("BUDGET_BACKEND_NAMESPACE", "agent-platform"),
+                os.environ.get("BUDGET_BACKEND_LABEL", "app.kubernetes.io/name=budget-backend"),
+                "budget-backend",
+            ),
+            KubernetesGatewayWatch(core),
+            args.budget_day_release,
+            args.budget_session_release,
+            os.environ.get("ARTIFACT_DIR", DEFAULT_ARTIFACT_DIR),
+        )
     harness = Harness(
         temporal,
         args.tenant,
@@ -1764,6 +1798,7 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
         human_client_id=os.environ.get("T5_HUMAN_CLIENT_ID", "agent-cli"),
         human_jwks_url=os.environ.get("T5_HUMAN_JWKS_URL", ""),
         protocol=protocol,
+        budget=budget,
     )
     if any(t in REVOCATION_TESTS for t in args.tests):
         from runner.conformance_revocation import RevocationHarness, RevocationOps
@@ -1808,10 +1843,16 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="temporarily revoke approval/drift the explicit fixture, then restore",
     )
+    parser.add_argument(
+        "--budget-day-release", help="signed conformance-budget-day release for T13"
+    )
+    parser.add_argument(
+        "--budget-session-release", help="signed conformance-budget-session release for T13b"
+    )
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)
-    supported = (*TESTS, *ADMISSION_TESTS, *PROTOCOL_TESTS, *REVOCATION_TESTS)
+    supported = (*TESTS, *ADMISSION_TESTS, *PROTOCOL_TESTS, *REVOCATION_TESTS, *BUDGET_TESTS)
     known = {t.upper(): t for t in supported}
     args.tests = [
         known.get(t.strip().upper(), t.strip().upper()) for t in args.tests.split(",") if t.strip()
@@ -1850,6 +1891,10 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
             parser.error(
                 "admission mutations must use a separate agent, never the primary conformance agent"
             )
+    if "T13" in args.tests and not args.budget_day_release:
+        parser.error("T13 requires --budget-day-release and external gateway pod replacement")
+    if "T13b" in args.tests and not args.budget_session_release:
+        parser.error("T13b requires --budget-session-release")
     return args
 
 

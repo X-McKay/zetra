@@ -53,14 +53,19 @@ type API struct {
 	TokenEndpoint string
 	IdP           *http.Client
 	// Full usernames, e.g. system:serviceaccount:agent-platform:session-runner.
-	RunnerSubjects     []string
-	ReconcilerSubjects []string
-	Log                *slog.Logger
-	Now                func() time.Time
+	BudgetObserverSubject string
+	BudgetObserverAgents  []string
+	RunnerSubjects        []string
+	ReconcilerSubjects    []string
+	Log                   *slog.Logger
+	Now                   func() time.Time
 }
 
 func (a *API) Handler() http.Handler {
 	mux := http.NewServeMux()
+	if a.BudgetObserverSubject != "" && len(a.BudgetObserverAgents) > 0 {
+		mux.HandleFunc("GET /v1/conformance/budgets/{id}", a.observeBudget)
+	}
 	mux.HandleFunc("POST /v1/token", a.token)
 	mux.HandleFunc("POST /v1/grants", a.createGrant)
 	mux.HandleFunc("GET /v1/grants/{handle}", a.runner(false, a.getGrant))

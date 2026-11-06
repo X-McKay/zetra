@@ -114,6 +114,29 @@ func TestUnsettledReservationChargedInFullAfterExpiry(t *testing.T) {
 	})
 }
 
+// Settlement must not refund a hold merely because no read/reserve swept it yet.
+func TestLateSettlementBeforeSweepStaysFullySpent(t *testing.T) {
+	for _, delay := range []time.Duration{ReservationTTL, ReservationTTL + time.Second} {
+		t.Run(delay.String(), func(t *testing.T) {
+			backends(t, func(t *testing.T, s Store, c *clock) {
+				ctx := context.Background()
+				if err := s.Reserve(ctx, res("late", 400, 1000, 5000)); err != nil {
+					t.Fatal(err)
+				}
+				c.Add(delay)
+				if ok, err := s.Settle(ctx, "late", 10); err != nil || ok {
+					t.Fatalf("late settlement: %v %v", ok, err)
+				}
+				for _, key := range []string{SessionLedger(sess), AgentLedger("tenant-a/investigator", c.Now())} {
+					if spent, inflight, err := s.Ledger(ctx, key); err != nil || spent != 400 || inflight != 0 {
+						t.Fatalf("late ledger = %d/%d, %v", spent, inflight, err)
+					}
+				}
+			})
+		})
+	}
+}
+
 func TestSettlementReplacesReservation(t *testing.T) {
 	backends(t, func(t *testing.T, s Store, c *clock) {
 		ctx := context.Background()

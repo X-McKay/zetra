@@ -75,6 +75,9 @@ func (r *Receiver) Export(ctx context.Context, req *collogs.ExportLogsServiceReq
 					}
 				case ok:
 					r.Metrics.Settled("settled")
+					if r.Log != nil {
+						r.Log.Info("budget settled", "decision_id", decision, "actual_tokens", max(in, 0)+max(out, 0))
+					}
 				default:
 					r.Metrics.Settled("no_reservation")
 				}

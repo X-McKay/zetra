@@ -339,3 +339,12 @@ func (m *Memory) ListSessions(_ context.Context, olderThan time.Time) ([]Session
 	sort.Slice(out, func(i, j int) bool { return out[i].Since.Before(out[j].Since) })
 	return out, nil
 }
+
+func (m *Memory) SessionOwner(_ context.Context, session string) (string, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s, ok := m.sessions[session]; ok {
+		return s.tenant, s.agent, nil
+	}
+	return "", "", nil
+}

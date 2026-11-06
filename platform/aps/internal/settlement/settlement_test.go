@@ -1,7 +1,11 @@
 package settlement
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log/slog"
+	"strings"
 	"testing"
 
 	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
@@ -25,7 +29,8 @@ func i(v int64) *commonpb.AnyValue {
 
 func TestSettlesTokensInPlusOut(t *testing.T) {
 	r := rec{}
-	recv := &Receiver{S: r}
+	var logs bytes.Buffer
+	recv := &Receiver{S: r, Log: slog.New(slog.NewJSONHandler(&logs, nil))}
 	req := &collogs.ExportLogsServiceRequest{ResourceLogs: []*logspb.ResourceLogs{{ScopeLogs: []*logspb.ScopeLogs{{LogRecords: []*logspb.LogRecord{
 		{Attributes: []*commonpb.KeyValue{kv("agent.decision_id", s("d1")), kv("llm.tokens_in", i(100)), kv("llm.tokens_out", i(23))}},
 		{Body: &commonpb.AnyValue{Value: &commonpb.AnyValue_KvlistValue{KvlistValue: &commonpb.KeyValueList{Values: []*commonpb.KeyValue{
@@ -35,6 +40,14 @@ func TestSettlesTokensInPlusOut(t *testing.T) {
 	}}}}}}
 	if _, err := recv.Export(context.Background(), req); err != nil {
 		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("settlement records: %s", logs.String())
+	}
+	var event map[string]any
+	if json.Unmarshal([]byte(lines[0]), &event) != nil || event["msg"] != "budget settled" || event["decision_id"] != "d1" || event["actual_tokens"] != float64(123) {
+		t.Fatalf("settlement evidence: %v", event)
 	}
 	if r["d1"] != 123 || r["d2"] != 10 || len(r) != 2 {
 		t.Fatalf("settled %v", r)

@@ -131,6 +131,7 @@ func run(log *slog.Logger) error {
 	api := &httpapi.API{
 		Kube: k, Store: st, Entries: entries, Verifier: verifier, Pods: pods,
 		IssuerURL: cfg.IssuerURL, TokenEndpoint: cfg.TokenEndpoint, IdP: idp,
+		BudgetObserverSubject: cfg.BudgetObserverSubject, BudgetObserverAgents: cfg.BudgetObserverAgents,
 		RunnerSubjects: cfg.RunnerSubjects, ReconcilerSubjects: cfg.ReconcilerSubjects, Log: log, Now: time.Now,
 	}
 	health := http.NewServeMux()
