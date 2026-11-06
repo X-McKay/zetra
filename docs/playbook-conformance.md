@@ -452,3 +452,21 @@ copy and exercise retry identity and restoration after successful return. The
 SessionWorkflow and confirmed deletion before replacement are unchanged. This
 corrects the upload failure path needed by T23(d); live qualification of all five
 failure points remains pending the observed-barrier harness and signed fixture.
+
+### T24 grant-record discovery after successful stop
+
+Cleanup discovery now retains a session while either its vault entry or its
+actual grant record exists. A successful `stop_session` deletes the vault before
+the independent grant-delete activity may finish; vault absence alone therefore
+cannot prove grant cleanup. Previously both Store implementations could drop that
+session from reconciliation after grant deletion failed. The same public session
+fields and caller authorization remain unchanged, and the existing reconciler
+retries the retained handle through its ordinary delete operation.
+
+Memory and Redis regressions reproduce stop succeeding with the grant record
+still present, preserve that record across repeated discovery, and require the
+row to disappear only after its deletion. A vault with an absent grant record
+remains discoverable too. All APS tests and `go vet` pass. This repairs discovery;
+actual T24 fault runs must still prove initial genuine grants and final Pod,
+active-generation, vault and grant-record absence within ten minutes. The ordinary
+GET-grant route's 404 after vault deletion is not sufficient absence evidence.

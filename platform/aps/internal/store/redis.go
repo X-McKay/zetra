@@ -377,10 +377,16 @@ func (r *Redis) ListSessions(ctx context.Context, olderThan time.Time) ([]Sessio
 		} else if ok {
 			info.Generation = &g
 		}
-		if n, err := r.C.Exists(ctx, "vault:"+id).Result(); err != nil {
+		// Stop removes the vault independently of grant deletion. Keep the
+		// grant's handle discoverable if its record still needs cleanup.
+		heldKeys := []string{"vault:" + id}
+		if handle := h["grant_handle"]; handle != "" {
+			heldKeys = append(heldKeys, "grant:"+handle)
+		}
+		if n, err := r.C.Exists(ctx, heldKeys...).Result(); err != nil {
 			return nil, err
 		} else {
-			info.HasGrant = n == 1
+			info.HasGrant = n > 0
 		}
 		if gh := h["grant_handle"]; info.HasGrant && gh != "" {
 			info.GrantHandle = &gh

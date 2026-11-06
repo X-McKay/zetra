@@ -45,7 +45,7 @@ type SessionInfo struct {
 	GrantHandle *string `json:"grant_handle"` // null when the session has no grant
 
 	Since          time.Time `json:"-"`
-	HasGrant       bool      `json:"-"`
+	HasGrant       bool      `json:"-"` // vault or actual grant record still held
 	Reservations   int64     `json:"-"`
 	Stopped        bool      `json:"-"`
 	CleanupPending bool      `json:"-"`
