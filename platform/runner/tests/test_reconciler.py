@@ -188,9 +188,12 @@ def test_reconciler_grant_delete_does_not_wait_for_stop(monkeypatch):
 
     aps = SlowStop()
     monkeypatch.setattr(act, "deps", lambda: SimpleNamespace(aps=aps))
-    assert ActivityEnvironment().run(
-        act.close_session, ClosedSession(TENANT, ApsSession(S1, "investigator", 1, "gh_1"))
-    ) == "OK"
+    assert (
+        ActivityEnvironment().run(
+            act.close_session, ClosedSession(TENANT, ApsSession(S1, "investigator", 1, "gh_1"))
+        )
+        == "OK"
+    )
 
 
 async def test_closed_workflows_distinguishes_terminated_and_running(monkeypatch):
@@ -206,7 +209,9 @@ async def test_closed_workflows_distinguishes_terminated_and_running(monkeypatch
         "running": Handle(WorkflowExecutionStatus.RUNNING),
     }
     monkeypatch.setattr(
-        act, "deps", lambda: SimpleNamespace(temporal=SimpleNamespace(get_workflow_handle=handles.get))
+        act,
+        "deps",
+        lambda: SimpleNamespace(temporal=SimpleNamespace(get_workflow_handle=handles.get)),
     )
     assert await act.closed_workflows(list(handles)) == ["terminated"]
 
@@ -262,7 +267,9 @@ async def test_terminated_session_skips_own_cleanup_and_reconciler_closes_it(mon
                 assert cleanup.stopped == [inp.session_id]
                 assert cleanup.deleted == [("p-terminated", "workflow_closed")]
                 assert result == {
-                    "orphans_deleted": 1, "orphans_unconfirmed": 0, "sessions_closed": 1
+                    "orphans_deleted": 1,
+                    "orphans_unconfirmed": 0,
+                    "sessions_closed": 1,
                 }
                 assert not {"stop_session", "delete_sandbox", "delete_grant"} & set(session.names())
             finally:
@@ -298,9 +305,7 @@ async def test_reconciler_replays_old_and_independent_cleanup_histories(monkeypa
                 task_queue="cleanup-replay",
             )
             summary = await handle.result()
-            assert summary == {
-                "orphans_deleted": 1, "orphans_unconfirmed": 0, "sessions_closed": 1
-            }
+            assert summary == {"orphans_deleted": 1, "orphans_unconfirmed": 0, "sessions_closed": 1}
             history = await handle.fetch_history()
         monkeypatch.setattr(wf.workflow, "patched", original_patch)
         replay = await Replayer(workflows=[wf.CleanupReconcilerWorkflow]).replay_workflow(history)
