@@ -7,6 +7,7 @@ import io
 import json
 import tarfile
 import tracemalloc
+from datetime import UTC, datetime
 
 import pytest
 from temporalio.exceptions import ApplicationError
@@ -397,6 +398,7 @@ def test_snapshot_is_content_addressed_and_restored(tmp_path):
     blob = workspace_tar()
     stream = FakeStream(FakeWS([blob[:4096], blob[4096:]], rc=0), FakeWS([], rc=0))
     d = setup(tmp_path, stream=stream)
+    run(act.create_sandbox, GenIn(inp(), 1, None))
     key = run(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
     assert key == hashlib.sha256(blob).hexdigest()
     assert "--exclude=state/token.json" in stream.commands[0]
@@ -415,6 +417,7 @@ def test_seed_restores_only_the_workspace(tmp_path):
     blob = workspace_tar()
     stream = FakeStream(FakeWS([blob], rc=0), FakeWS([], rc=0))
     setup(tmp_path, stream=stream)
+    run(act.create_sandbox, GenIn(inp(), 1, None))
     key = run(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
     seeded = dataclasses.replace(inp(), session_id="b" * 32, seed=key)
     run(act.create_sandbox, GenIn(seeded, 1, key))
@@ -428,12 +431,65 @@ def test_snapshot_over_limit_is_snapshot_failed(tmp_path, monkeypatch):
     monkeypatch.setattr(act, "MAX_SNAPSHOT", 1 << 20)
     ws = FakeWS([b"\0" * 65536] * 32, rc=0)
     setup(tmp_path, stream=FakeStream(ws))
+    run(act.create_sandbox, GenIn(inp(), 1, None))
     err = refused(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
     assert err.type == "SnapshotFailed" and err.non_retryable and ws.closed
 
 
 def test_snapshot_nonzero_exit_is_retryable_snapshot_failed(tmp_path):
     setup(tmp_path, stream=FakeStream(FakeWS([b"partial"], rc=2)))
+    run(act.create_sandbox, GenIn(inp(), 1, None))
+    err = refused(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
+    assert err.type == "SnapshotFailed" and not err.non_retryable
+
+
+@pytest.mark.parametrize("loss", ["deleted", "replaced", "terminating", "exited"])
+def test_snapshot_rejects_pod_loss_during_actual_store_copy(tmp_path, loss):
+    # The archive is fully spooled before put starts. Killing the Pod while this
+    # real filesystem copy is in progress must not make its result a checkpoint.
+    blob = workspace_tar() + b"\0" * (2 << 20)
+    d = setup(tmp_path, stream=FakeStream(FakeWS([blob], rc=0)))
+    run(act.create_sandbox, GenIn(inp(), 1, None))
+    name = act.pod_name(SESSION, 1)
+    put = d.store.put
+    copies = []
+
+    def put_while_losing_pod(key, src):
+        class Source:
+            reads = 0
+
+            def read(self, size):
+                chunk = src.read(size)
+                self.reads += 1
+                if self.reads == 2:
+                    pod = d.core.pods[name]
+                    if loss == "deleted":
+                        del d.core.pods[name]
+                    elif loss == "replaced":
+                        pod.metadata.uid = "replacement-pod"
+                    elif loss == "terminating":
+                        pod.metadata.deletion_timestamp = datetime.now(UTC)
+                    else:
+                        pod.status.phase = "Failed"
+                return chunk
+
+        put(key, Source())
+        copies.append(key)
+
+    d.store.put = put_while_losing_pod
+    err = refused(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
+    assert err.type == "SnapshotFailed"
+    assert copies == [hashlib.sha256(blob).hexdigest()]
+
+
+def test_snapshot_store_failure_has_retryable_unknown_checkpoint_outcome(tmp_path):
+    d = setup(tmp_path, stream=FakeStream(FakeWS([workspace_tar()], rc=0)))
+    run(act.create_sandbox, GenIn(inp(), 1, None))
+
+    def fail_put(key, src):
+        raise OSError("storage unavailable")
+
+    d.store.put = fail_put
     err = refused(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
     assert err.type == "SnapshotFailed" and not err.non_retryable
 
@@ -493,3 +549,54 @@ def test_stop_and_grant_calls(tmp_path):
     assert run(act.stop_session, inp("gh_1")) == "OK"
     assert run(act.delete_grant, inp("gh_1")) == "OK"
     assert d.aps.calls == [("POST", f"/v1/sessions/{SESSION}/stop"), ("DELETE", "/v1/grants/gh_1")]
+
+
+@pytest.mark.parametrize("replaced", [False, True])
+def test_snapshot_retry_preserves_first_attempt_pod_uid(tmp_path, replaced):
+    d = setup(tmp_path, stream=FakeStream(FakeWS([workspace_tar()], rc=0)))
+    run(act.create_sandbox, GenIn(inp(), 1, None))
+    pod = d.core.pods[act.pod_name(SESSION, 1)]
+    original = pod.metadata.uid
+    environment = ActivityEnvironment()
+    environment.info = dataclasses.replace(
+        environment.info, attempt=2, heartbeat_details=[{"snapshot_pod_uid": original}]
+    )
+    beats = []
+    environment.on_heartbeat = lambda *args: beats.append(args)
+    if replaced:
+        pod.metadata.uid = "replacement-pod"
+        with pytest.raises(ApplicationError) as error:
+            environment.run(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
+        assert error.value.type == "SnapshotFailed" and error.value.non_retryable
+        assert beats == []
+    else:
+        key = environment.run(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
+        assert key == hashlib.sha256(workspace_tar()).hexdigest()
+        assert beats and all(b == ({"snapshot_pod_uid": original},) for b in beats)
+
+
+@pytest.mark.parametrize(
+    "details",
+    [[{}], ["uid"], [{"snapshot_pod_uid": ""}], [{"snapshot_pod_uid": "uid", "other": 1}]],
+)
+def test_snapshot_retry_rejects_invalid_heartbeat_identity(tmp_path, details):
+    setup(tmp_path)
+    environment = ActivityEnvironment()
+    environment.info = dataclasses.replace(environment.info, attempt=2, heartbeat_details=details)
+    with pytest.raises(ApplicationError) as error:
+        environment.run(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
+    assert error.value.type == "SnapshotFailed" and error.value.non_retryable
+
+
+def test_pod_loss_after_checkpoint_returns_does_not_invalidate_artifact(tmp_path):
+    blob = workspace_tar()
+    stream = FakeStream(FakeWS([blob], rc=0), FakeWS([], rc=0))
+    d = setup(tmp_path, stream=stream)
+    run(act.create_sandbox, GenIn(inp(), 1, None))
+    key = run(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
+    del d.core.pods[act.pod_name(SESSION, 1)]
+    run(act.create_sandbox, GenIn(inp(), 2, key))
+    run(act.wait_ready, GenIn(inp(), 2, key))
+    assert bytes(stream.used[-1].stdin) == blob
+    with d.store.open(key) as artifact:
+        assert hashlib.sha256(artifact.read()).hexdigest() == key

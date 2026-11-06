@@ -553,6 +553,27 @@ def _run_boundary(b: BoundaryIn, memory: MemoryAudit) -> BoundaryOut:
 def snapshot_workspace(s: SnapshotIn) -> str:
     d = deps()
     ns, name = s.inp.tenant, pod_name(s.inp.session_id, s.generation)
+    details = activity.info().heartbeat_details
+    expected_uid = None
+    if details:
+        if (
+            len(details) != 1
+            or not isinstance(details[0], dict)
+            or set(details[0]) != {"snapshot_pod_uid"}
+            or not isinstance(details[0]["snapshot_pod_uid"], str)
+            or not details[0]["snapshot_pod_uid"]
+        ):
+            raise ApplicationError(
+                "snapshot retry identity is invalid", type="SnapshotFailed", non_retryable=True
+            )
+        expected_uid = details[0]["snapshot_pod_uid"]
+    uid = _snapshot_pod_uid(d, ns, name, expected_uid)
+
+    def heartbeat():
+        # A retried upload may never adopt a replacement Pod with the same name.
+        activity.heartbeat({"snapshot_pod_uid": uid})
+
+    heartbeat()
     digest = hashlib.sha256()
     with tempfile.SpooledTemporaryFile(max_size=8 << 20) as buf:
 
@@ -568,7 +589,7 @@ def snapshot_workspace(s: SnapshotIn) -> str:
                 max_output=MAX_SNAPSHOT,
                 deadline=SNAPSHOT_DEADLINE,
                 on_stdout=sink,
-                heartbeat=activity.heartbeat,
+                heartbeat=heartbeat,
             )
         except (ExecNotStarted, ExecLost) as e:
             raise ApplicationError(f"snapshot exec failed: {e}", type="SnapshotFailed") from None
@@ -580,8 +601,37 @@ def snapshot_workspace(s: SnapshotIn) -> str:
             raise ApplicationError(f"snapshot rc={res.rc}", type="SnapshotFailed")
         key = digest.hexdigest()
         buf.seek(0)
-        d.store.put(key, buf)
+        try:
+            d.store.put(key, buf)
+        except OSError:
+            raise ApplicationError("snapshot store write failed", type="SnapshotFailed") from None
+    # The archive was spooled before store.put. Pod loss during that copy must
+    # remain an uncommitted boundary, even if a candidate artifact is durable.
+    _snapshot_pod_uid(d, ns, name, uid)
     return key
+
+
+def _snapshot_pod_uid(d: Deps, ns: str, name: str, expected: str | None) -> str:
+    try:
+        pod = d.core.read_namespaced_pod(name, ns)
+    except ApiException as exc:
+        if exc.status != 404:
+            _kube_error(exc, "snapshot pod")
+        raise ApplicationError(
+            "snapshot pod disappeared", type="SnapshotFailed", non_retryable=True
+        ) from None
+    uid = pod.metadata.uid
+    if (
+        not uid
+        or (expected is not None and uid != expected)
+        or pod.metadata.deletion_timestamp is not None
+        or pod.status is None
+        or pod.status.phase != "Running"
+    ):
+        raise ApplicationError(
+            "snapshot pod identity or liveness changed", type="SnapshotFailed", non_retryable=True
+        )
+    return uid
 
 
 def _restore(d: Deps, ns: str, name: str, key: str, *, workspace_only: bool = False) -> None:

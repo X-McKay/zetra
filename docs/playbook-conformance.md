@@ -435,3 +435,20 @@ readable; an unrelated issuance cannot suppress the retry. Missing evidence afte
 three reads still fails. Run18's historical missing issuance remains a failure;
 these regressions demonstrate collection defects without proving which delay caused
 that particular missing event.
+
+### Checkpoint source lifetime during upload
+
+The snapshot activity now keeps the source Pod UID in its heartbeat and checks
+that exact Pod is still Running and not terminating after the artifact-store
+write. Losing or replacing it while the spooled archive is being copied yields
+`SnapshotFailed`, so the existing workflow restores the last accepted checkpoint
+on a new generation. A durable candidate object alone is not accepted progress.
+A retry keeps the original source UID; it cannot adopt a replacement with the
+same name. Storage write errors remain retryable snapshot failures. Pod loss
+after a successful activity return does not invalidate the durable artifact.
+
+Regressions kill, replace, terminate or fail the Pod during a real filesystem
+copy and exercise retry identity and restoration after successful return. The
+SessionWorkflow and confirmed deletion before replacement are unchanged. This
+corrects the upload failure path needed by T23(d); live qualification of all five
+failure points remains pending the observed-barrier harness and signed fixture.
