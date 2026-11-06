@@ -120,7 +120,7 @@ class KubernetesInventory:
                 if (
                     env.get("WORKER_POOL", "legacy") != "legacy"
                     or env.get("WORKER_BUILD_ID")
-                    or env.get("WORKER_DEPLOYMENT")
+                    or env.get("WORKER_DEPLOYMENT") not in (None, "", temporal_name)
                 ):
                     raise GuardError("legacy worker unexpectedly versioned")
             elif any(env.get(k) != v for k, v in expected_env.items()):

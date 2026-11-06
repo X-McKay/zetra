@@ -1047,7 +1047,7 @@ Historical SessionInput payloads omit `worker_pool`; decoding defaults to
 `governed-v1` uses `sessions-<tenant>-governed-v1` and its separate deployment
 `session-runner-<tenant>-governed-v1`. Cleanup has corresponding disjoint queues.
 `agent-session-submit --worker-pool governed-v1` refuses an unpromoted route or
-wrong tenant namespace. Legacy workers reject version/build environment settings;
+wrong tenant namespace. Legacy workers reject nonempty builds or a mismatched deployment name;
 governed workers require the exact role deployment and a build, with PINNED
 behavior. Governed workers never automatically create/change the legacy Schedule.
 

@@ -92,3 +92,10 @@ async def test_governed_submission_refuses_unpromoted_route_before_start():
     with pytest.raises(ValueError, match="promoted"):
         await submit(client, session(worker_pool="governed-v1"))
     client.start_workflow.assert_not_called()
+
+
+def test_existing_legacy_deployment_environment_remains_unversioned(monkeypatch):
+    monkeypatch.delenv("WORKER_POOL", raising=False)
+    monkeypatch.setenv("WORKER_BUILD_ID", "")
+    monkeypatch.setenv("WORKER_DEPLOYMENT", "session-runner-tenant-test")
+    assert worker._deployment("tenant-test", "sessions") is None

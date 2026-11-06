@@ -72,7 +72,7 @@ def _deployment(tenant: str, role: str) -> WorkerDeploymentConfig | None:
     build_id = os.environ.get("WORKER_BUILD_ID")
     deployment = os.environ.get("WORKER_DEPLOYMENT")
     if pool == "legacy":
-        if build_id or deployment:
+        if build_id or deployment not in (None, "", expected):
             raise ValueError("legacy queues must remain unversioned")
         return None
     import re
