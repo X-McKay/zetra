@@ -170,10 +170,14 @@ def evidence(case="day"):
             {"uid": "new2", "ready": True, "image_id": "image1"},
         ],
         "old_uids_absent": True,
+        "completed": True,
+        "emitted_ns": int(START.timestamp() * 1_000_000_000) + 200_000_000_000,
+        "deadline_seconds": 100,
+        "elapsed_seconds": 99.0,
         "configuration_before": "b" * 64,
         "configuration_after": "b" * 64,
         "started_at": stamp(200),
-        "finished_at": stamp(300),
+        "finished_at": stamp(299),
     }
     return {
         "case": case,
@@ -298,4 +302,49 @@ def test_extra_session_request_evidence_never_passes(source):
         extra["trace_id"] = "f" * 32
         extra["backend"] = "llm-other"
         data["aps"].append(extra)
+    assert evaluate_budget(**data)["result"] == "fail"
+
+
+@pytest.mark.parametrize("mismatch", [None, "aps", "backend", "observations"])
+def test_explicit_retry_identity_must_match_every_trusted_source(mismatch):
+    data = evidence()
+    retry = "conformance-budget-day-retry"
+    data["agent"] = retry
+    for source in ("aps", "backend"):
+        if source != mismatch:
+            for row in data[source]:
+                if "agent_id" in row:
+                    row["agent_id"] = "tenant-test/" + retry
+    if mismatch != "observations":
+        for row in data["observations"]:
+            row["agent"] = retry
+    result = evaluate_budget(**data)
+    assert result["result"] == ("pass" if mismatch is None else "fail")
+    assert result["evidence"]["agent"] == retry
+    assert result["evidence"]["tokens_per_day"] == 2000
+
+
+@pytest.mark.parametrize(
+    "case,agent", [("day", "arbitrary"), ("session", "conformance-budget-day-retry")]
+)
+def test_arbitrary_budget_identity_is_rejected(case, agent):
+    with pytest.raises(ValueError):
+        evaluate_budget(**evidence(case), agent=agent)
+
+
+@pytest.mark.parametrize("change", ["bool_timestamp", "late_restart", "incomplete_restart"])
+def test_gateway_deadline_receipt_cannot_be_weakened(change):
+    data = evidence()
+    data["restart"].update(
+        completed=True,
+        emitted_ns=int(START.timestamp() * 1_000_000_000) + 200_000_000_000,
+        deadline_seconds=100,
+        elapsed_seconds=99.0,
+    )
+    if change == "bool_timestamp":
+        data["restart"]["emitted_ns"] = True
+    elif change == "late_restart":
+        data["restart"]["elapsed_seconds"] = 100.001
+    else:
+        data["restart"]["completed"] = False
     assert evaluate_budget(**data)["result"] == "fail"

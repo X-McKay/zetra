@@ -7,6 +7,7 @@ operator must replace the exact observed old pods within the fixture's120s pause
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import sys
@@ -21,7 +22,14 @@ from pathlib import Path
 from temporalio.api.enums.v1 import EventType
 
 from runner.conformance_admission import AdmissionSessions, ready, settled
-from runner.conformance_budget import AGENTS, evaluate_budget, read_budget_state
+from runner.conformance_budget import (
+    AGENTS,
+    UUID,
+    TRACE,
+    budget_agent,
+    evaluate_budget,
+    read_budget_state,
+)
 from runner.submit import submit
 from runner.types import SessionInput
 
@@ -72,6 +80,7 @@ class BudgetObserver:
 class KubernetesGatewayWatch:
     def __init__(self, core):
         self.core = core
+        self.last_evidence = None
 
     def inventory(self):
         pods = self.core.list_namespaced_pod(
@@ -115,41 +124,66 @@ class KubernetesGatewayWatch:
         digest = hashlib.sha256(json.dumps(sorted(set(configurations))).encode()).hexdigest()
         return {"pods": sorted(result, key=lambda p: p["uid"]), "configuration": digest}
 
-    async def replaced(self, before):
+    async def replaced(self, before, *, agent, session_id):
+        budget_agent("day", agent)
+        if not isinstance(session_id, str) or not UUID.fullmatch(session_id):
+            raise ValueError("exact budget session required")
         if len(before["pods"]) != 2 or not all(p["ready"] for p in before["pods"]):
             raise ValueError("two Ready gateway replicas required")
         started = utcnow()
+        began = time.monotonic()
+        emitted_ns = time.time_ns()
         old = {p["uid"] for p in before["pods"]}
+        self.last_evidence = {
+            "before": before["pods"],
+            "after": [],
+            "old_uids_absent": False,
+            "configuration_before": before["configuration"],
+            "configuration_after": None,
+            "started_at": started,
+            "emitted_ns": emitted_ns,
+            "deadline_seconds": 100,
+            "completed": False,
+            "elapsed_seconds": 0.0,
+        }
         print(
             json.dumps(
                 {
                     "event": "T13 awaiting gateway replacement",
+                    "test": "T13",
+                    "agent": agent,
+                    "session_id": session_id,
                     "old_pods": before["pods"],
+                    "emitted_ns": emitted_ns,
                     "deadline_seconds": 100,
                 }
             ),
             file=sys.stderr,
             flush=True,
         )
-        until = time.monotonic() + 100
-        while time.monotonic() < until:
+        while time.monotonic() - began < 100:
             after = await asyncio.to_thread(self.inventory)
             current = {p["uid"] for p in after["pods"]}
+            elapsed = time.monotonic() - began
+            self.last_evidence.update(
+                after=after["pods"],
+                old_uids_absent=not bool(current & old),
+                configuration_after=after["configuration"],
+                elapsed_seconds=elapsed,
+                last_observed_at=utcnow(),
+            )
+            # An API response arriving after the deadline cannot qualify a restart.
+            if elapsed >= 100:
+                break
             if (
                 len(after["pods"]) == 2
                 and not current & old
                 and all(p["ready"] for p in after["pods"])
             ):
-                return {
-                    "before": before["pods"],
-                    "after": after["pods"],
-                    "old_uids_absent": True,
-                    "configuration_before": before["configuration"],
-                    "configuration_after": after["configuration"],
-                    "started_at": started,
-                    "finished_at": utcnow(),
-                }
+                self.last_evidence.update(completed=True, finished_at=utcnow())
+                return dict(self.last_evidence)
             await asyncio.sleep(0.5)
+        self.last_evidence.update(elapsed_seconds=time.monotonic() - began)
         raise TimeoutError("gateway replacement deadline")
 
 
@@ -240,18 +274,21 @@ class BudgetHarness:
         artifact_dir,
         *,
         timeout=900,
+        day_agent=AGENTS["day"],
     ):
         if ops.tenant != "tenant-test":
             raise ValueError("budget fixtures require tenant-test")
         self.client, self.ops, self.observer = client, ops, observer
         self.aps_logs, self.backend_logs, self.gateway = aps_logs, backend_logs, gateway
         self.releases = {"day": day_release, "session": session_release}
+        self.agents = {"day": budget_agent("day", day_agent), "session": AGENTS["session"]}
+        self.decision_receipts = []
         self.artifact_dir, self.timeout = artifact_dir, timeout
         self.cleanup = AdmissionSessions(client, ops, timeout=180)
         self.observations = []
 
     async def validate(self, case):
-        agent = AGENTS[case]
+        agent = self.agents[case]
         release = self.releases[case]
         if not release:
             raise ValueError("explicit signed budget release required")
@@ -275,7 +312,7 @@ class BudgetHarness:
     async def start(self, case, role):
         inp = SessionInput(
             "tenant-test",
-            AGENTS[case],
+            self.agents[case],
             self.releases[case],
             str(uuid.uuid4()),
             None,
@@ -369,13 +406,31 @@ class BudgetHarness:
             if running[3].done() and running[3].exception():
                 raise running[3].exception()
             records = parse_aps_log(await self.aps_logs(time.time() - started + 5))
-            if any(
-                r.get("session_id") == session
-                and r.get("reason") == reason
-                and r.get("backend") == "llm-budget-conformance"
-                for r in records
-            ):
-                return
+            for record in records:
+                if (
+                    record.get("session_id") == session
+                    and record.get("reason") == reason
+                    and record.get("backend") == "llm-budget-conformance"
+                    and record.get("agent_id") == "tenant-test/" + running[0].agent
+                    and record.get("release") == running[0].release
+                ):
+                    # Keep only fixed-label/validated correlation metadata; never raw logs.
+                    self.decision_receipts.append(
+                        {
+                            "session_id": session,
+                            "reason": reason,
+                            "backend": "llm-budget-conformance",
+                            "decision_id": record.get("decision_id")
+                            if isinstance(record.get("decision_id"), str)
+                            and UUID.fullmatch(record["decision_id"])
+                            else None,
+                            "trace_id": record.get("trace_id")
+                            if isinstance(record.get("trace_id"), str)
+                            and TRACE.fullmatch(record["trace_id"])
+                            else None,
+                        }
+                    )
+                    return
             if running[2].done():
                 raise RuntimeError("fixture ended before expected decision")
             await asyncio.sleep(0.5)
@@ -384,39 +439,61 @@ class BudgetHarness:
     async def run(self, case):
         from runner.conformance import parse_aps_log
 
-        await self.validate(case)
         started = time.time()
         self.observations = []
-        active = []
+        self.decision_receipts = []
+        active, sessions = [], []
         restart = None
+        outcome = None
+        phase = "fixture_validation"
+        validated = False
+        if case == "day":
+            self.gateway.last_evidence = None
         try:
+            await self.validate(case)
+            validated = True
             if case == "day":
+                phase = "gateway_inventory"
                 before = await asyncio.to_thread(self.gateway.inventory)
+                phase = "session_start"
                 primary = await self.start(case, "day")
                 active.append(primary)
+                phase = "budget_denial"
                 await self.wait_decision(
                     primary[0].session_id, "deny.budget_exhausted", started, primary
                 )
-                restart = await self.gateway.replaced(before)
+                phase = "gateway_replacement"
+                restart = await self.gateway.replaced(
+                    before, agent=primary[0].agent, session_id=primary[0].session_id
+                )
+                phase = "session_completion"
                 sessions = [await self.finish(primary)]
             else:
+                phase = "control_start"
                 control = await self.start(case, "control")
                 active.append(control)
+                phase = "control_allow"
                 await self.wait_decision(control[0].session_id, "allow", started, control)
+                phase = "session_start"
                 primary = await self.start(case, "session")
                 active.append(primary)
+                phase = "session_completion"
                 sessions = list(await asyncio.gather(self.finish(primary), self.finish(control)))
+            phase = "aps_logs"
             aps = parse_aps_log(await self.aps_logs(time.time() - started + 5))
+            phase = "backend_logs"
             backend = parse_aps_log(await self.backend_logs(time.time() - started + 5))
-            result = evaluate_budget(
+            phase = "evidence_evaluation"
+            outcome = evaluate_budget(
                 case=case,
+                agent=self.agents[case],
                 sessions=sessions,
                 aps=aps,
                 backend=backend,
                 observations=self.observations,
                 restart=restart,
             )
-            result["evidence"]["sessions"] = [
+            outcome["evidence"]["sessions"] = [
                 {
                     k: s.get(k)
                     for k in (
@@ -431,11 +508,43 @@ class BudgetHarness:
                 }
                 for s in sessions
             ]
-            result["evidence"]["observations"] = self.observations
-            result["evidence"]["gateway_restart"] = restart
-            return {"id": "T13" if case == "day" else "T13b", **result}
+            outcome["evidence"]["observations"] = list(self.observations)
+            outcome["evidence"]["gateway_restart"] = restart
+        except Exception as exc:
+            # Freeze the evidence at failure. Later cleanup or operator activity
+            # cannot rewrite this error into a pass. Avoid secondary network reads.
+            outcome = {
+                "result": "error",
+                "error": type(exc).__name__,
+                "phase": phase,
+                "checks": {"fixture_validated": validated, "orchestration_completed": False},
+                "evidence": {
+                    "scope": "partial budget-path observations; no qualification verdict",
+                    "agent": self.agents[case],
+                    "failed_at": utcnow(),
+                    "sessions": [
+                        {
+                            "session_id": r[0].session_id,
+                            "release": r[0].release,
+                            "case": r[0].task["budget_case"],
+                        }
+                        for r in active
+                    ],
+                    "observations": copy.deepcopy(self.observations),
+                    "decision_receipts": copy.deepcopy(self.decision_receipts),
+                    "gateway_restart": copy.deepcopy(
+                        restart or (self.gateway.last_evidence if case == "day" else None)
+                    ),
+                },
+            }
         finally:
-            await self.close_all(active)
+            try:
+                await self.close_all(active)
+            except Exception as exc:
+                if outcome is None:
+                    raise
+                outcome = {**outcome, "result": "error", "cleanup_error": type(exc).__name__}
+        return {"id": "T13" if case == "day" else "T13b", **outcome}
 
     async def t13(self):
         return await self.run("day")
