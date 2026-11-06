@@ -269,3 +269,95 @@ async def test_read_only_orchestration_observes_separate_root_protocol_and_close
         assert "scheduled_delete_pending_remove_finalizer_now" in signals
         assert report["evidence"]["harness_monotonic_bound"] is True
         assert report["evidence"]["outcome"] == "NOT_CONFIRMED"
+
+
+def test_ops_use_actual_kubernetes_models_and_api_client_without_transport_calls():
+    from kubernetes import client
+    from kubernetes.client.exceptions import ApiException
+    from runner.conformance_generation_runtime import GenerationOps
+    from tests.test_conformance_generation import config
+
+    cfg = config()
+    sid = cfg["sessions"]["fence_only"]
+    api = client.ApiClient()
+    sandbox = client.V1Pod(
+        metadata=client.V1ObjectMeta(
+            name="g1", uid="uid1", labels={"agentplatform.io/generation": "1"}
+        ),
+        status=client.V1PodStatus(phase="Running"),
+    )
+    image = cfg["worker_image"]
+    worker = client.V1Pod(
+        metadata=client.V1ObjectMeta(name="worker", uid="worker-uid"),
+        spec=client.V1PodSpec(
+            containers=[client.V1Container(name="runner", image=image)],
+            service_account_name="session-runner-tenant-test",
+        ),
+        status=client.V1PodStatus(
+            phase="Running",
+            container_statuses=[
+                client.V1ContainerStatus(
+                    name="runner",
+                    image=image,
+                    image_id="runtime@sha256:" + "a" * 64,
+                    ready=True,
+                    restart_count=0,
+                )
+            ],
+        ),
+    )
+
+    def pods(namespace, **kwargs):
+        return client.V1PodList(items=[worker if namespace == "agent-platform" else sandbox])
+
+    core = NS(
+        api_client=api, list_namespaced_pod=pods, read_namespaced_pod=lambda *a, **kw: sandbox
+    )
+    ops = GenerationOps(core, None, NS(config=cfg))
+    assert ops.rows(sid) == [
+        {
+            "name": "g1",
+            "uid": "uid1",
+            "generation": 1,
+            "phase": "Running",
+            "deleting": False,
+            "finalizers": [],
+        }
+    ]
+    actual = ops.workers()
+    assert (
+        actual[0]["service_account"] == "session-runner-tenant-test"
+        and actual[0]["image"] == image
+        and actual[0]["ready"] is True
+    )
+    assert ops.absent("g1") is False
+
+    def absent(*a, **kw):
+        raise ApiException(status=404)
+
+    core.read_namespaced_pod = absent
+    assert ops.absent("g1") is True
+
+
+async def test_pending_gate_uses_actual_temporal_heartbeat_protobuf():
+    from temporalio.api.workflow.v1 import PendingActivityInfo
+    from runner.conformance_generation_runtime import pending_gates
+
+    converter = DataConverter.default
+    sid = str(uuid.uuid4())
+    gate = {
+        "schema": "t21-gate-v1",
+        "case": "blocked_deletion",
+        "run_id": str(uuid.uuid4()),
+        "session_id": sid,
+        "pod_uid": "pod",
+        "worker_uid": "worker",
+    }
+    pending = PendingActivityInfo()
+    pending.heartbeat_details.payloads.extend(await converter.encode([gate]))
+
+    async def describe():
+        return NS(raw_description=NS(pending_activities=[pending]))
+
+    assert await pending_gates(NS(describe=describe), converter, sid) == [gate]
+    assert await pending_gates(NS(describe=describe), converter, "another-session") == []
