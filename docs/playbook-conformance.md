@@ -889,3 +889,51 @@ one completed read, corroborated by the signed fixture's actual SDK completion
 and accepted checkpoint. Duplicate calls, missing handshakes, failed responses,
 unclassified rows and orphan IDs fail. Fresh qualification requires both the
 new runner and MCP capture images; an old capture log does not qualify.
+
+## T2a: UID-bound attestation and startup receipts
+
+The node attestor now uses an atomic JSON Patch that tests both the listed Pod
+UID and resourceVersion before changing only `agentplatform.io/netpol-attested`.
+This closes a same-name replacement race: the old name-only patch could attach a
+chain verdict computed for a deleted Pod to its replacement. A conflict leaves
+the current object unchanged; the attestor never retries that verdict against a
+new resource version. Its next pass must list the Pod and read the host table
+again. Initial addition, refresh and removal use the same preconditions and
+preserve unrelated annotations. A local HTTP regression exercises the pinned
+Kubernetes client's actual JSON Patch serialization and the replacement race.
+
+The attestor emits `netpol-attestor-v1` JSON receipts as its log message. Each
+`chain_verified` receipt is emitted before the real PATCH; a matching
+`annotation_patch_ack` is emitted only after checking the response UID, Pod
+identity and annotation. Operation/process IDs, sequence numbers, local monotonic
+nanoseconds and wall timestamps bind the records. Failures export only a fixed
+category/status, never response bodies. Withdrawal and nonverified-chain records
+remain distinct from successful attestation. Receipt fields contain only the
+explicit Pod/node binding, versions and safe annotation; no raw table, arbitrary
+annotation or credential material is exported.
+
+The guard emits `egress-guard-v1` JSON lines alongside its existing diagnostics.
+An `annotation_observed` record precedes the gateway check, and a successful
+`guard_exit` references the exact observation used by that attempt. A retry reads
+the Downward API file again and gets a distinct observation ID. The existing
+predicates and order are unchanged: the first forbidden connection still exits
+3 immediately, successful annotation plus reachable gateway yields 0, and the
+existing deadline yields 4. Attack-mode output is unchanged. Only the pinned
+`<RFC3339>;KUBE-POD-FW-<chain>` syntax is exported. Other values retain their
+existing acceptance semantics but have `annotation_recorded=false` and cannot
+be used as exact startup evidence.
+
+These records alone do not qualify T2a. The remaining collector must bind trusted
+attestor logs and actual guard CRI logs to immutable Pod/container/image IDs,
+then combine the exact guard read with actual init-finished and agent-started
+timestamps from the same node/runtime, kubelet evidence and Pod status. Do not
+require the client's PATCH acknowledgement to precede agent start: the API write
+can commit and become visible before its response reaches the attestor. The
+causal proof is verification before conditional write, that write's value read
+by the guard before exit, then actual agent start after successful init. Missing
+runtime/kubelet evidence cannot be replaced by polling timestamps or a summary.
+
+The full gate remains exactly 100 serialized signed starts plus an unpoliced
+negative with no annotation/agent start and real exit 3 or 4. The historical ten
+starts remain insufficient. No new live run, guard/attestor image publication,
+admission pin change or production rollout is claimed by this code change.
