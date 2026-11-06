@@ -836,3 +836,289 @@ def test_cli_rejects_unknown_tests(capsys):
     )
     assert args.tests == ["T5", "T19", "T8", "T11", "T12", "T26"] and args.tenant == "tenant-test"
     assert args.agent_b == "b" and args.release_b == "rb"
+
+
+@pytest.fixture
+def fake_model():
+    seen = []
+    key = "test-static-engine-key"
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            auth = self.headers.get("Authorization")
+            seen.append((self.path, auth))
+            if self.path == "/redirect":
+                self.send_response(302)
+                self.send_header("Location", "/v1/models")
+            else:
+                self.send_response(200 if auth == f"Bearer {key}" else 401)
+            self.end_headers()
+            # An upstream can echo credentials: the harness must never retain its body.
+            self.wfile.write(key.encode())
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}", key, seen
+    server.shutdown()
+    server.server_close()
+
+
+async def empty_logs(since):
+    return ""
+
+
+async def test_t6_proves_engine_auth_without_outputting_key_or_response(fake_model, tmp_path):
+    url, key, seen = fake_model
+    keyfile = tmp_path / "key"
+    keyfile.write_text(key + "\n")
+    h = c.Harness(
+        None,
+        TENANT,
+        AGENT,
+        "r1",
+        empty_logs,
+        model_url=url + "/v1/models",
+        backend_key_file=str(keyfile),
+    )
+    out = await h.run(["T6"])
+    assert out["result"] == "pass", out
+    assert seen == [("/v1/models", None), ("/v1/models", f"Bearer {key}")]
+    assert out["tests"][0]["evidence"] == {
+        "unauthenticated_status": 401,
+        "authenticated_status": 200,
+    }
+    assert key not in json.dumps(out)
+
+
+@pytest.mark.parametrize("key_text", ["wrong-key", "", "Bearer invalid", "line1\nline2"])
+async def test_t6_rejects_wrong_or_invalid_key(fake_model, tmp_path, key_text):
+    url, _, _ = fake_model
+    keyfile = tmp_path / "key"
+    keyfile.write_text(key_text)
+    h = c.Harness(
+        None,
+        TENANT,
+        AGENT,
+        "r1",
+        empty_logs,
+        model_url=url + "/v1/models",
+        backend_key_file=str(keyfile),
+    )
+    out = await h.run(["T6"])
+    assert out["result"] != "pass"
+    if key_text:
+        assert key_text not in json.dumps(out)
+
+
+async def test_t6_missing_file_and_unreachable_engine_are_errors(tmp_path):
+    keyfile = tmp_path / "key"
+    h = c.Harness(
+        None,
+        TENANT,
+        AGENT,
+        "r1",
+        empty_logs,
+        model_url="http://127.0.0.1:1/v1/models",
+        backend_key_file=str(keyfile),
+    )
+    assert (await h.run(["T6"]))["result"] == "error"
+    keyfile.write_text("test-engine-key")
+    out = await h.run(["T6"])
+    assert out["result"] == "error"
+    assert "test-engine-key" not in json.dumps(out)
+
+
+async def test_t6_does_not_follow_redirects_with_the_key(fake_model, tmp_path):
+    url, key, seen = fake_model
+    keyfile = tmp_path / "key"
+    keyfile.write_text(key)
+    h = c.Harness(
+        None,
+        TENANT,
+        AGENT,
+        "r1",
+        empty_logs,
+        model_url=url + "/redirect",
+        backend_key_file=str(keyfile),
+    )
+    assert (await h.run(["T6"]))["result"] == "fail"
+    assert [path for path, _ in seen] == ["/redirect", "/redirect"]
+
+
+def t7_evidence():
+    r = run()
+    r.boundaries[0]["usage"] = {"input_tokens": 12, "output_tokens": 4}
+    cap = {
+        **capture(SESSION, ""),
+        "path": "/v1/chat/completions",
+        "backend_key_match": True,
+        "bearer": {"error": "not_a_jwt"},
+    }
+    gw = {
+        "agent.session_id": SESSION,
+        "http.method": "POST",
+        "http.status": "200",
+        "http.path": "/models/llm-main/v1/chat/completions",
+        "jwt.sub": "agent-sub",
+        "agent.decision": "allow",
+        "llm.tokens_in": "12",
+        "llm.tokens_out": "4",
+    }
+    return r, cap, gw
+
+
+def test_t7_requires_matching_backend_key_chat_path_and_nonzero_usage():
+    r, cap, gw = t7_evidence()
+    out = c.evaluate_t7(r, [cap, {**cap, "x_agent": {"x-agent-session-id": "other"}}], [gw])
+    assert out["result"] == "pass" and all(out["checks"].values()), out
+    assert len(out["evidence"]["model_capture"]) == 1
+
+
+@pytest.mark.parametrize(
+    "mutation,failed_check",
+    [
+        ("wrong_path", "chat_completion_at_model_server"),
+        ("get", "chat_completion_at_model_server"),
+        ("capture_401", "model_server_status_200"),
+        ("no_capture", "model_server_captured"),
+        ("wrong_session", "model_server_captured"),
+        ("false_key", "backend_key_received"),
+        ("absent_key", "backend_key_received"),
+        ("truthy_key", "backend_key_received"),
+        ("jwt", "no_agent_jwt_at_model_server"),
+        ("flat_jti", "no_agent_jwt_at_model_server"),
+        ("flat_bearer_jti", "no_agent_jwt_at_model_server"),
+        ("zero_boundary", "boundary_usage_nonzero"),
+        ("zero_gateway", "gateway_usage_nonzero"),
+        ("no_gateway", "gateway_accepted_agent_token"),
+        ("no_subject", "gateway_accepted_agent_token"),
+        ("failed_session", "session_completed"),
+    ],
+)
+def test_t7_rejects_missing_or_contradictory_evidence(mutation, failed_check):
+    r, cap, gw = t7_evidence()
+    caps, lines = [cap], [gw]
+    if mutation == "wrong_path":
+        cap["path"] = "/v1/models"
+    elif mutation == "get":
+        cap["method"] = "GET"
+    elif mutation == "capture_401":
+        cap["status"] = 401
+    elif mutation == "no_capture":
+        caps = []
+    elif mutation == "wrong_session":
+        cap["x_agent"]["x-agent-session-id"] = "other"
+    elif mutation == "false_key":
+        cap["backend_key_match"] = False
+    elif mutation == "absent_key":
+        del cap["backend_key_match"]
+    elif mutation == "truthy_key":
+        cap["backend_key_match"] = "true"
+    elif mutation == "jwt":
+        cap["bearer"] = {"jti": "agent-jti"}
+    elif mutation == "flat_jti":
+        cap["jti"] = "agent-jti"
+    elif mutation == "flat_bearer_jti":
+        cap["bearer_jti"] = "agent-jti"
+    elif mutation == "zero_boundary":
+        r.boundaries[0]["usage"] = None
+    elif mutation == "zero_gateway":
+        gw.update({"llm.tokens_in": "0", "llm.tokens_out": "0"})
+    elif mutation == "no_gateway":
+        lines = []
+    elif mutation == "no_subject":
+        del gw["jwt.sub"]
+    elif mutation == "failed_session":
+        r.outcome = "FAILED"
+    out = c.evaluate_t7(r, caps, lines)
+    assert out["result"] == "fail" and out["checks"][failed_check] is False, out
+
+
+def test_t7_does_not_copy_arbitrary_capture_fields_to_report():
+    r, cap, gw = t7_evidence()
+    cap["authorization"] = "opaque-test-key"
+    cap["bearer"]["unexpected"] = "opaque-test-key"
+    gw["request.headers.authorization"] = "opaque-test-key"
+    assert "opaque-test-key" not in json.dumps(c.evaluate_t7(r, [cap], [gw]))
+
+
+async def test_t7_harness_reads_model_capture_separately_from_mcp(monkeypatch):
+    r, cap, gw = t7_evidence()
+
+    async def model_logs(since):
+        return json.dumps(cap)
+
+    h = c.Harness(
+        None,
+        TENANT,
+        AGENT,
+        "r1",
+        empty_logs,
+        capture_logs=empty_logs,
+        model_capture_logs=model_logs,
+    )
+
+    async def session(case):
+        assert case.tool == "probe_files"
+        return r
+
+    async def gateway(started):
+        return [gw]
+
+    monkeypatch.setattr(h, "run_session", session)
+    monkeypatch.setattr(h, "gateway_since", gateway)
+    assert (await h.run(["T7"]))["result"] == "pass"
+
+
+def test_cli_selects_model_auth_tests():
+    assert c.parse_args(["--release", "r1", "--tests", "t6,t7"]).tests == ["T6", "T7"]
+
+
+async def test_cluster_wiring_uses_engine_env_and_vllm_capture(fake_model, tmp_path, monkeypatch):
+    from kubernetes import client as k8s, config
+    from runner import worker
+
+    url, key, seen = fake_model
+    keyfile = tmp_path / "key"
+    keyfile.write_text(key)
+    monkeypatch.setenv("T6_MODEL_URL", url + "/v1/models")
+    monkeypatch.setenv("BACKEND_KEY_FILE", str(keyfile))
+    r, cap, gw = t7_evidence()
+
+    class Core:
+        def list_namespaced_pod(self, ns, label_selector):
+            name = {
+                ("vllm", "app=vllm"): "model-pod",
+                ("ai-gateway", "app.kubernetes.io/name=agents"): "gateway-pod",
+            }.get((ns, label_selector))
+            return types.SimpleNamespace(
+                items=[types.SimpleNamespace(metadata=types.SimpleNamespace(name=name))]
+                if name
+                else []
+            )
+
+        def read_namespaced_pod_log(self, name, ns, since_seconds, container=None):
+            if (name, ns, container) == ("model-pod", "vllm", "capture"):
+                return json.dumps(cap)
+            if (name, ns, container) == ("gateway-pod", "ai-gateway", None):
+                return " ".join(f"{k}={v}" for k, v in gw.items())
+            return ""
+
+    async def connect(tenant):
+        return None
+
+    async def session(self, case):
+        return r
+
+    monkeypatch.setattr(k8s, "CoreV1Api", Core)
+    monkeypatch.setattr(config, "load_incluster_config", lambda: None)
+    monkeypatch.setattr(worker, "connect", connect)
+    monkeypatch.setattr(c.Harness, "run_session", session)
+    args = c.parse_args(["--release", "r1", "--tests", "T6,T7"])
+    out = await c.run_in_cluster(args)
+    assert out["result"] == "pass", out
+    assert seen == [("/v1/models", None), ("/v1/models", f"Bearer {key}")]
+    assert key not in json.dumps(out)

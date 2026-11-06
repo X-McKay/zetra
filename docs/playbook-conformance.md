@@ -47,6 +47,18 @@ Protocol failures also record only known framing or boundary-mismatch diagnostic
 never arbitrary guest stderr or stdout. A rebuilt image must be deployed to the
 runner, cleanup reconciler and harness before the next T26 qualification run.
 
+The Phase B harness now implements T6 direct engine authentication and T7 model
+request capture. T6 requires unauthenticated/authenticated statuses 401/200;
+T7 requires session-correlated chat completions, a locally compared static
+backend key, absence of an upstream agent JWT, and nonzero committed and gateway
+usage. Capture records contain only the key-match boolean, never key material
+or its hash. Local HTTP and capture tests exercise refusals, missing evidence and
+credential hygiene; they do not establish a live T6/T7 qualification pass. See
+[model authentication qualification](platform.md#model-authentication-qualification-t6t7)
+for the required mounts, vantage point and capture permissions.
+The capture image build uses the target OS and architecture explicitly, so an
+ARM64 model-side image can be built on an AMD64 builder without emulation.
+
 ## Review hardening
 
 Worker release allowlists restrict active operations while preserving revoked-release
