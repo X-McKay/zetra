@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -71,6 +72,84 @@ type env struct {
 	logs    *bytes.Buffer
 	idpHits atomic.Int32
 	idpForm string
+}
+
+type interruptedStopStore struct {
+	store.Store
+	failExchangeDelete bool
+	failCompletion     bool
+}
+
+func (s *interruptedStopStore) DeleteExchanged(ctx context.Context, session string) error {
+	if s.failExchangeDelete {
+		return errors.New("exchange cleanup unavailable")
+	}
+	return s.Store.DeleteExchanged(ctx, session)
+}
+
+func (s *interruptedStopStore) CompleteStop(ctx context.Context, session string) error {
+	if s.failCompletion {
+		return errors.New("completion receipt unavailable")
+	}
+	return s.Store.CompleteStop(ctx, session)
+}
+
+func TestStopCompletionFailureRemainsDiscoverable(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	_ = e.st.TouchSession(ctx, sess, "tenant-a", "investigator", "")
+	_ = e.st.SetGeneration(ctx, sess, 1)
+	interrupted := &interruptedStopStore{Store: e.st, failCompletion: true}
+	e.api.Store = interrupted
+	if w := e.do("POST", "/v1/sessions/"+sess+"/stop", reconToken, "application/json", "{}"); w.Code != 500 {
+		t.Fatalf("completion failure: %d", w.Code)
+	}
+	list, err := e.st.ListSessions(ctx, time.Now())
+	if err != nil || len(list) != 1 || !list[0].CleanupPending {
+		t.Fatalf("pending completion receipt lost: %+v %v", list, err)
+	}
+	interrupted.failCompletion = false
+	if w := e.do("POST", "/v1/sessions/"+sess+"/stop", reconToken, "application/json", "{}"); w.Code != 200 {
+		t.Fatalf("retry completion: %d", w.Code)
+	}
+	list, err = e.st.ListSessions(ctx, time.Now())
+	if err != nil || len(list) != 0 {
+		t.Fatalf("completed cleanup retained: %+v %v", list, err)
+	}
+}
+
+func TestPartialStopRemainsDiscoverableUntilCleanupCompletes(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	_ = e.st.TouchSession(ctx, sess, "tenant-a", "investigator", "")
+	_ = e.st.SetGeneration(ctx, sess, 1)
+	_ = e.st.PutExchanged(ctx, sess, "backend", []byte("cached"), time.Hour)
+	interrupted := &interruptedStopStore{Store: e.st, failExchangeDelete: true}
+	e.api.Store = interrupted
+	if w := e.do("POST", "/v1/sessions/"+sess+"/stop", reconToken, "application/json", "{}"); w.Code != 500 {
+		t.Fatalf("partial stop: %d", w.Code)
+	}
+	if _, active, _ := e.st.ActiveGeneration(ctx, sess); active {
+		t.Fatal("active generation retained after partial stop")
+	}
+	var list struct {
+		Sessions []map[string]any `json:"sessions"`
+	}
+	w := e.do("GET", "/v1/sessions", reconToken, "", "")
+	_ = json.Unmarshal(w.Body.Bytes(), &list)
+	if w.Code != 200 || len(list.Sessions) != 1 || list.Sessions[0]["session_id"] != sess {
+		t.Fatalf("partial cleanup lost from discovery: %d %s", w.Code, w.Body)
+	}
+	interrupted.failExchangeDelete = false
+	if w := e.do("POST", "/v1/sessions/"+sess+"/stop", reconToken, "application/json", "{}"); w.Code != 200 {
+		t.Fatalf("retry stop: %d", w.Code)
+	}
+	if _, held, _ := e.st.GetExchanged(ctx, sess, "backend"); held {
+		t.Fatal("exchanged token survived retry")
+	}
+	if w := e.do("GET", "/v1/sessions", reconToken, "", ""); !strings.Contains(w.Body.String(), `"sessions":[]`) {
+		t.Fatalf("completed cleanup retained: %s", w.Body)
+	}
 }
 
 func newEnv(t *testing.T) *env {
@@ -345,5 +424,14 @@ func TestRunnerIdentityAndGenerations(t *testing.T) {
 	}
 	if st, _ := e.st.IsStopped(context.Background(), sess); !st {
 		t.Fatal("not stopped")
+	}
+	if _, active, err := e.st.ActiveGeneration(context.Background(), sess); err != nil || active {
+		t.Fatalf("stopped generation remains active: %v %v", active, err)
+	}
+	if w := e.do("PUT", "/v1/sessions/"+sess+"/generation", runnerToken, "application/json", `{"generation":3}`); w.Code != 409 {
+		t.Fatalf("late generation after stop: %d", w.Code)
+	}
+	if w := e.do("GET", "/v1/sessions", reconToken, "", ""); !strings.Contains(w.Body.String(), `"sessions":[]`) {
+		t.Fatalf("stopped session still holds active state: %s", w.Body)
 	}
 }

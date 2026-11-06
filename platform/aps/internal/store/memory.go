@@ -88,6 +88,9 @@ func (m *Memory) PinJTI(_ context.Context, jti, podUID string, exp time.Time) (s
 func (m *Memory) SetGeneration(_ context.Context, session string, gen int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, stopped := m.get("stopped:" + session); stopped {
+		return ErrConflict
+	}
 	if v, ok := m.get("gen:" + session); ok && atoi(string(v)) > gen {
 		return ErrConflict
 	}
@@ -109,6 +112,15 @@ func (m *Memory) MarkStopped(_ context.Context, session string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.set("stopped:"+session, []byte("1"), SessionStateTTL)
+	m.set("stop-pending:"+session, []byte("1"), SessionStateTTL)
+	delete(m.kv, "gen:"+session)
+	return nil
+}
+
+func (m *Memory) CompleteStop(_ context.Context, session string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.kv, "stop-pending:"+session)
 	return nil
 }
 
@@ -122,6 +134,9 @@ func (m *Memory) IsStopped(_ context.Context, session string) (bool, error) {
 func (m *Memory) PutVault(_ context.Context, session string, blob []byte, ttl time.Duration) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, stopped := m.get("stopped:" + session); stopped {
+		return false, ErrStopped
+	}
 	if _, ok := m.get("vault:" + session); ok {
 		return false, nil
 	}
@@ -132,6 +147,9 @@ func (m *Memory) PutVault(_ context.Context, session string, blob []byte, ttl ti
 func (m *Memory) SetVault(_ context.Context, session string, blob []byte, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, stopped := m.get("stopped:" + session); stopped {
+		return ErrStopped
+	}
 	m.set("vault:"+session, blob, ttl)
 	return nil
 }
@@ -188,6 +206,9 @@ func (m *Memory) DeleteGrant(_ context.Context, handle string) error {
 func (m *Memory) PutExchanged(_ context.Context, session, key string, blob []byte, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, stopped := m.get("stopped:" + session); stopped {
+		return ErrStopped
+	}
 	m.set("xchg:"+session+":"+key, blob, ttl)
 	return nil
 }
@@ -329,8 +350,9 @@ func (m *Memory) ListSessions(_ context.Context, olderThan time.Time) ([]Session
 		}
 		_, info.HasGrant = m.get("vault:" + id)
 		_, info.Stopped = m.get("stopped:" + id)
+		_, info.CleanupPending = m.get("stop-pending:" + id)
 		info.Reservations = int64(len(m.ledger(SessionLedger(id)).res))
-		if info.Generation == nil && !info.HasGrant && info.Reservations == 0 {
+		if info.Generation == nil && !info.HasGrant && info.Reservations == 0 && !info.CleanupPending {
 			delete(m.sessions, id) // nothing held any more
 			continue
 		}

@@ -12,6 +12,7 @@ import os
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -695,7 +696,10 @@ def list_reconcile_inputs(tenant: str) -> ReconcileInputs:
                     since.isoformat() if since else None,
                 )
             )
-    listed = d.aps.get("/v1/sessions?older_than=15m") or []
+    # A terminated workflow never runs its own cleanup. Waiting for a session to
+    # become fifteen minutes old would miss T24's ten-minute convergence bound.
+    # The reconciler still checks Temporal closure before stopping any session.
+    listed = d.aps.get("/v1/sessions") or []
     if isinstance(listed, dict):
         listed = listed.get("sessions") or []
     sessions = [
@@ -744,9 +748,32 @@ def delete_orphan(o: OrphanPod) -> str:
 @activity.defn
 def close_session(c: ClosedSession) -> str:
     d = deps()
-    d.aps.post(f"/v1/sessions/{c.session.session_id}/stop", {})
+    steps = {"stop": lambda: d.aps.post(f"/v1/sessions/{c.session.session_id}/stop", {})}
     if c.session.grant_handle:
-        d.aps.delete(f"/v1/grants/{c.session.grant_handle}")
+        steps["grant"] = lambda: d.aps.delete(f"/v1/grants/{c.session.grant_handle}")
+    failures = {}
+    # Neither a slow stop nor a failed stop prevents the independent grant delete.
+    # Every step is idempotent, including retries of a partially completed activity.
+    with ThreadPoolExecutor(max_workers=len(steps)) as executor:
+        futures = {name: executor.submit(call) for name, call in steps.items()}
+        for name, future in futures.items():
+            result = "OK"
+            try:
+                future.result()
+            except Exception as exc:  # every independent step must be attempted
+                failures[name] = type(exc).__name__
+                result = "FAILED:" + type(exc).__name__
+            records.emit(
+                "cleanup_result",
+                session_id=c.session.session_id,
+                source="reconciler",
+                step=name,
+                result=result,
+            )
+    if failures:
+        raise ApplicationError(
+            "reconciler session cleanup incomplete", failures, type="CleanupFailed"
+        )
     return "OK"
 
 

@@ -47,7 +47,7 @@ FIELDS = {
     },
     "sandbox_replaced": {"session_id", "old_generation", "reason"},
     "session_finished": {"session_id", "outcome", "boundaries", "cumulative_tokens", "duration_ms"},
-    "cleanup_result": {"session_id", "generation", "result", "source", "pod"},
+    "cleanup_result": {"session_id", "generation", "result", "source", "pod", "step"},
     "cleanup_reconciled": {"tenant", "orphans_deleted", "orphans_unconfirmed", "sessions_closed"},
     "orphan_persisting": {"tenant", "pod", "session_id", "generation", "deleting_since"},
 }

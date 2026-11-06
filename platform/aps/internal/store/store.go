@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	// ErrConflict is returned when a generation is lower than the active one.
-	ErrConflict = errors.New("generation is not increasing")
+	// ErrConflict rejects generation rollback or any generation of a stopped session.
+	ErrConflict = errors.New("generation is not increasing or session is stopped")
+	// ErrStopped rejects late credential writes after terminal session revocation.
+	ErrStopped = errors.New("session is stopped")
 	// ErrNotFound is returned by Settle when no reservation exists for the decision.
 	ErrNotFound = errors.New("not found")
 )
@@ -42,10 +44,11 @@ type SessionInfo struct {
 	Generation  *int    `json:"generation"`
 	GrantHandle *string `json:"grant_handle"` // null when the session has no grant
 
-	Since        time.Time `json:"-"`
-	HasGrant     bool      `json:"-"`
-	Reservations int64     `json:"-"`
-	Stopped      bool      `json:"-"`
+	Since          time.Time `json:"-"`
+	HasGrant       bool      `json:"-"`
+	Reservations   int64     `json:"-"`
+	Stopped        bool      `json:"-"`
+	CleanupPending bool      `json:"-"`
 }
 
 type Store interface {
@@ -54,10 +57,14 @@ type Store interface {
 	// PinJTI pins jti to podUID unless it is already pinned, and returns the pinned UID.
 	PinJTI(ctx context.Context, jti, podUID string, exp time.Time) (string, error)
 
-	// SetGeneration records gen; an equal value is accepted, a lower one is ErrConflict.
+	// SetGeneration records gen; an equal value is accepted for a live session.
+	// Lower values and all values for a stopped session return ErrConflict.
 	SetGeneration(ctx context.Context, session string, gen int) error
 	ActiveGeneration(ctx context.Context, session string) (int, bool, error)
+	// MarkStopped atomically removes the active generation and fences later writes.
 	MarkStopped(ctx context.Context, session string) error
+	// CompleteStop clears discovery's pending receipt only after every stop step succeeds.
+	CompleteStop(ctx context.Context, session string) error
 	IsStopped(ctx context.Context, session string) (bool, error)
 
 	// PutVault stores blob only if no entry exists; false means one already exists.
