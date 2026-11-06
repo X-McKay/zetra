@@ -17,7 +17,7 @@ from pathlib import Path
 BACKEND = "llm-budget-conformance"
 TESTS = ("T13", "T13b")
 AGENTS = {"day": "conformance-budget-day", "session": "conformance-budget-session"}
-DAY_AGENTS = (AGENTS["day"], "conformance-budget-day-retry")
+DAY_AGENTS = (AGENTS["day"], "conformance-budget-day-retry", "conformance-budget-day-retry2")
 UUID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 TRACE = re.compile(r"[0-9a-f]{32}\Z")

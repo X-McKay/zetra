@@ -10,6 +10,8 @@ func TestBudgetObserverConfig(t *testing.T) {
 	}{
 		{"", "", false}, {"system:serviceaccount:agent-platform:conformance-harness", "conformance-budget-day,conformance-budget-session", false},
 		{"system:serviceaccount:agent-platform:conformance-harness", "conformance-budget-day-retry", false},
+		{"system:serviceaccount:agent-platform:conformance-harness", "conformance-budget-day-retry2", false},
+		{"system:serviceaccount:agent-platform:conformance-harness", "conformance-budget-day-retry3", true},
 		{"system:serviceaccount:agent-platform:conformance-harness", "conformance-budget-day-arbitrary", true},
 		{"alice", "conformance-budget-day", true}, {"system:serviceaccount:tenant-test:agent-conformance", "conformance-budget-day", true},
 		{"system:serviceaccount:agent-platform:conformance-harness", "", true}, {"", "conformance-budget-day", true},

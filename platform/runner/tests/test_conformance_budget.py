@@ -305,10 +305,10 @@ def test_extra_session_request_evidence_never_passes(source):
     assert evaluate_budget(**data)["result"] == "fail"
 
 
+@pytest.mark.parametrize("retry", ["conformance-budget-day-retry", "conformance-budget-day-retry2"])
 @pytest.mark.parametrize("mismatch", [None, "aps", "backend", "observations"])
-def test_explicit_retry_identity_must_match_every_trusted_source(mismatch):
+def test_explicit_retry_identity_must_match_every_trusted_source(mismatch, retry):
     data = evidence()
-    retry = "conformance-budget-day-retry"
     data["agent"] = retry
     for source in ("aps", "backend"):
         if source != mismatch:
@@ -325,7 +325,13 @@ def test_explicit_retry_identity_must_match_every_trusted_source(mismatch):
 
 
 @pytest.mark.parametrize(
-    "case,agent", [("day", "arbitrary"), ("session", "conformance-budget-day-retry")]
+    "case,agent",
+    [
+        ("day", "arbitrary"),
+        ("day", "conformance-budget-day-retry3"),
+        ("session", "conformance-budget-day-retry"),
+        ("session", "conformance-budget-day-retry2"),
+    ],
 )
 def test_arbitrary_budget_identity_is_rejected(case, agent):
     with pytest.raises(ValueError):
