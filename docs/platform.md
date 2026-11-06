@@ -56,6 +56,29 @@ gateway access logs must contain nonzero token usage. Missing capture, identity
 or usage evidence fails the test. The harness ServiceAccount needs pod/log read
 access in `vllm`; the GitOps deployment owns that RBAC and the key mounts.
 
+## Cache-separation qualification (T19)
+
+T19 requires a conformance release with the structured `probe_mcp` evidence
+interface. One tool boundary pins one agent token and sends 50 consecutive
+allowed/forbidden MCP cycles. The harness requires 100 HTTP statuses alternating
+200/403, 100 distinct APS decisions with matching tools/reasons and one token
+`jti`, and a measured MCP interval no greater than 10,000 ms. It correlates the
+requests using trace ids rather than relying on log ordering across APS replicas.
+
+The same probe then performs two main/fast model-route cycles. Each main request
+uses the admitted model and must return 200; each fast request uses that route's
+correct model name and must return 403 `deny.route_not_permitted`. Six-second
+pauses before, between and after these cycles allow the preceding model's budget
+reservation to settle. The model half has no ten-second limit. There are no
+retries that hide 429s or other failures; two cycles keep the explicit main calls
+plus the driver's two model boundaries within the existing burst of five.
+
+The harness reads the exact probe result from `state/state.json` in the final
+accepted snapshot, verifies the archive hash and bounds the member size. It
+does not grade the model's truncated summary. Missing, ambiguous or malformed
+snapshot evidence fails the gate. Earlier five-cycle T19 runs remain evidence
+only for the narrower behavior they exercised.
+
 ## Keyless signing (private Sigstore)
 
 The Registry Controller has three signature profiles, chosen with

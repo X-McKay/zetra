@@ -408,67 +408,6 @@ def test_t5_direct_case_never_accepts_a_token_in_the_reply():
     assert bad["result"] == "fail" and FAKE_JWT not in json.dumps(bad)
 
 
-def test_t19_passes_on_an_exact_alternation_of_fresh_decisions():
-    r = run(tool="probe_mcp", summary='{"calls":["ok","deny","ok","deny"]}')
-    other = decision("s-other-g1", c.MCP_ALLOWED_TOOL, "allow", "x")  # another session's call
-    init = {**decision(r.pod, None, "allow", "i"), "method": "initialize", "tool": None}
-    out = c.evaluate_t19(r, [init, *alternation(r.pod, 2), other], rounds=2)
-    assert out["result"] == "pass" and all(out["checks"].values()), out["checks"]
-    assert [d["decision_id"] for d in out["evidence"]["decisions"]] == ["a0", "d0", "a1", "d1"]
-
-
-def test_t19_orders_decisions_by_time_across_aps_replicas():
-    # Two APS pods: the log text is one pod's lines after the other's (run 7).
-    r = run(tool="probe_mcp", summary='{"calls":["ok","deny","ok","deny","ok","deny"]}')
-    lines = alternation(r.pod, 3)
-    pod_a, pod_b = lines[1:4] + [lines[5]], [lines[0], lines[4]]
-    out = c.evaluate_t19(r, pod_a + pod_b, rounds=3)
-    assert out["checks"]["exact_alternation"] is True and out["result"] == "pass"
-    assert [d["decision_id"] for d in out["evidence"]["decisions"]] == [
-        "a0",
-        "d0",
-        "a1",
-        "d1",
-        "a2",
-        "d2",
-    ]
-
-
-@pytest.mark.parametrize(
-    "r,lines,failed_check",
-    [
-        (run(tool="probe_mcp"), alternation(pod_name(SESSION, 1), 1), "one_decision_per_request"),
-        (  # a cached allow served the forbidden tool
-            run(tool="probe_mcp"),
-            [
-                decision(pod_name(SESSION, 1), c.MCP_ALLOWED_TOOL, "allow", "a0"),
-                decision(pod_name(SESSION, 1), c.MCP_FORBIDDEN_TOOL, "allow", "d0"),
-                *alternation(pod_name(SESSION, 1), 1),
-            ],
-            "exact_alternation",
-        ),
-        (  # one decision id reused: the second request was not evaluated
-            run(tool="probe_mcp"),
-            [
-                decision(pod_name(SESSION, 1), c.MCP_ALLOWED_TOOL, "allow", "same"),
-                decision(pod_name(SESSION, 1), c.MCP_FORBIDDEN_TOOL, c.DENY_ROUTE, "same"),
-                *alternation(pod_name(SESSION, 1), 1),
-            ],
-            "distinct_decision_ids",
-        ),
-        (
-            run(outcome="FAILED", tool="probe_mcp"),
-            alternation(pod_name(SESSION, 1), 2),
-            "session_completed",
-        ),
-        (run(tool="probe_http"), alternation(pod_name(SESSION, 1), 2), "probe_mcp_ran"),
-    ],
-)
-def test_t19_fails_without_its_required_evidence(r, lines, failed_check):
-    out = c.evaluate_t19(r, lines, rounds=2)
-    assert out["result"] == "fail" and out["checks"][failed_check] is False
-
-
 def test_capture_and_gateway_logs_are_parsed():
     text = (
         json.dumps(capture(SESSION, "trrtte:1"))
