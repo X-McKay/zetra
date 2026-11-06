@@ -228,3 +228,20 @@ get access; it needs no additional exec or fixture mutation privileges.
 Local subprocess and history tests establish implementation coverage only. The
 fixture must still pass the signed release pipeline and live admission, and a new
 retained report must establish the actual T25 gate. Historical failures remain.
+
+### Active-session disable, cancellation and policy drift
+
+Opt-in T15/T20 orchestration now runs in the harness Job against conformance-b.
+The bounded probe keeps sending requests during Agent disable/drift and real
+Temporal cancellation. Gateway statuses and APS source-replica decisions supply
+the verdict; no model summary substitutes for a 403. Tests require both warmed
+APS replicas, measured conservative timing bounds, controller-produced drift,
+failed new-session preflight and CRD image immutability.
+
+Cancellation deliberately injects a DELETE denial for one exact Pod name and UID
+through an operator-created namespaced Kyverno Policy. The harness restores that
+rule and the exact Agent spec under shield, refuses concurrent edits, and requires
+trusted cleanup to confirm Pod absence. The operator owns independent cleanup
+after Job failure. See [platform](platform.md#active-session-revocation-qualification-t15t20)
+for permissions, timing semantics and setup. No live T15/T20 pass is claimed by
+this implementation.

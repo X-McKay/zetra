@@ -131,6 +131,7 @@ STATUS_WORD = re.compile(r"\b([45][0-9]{2})\b")
 TESTS = ("T4", "T5", "T6", "T7", "T8", "T11", "T12", "T19", "T26")
 ADMISSION_TESTS = ("T9a", "T9b", "T22")
 PROTOCOL_TESTS = ("T25",)
+REVOCATION_TESTS = ("T15", "T20")
 DEFAULT_ARTIFACT_DIR = "/var/lib/agent-artifacts"
 TOKEN_STASH_MEMBER = "workspace/t26/token"  # what probe_token_stash writes, as the tar names it
 DENY_BOUND = "deny.token_bound_elsewhere"
@@ -1289,6 +1290,7 @@ class Harness:
         human_client_id: str = "agent-cli",
         human_jwks_url: str = "",
         protocol=None,
+        revocation=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1314,6 +1316,7 @@ class Harness:
             human_jwks_url or issuer.rstrip("/") + "/protocol/openid-connect/certs"
         )
         self.protocol = protocol
+        self.revocation = revocation
 
     async def run_session(
         self,
@@ -1604,6 +1607,8 @@ class Harness:
                     if t in ADMISSION_TESTS
                     else self
                 )
+                if t in REVOCATION_TESTS:
+                    target = self.revocation
                 if target is None:
                     raise ValueError("selected test requires its Kubernetes adapter")
                 results.append(await getattr(target, t.lower())())
@@ -1760,6 +1765,17 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
         human_jwks_url=os.environ.get("T5_HUMAN_JWKS_URL", ""),
         protocol=protocol,
     )
+    if any(t in REVOCATION_TESTS for t in args.tests):
+        from runner.conformance_revocation import RevocationHarness, RevocationOps
+
+        ops = RevocationOps(core, k8s.CustomObjectsApi(), args.tenant, poll=0.1)
+        harness.revocation = RevocationHarness(
+            ops,
+            temporal,
+            harness,
+            args.revocation_fixture_release,
+            allow_mutations=args.allow_revocation_mutations,
+        )
     return await harness.run(args.tests)
 
 
@@ -1779,6 +1795,15 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--protocol-fixture-agent", help="dedicated signed T25 protocol fixture")
     parser.add_argument("--protocol-fixture-release", help="that fixture's approved Ready release")
     parser.add_argument(
+        "--revocation-fixture-release",
+        help="T15/T20: signed Ready conformance-b release with probe_revocation",
+    )
+    parser.add_argument(
+        "--allow-revocation-mutations",
+        action="store_true",
+        help="temporarily disable/drift conformance-b and hold one sandbox deletion, then restore",
+    )
+    parser.add_argument(
         "--allow-admission-mutations",
         action="store_true",
         help="temporarily revoke approval/drift the explicit fixture, then restore",
@@ -1786,7 +1811,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)
-    supported = (*TESTS, *ADMISSION_TESTS, *PROTOCOL_TESTS)
+    supported = (*TESTS, *ADMISSION_TESTS, *PROTOCOL_TESTS, *REVOCATION_TESTS)
     known = {t.upper(): t for t in supported}
     args.tests = [
         known.get(t.strip().upper(), t.strip().upper()) for t in args.tests.split(",") if t.strip()
@@ -1802,6 +1827,13 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         parser.error(
             "T25 requires --protocol-fixture-agent conformance-protocol, explicit release, and --session-timeout >=1800"
         )
+    if any(t in REVOCATION_TESTS for t in args.tests):
+        if not args.allow_revocation_mutations or not args.revocation_fixture_release:
+            parser.error(
+                "T15/T20 require --revocation-fixture-release and --allow-revocation-mutations"
+            )
+        if args.agent == "conformance-b":
+            parser.error("revocation mutations must not target the primary conformance agent")
     if bool(args.admission_fixture_agent) != bool(args.admission_fixture_release):
         parser.error("admission fixture agent and release must be supplied together")
     if any(t in ("T9a", "T9b") for t in args.tests):

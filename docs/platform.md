@@ -161,3 +161,45 @@ render (`--out DIR` writes them). `--eval` and `--vuln` check local predicate
 JSON with the same conditions the controller applies. `--policies DIR` runs
 `kyverno apply` on the rendered pod; give it the shape policies only, since an
 unsigned local image cannot pass the verifyImages rules.
+
+## Active-session revocation qualification (T15/T20)
+
+Run these tests inside the `agent-platform` harness Job with
+`--tests T15,T20 --revocation-fixture-release RELEASE --allow-revocation-mutations`.
+The fixture is always the separate `conformance-b` Agent, whose signed release
+must include `probe_revocation`. No existing conformance-b sandbox may be active.
+The primary agent remains available for the other tests.
+
+The probe holds one token and issues bounded MCP initialize requests. The harness
+joins actual gateway HTTP responses to APS decisions by decision ID, session,
+pod and probe trace prefix. Both Ready APS replicas must provide baseline allows
+and later 403s. Model summaries, transport failures and pod disappearance are
+never denial evidence. T15 repeats disable/re-enable/cancel against the same two
+warm replicas. T20 adds a tool, checks controller-produced drift/not-ready within
+ten seconds, unchanged policy/ConfigMaps, active-session denial, real preflight
+refusal and a CRD-rejected server-side dry-run image edit.
+
+The operator precreates the temporary namespaced Kyverno Policy
+`tenant-test/conformance-revocation-delete-hold` with the inert rule returned by
+`runner.conformance_revocation.hold_rule()`. The harness may patch only this
+Policy and the fixture Agent/release by resource name. It temporarily holds
+DELETE of one exact test Pod name and UID. A Kyverno blocked PolicyViolation
+Event must identify the rule and related Pod UID. Real Temporal cancellation
+still runs normal `stop_session`; deletion is deliberately denied so the running
+sandbox can observe revocation. The policy is restored under shield before the
+existing trusted cleanup reconciler removes any remaining pod.
+
+Timing is conservative: mutation request-start to observed gateway 403 includes
+log delivery. The cancellation gate requires both replicas' responses observed
+within one second of cancellation request-start, in addition to measuring the
+actual APS stop event to a 403 on that same replica (plus one millisecond for
+timestamp truncation). This may fail on a slow observation path despite prompt
+revocation; it cannot understate the stop bound through cross-node clock skew.
+
+Restoration of the Agent spec, its per-resource Flux reconciliation annotation,
+inert Policy rule, original policy digest/ConfigMaps and pod cleanup are gates.
+A fresh successful session is also required. The operator independently removes
+the temporary Policy and RBAC after any run, including Job failure. The harness
+has no Pod mutation/exec, secret-read, status-write, or cluster-policy permission.
+These tests require new signed probe and runner images; unit tests are not live
+qualification results.
