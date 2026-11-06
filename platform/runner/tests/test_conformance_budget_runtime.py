@@ -160,13 +160,13 @@ async def test_cleanup_attempts_both_sessions_before_propagating_first_error(fir
     assert closed == ["control", "primary"]
 
 
-def test_daily_retry_cli_is_explicit_and_fixed():
+@pytest.mark.parametrize(
+    "identity", ["conformance-budget-day-retry", "conformance-budget-day-retry2"]
+)
+def test_daily_retry_cli_is_explicit_and_fixed(identity):
     args = ["--release", "main", "--tests", "T13", "--budget-day-release", "retry-release"]
     assert parse_args(args).budget_day_agent == "conformance-budget-day"
-    assert (
-        parse_args(args + ["--budget-day-agent", "conformance-budget-day-retry"]).budget_day_agent
-        == "conformance-budget-day-retry"
-    )
+    assert parse_args(args + ["--budget-day-agent", identity]).budget_day_agent == identity
     with pytest.raises(SystemExit):
         parse_args(args + ["--budget-day-agent", "arbitrary"])
     with pytest.raises(SystemExit):
@@ -177,7 +177,7 @@ def test_daily_retry_cli_is_explicit_and_fixed():
                 "--tests",
                 "T4",
                 "--budget-day-agent",
-                "conformance-budget-day-retry",
+                identity,
             ]
         )
 

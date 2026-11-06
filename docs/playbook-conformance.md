@@ -888,6 +888,22 @@ updated runner from merged main, verify installed/source equality, then coordina
 a new bounded operator capture during exact T4. No image was built, released or
 qualified by these tests; run31 and its absence of packet evidence remain intact.
 
+### Explicit second daily-budget retry identity
+
+`conformance-budget-day-retry2` adds one exact selectable T13 identity after
+run 30 consumed 1800 tokens on the first retry fixture before Kubernetes log
+deserialization blocked its evidence collection. Both previous daily ledgers
+and their failed reports are retained. The new signed fixture keeps the same
+2000-token daily limit, 300-token maximum reservation and 100-token actual cost;
+there is no reset, dynamic identity generation or added model permission.
+
+Runner CLI, APS read-only observer and deterministic backend admit only this
+additional fixed fixture name. An unrelated retry name is still rejected.
+A fresh signed unapproved release, exact gateway/observer/backend allowlists,
+and matching component images are prerequisites to a root-operated exclusive
+retry. Existing baseline, committed HTTP completion, restart-watch timing and
+restoration checks remain unchanged.
+
 ### T23 backend protocol expansion evidence
 
 The pinned agentgateway v1.7.0 MCP backend uses `sessionRouting: Stateless`.
