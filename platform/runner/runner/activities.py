@@ -67,6 +67,10 @@ SNAPSHOT_CMD = [
 ]
 # The exec channel has no end-of-input signal, so the archive is length-prefixed too.
 RESTORE_CMD = ["sh", "-c", 'head -c "$1" | tar -x -C /sandbox -f -', "restore"]
+# A seed (10.2) is another session's final snapshot: only its workspace enters the new sandbox.
+# Its state/ belongs to the donor (state.json names the donor's next boundary), and restoring
+# it makes the seeded session's first boundary a "boundary mismatch" (step rc 5).
+SEED_RESTORE_CMD = ["sh", "-c", 'head -c "$1" | tar -x -C /sandbox -f - workspace', "restore"]
 EXEC_DEADLINE = 290.0  # inside the 300 s start-to-close of run_boundary
 SNAPSHOT_DEADLINE = 110.0  # inside the 120 s start-to-close of snapshot_workspace
 READY_DEADLINE = 170.0
@@ -429,7 +433,8 @@ def wait_ready(g: GenIn) -> None:
             )
         if phase == "Running":  # Running implies every init container exited 0
             if g.restore:
-                _restore(d, ns, name, g.restore)
+                # The seed stays the restore source until this session commits a snapshot.
+                _restore(d, ns, name, g.restore, workspace_only=g.restore == g.inp.seed)
             created = pod.metadata.creation_timestamp
             records.emit(
                 "sandbox_created",
@@ -530,7 +535,7 @@ def snapshot_workspace(s: SnapshotIn) -> str:
     return key
 
 
-def _restore(d: Deps, ns: str, name: str, key: str) -> None:
+def _restore(d: Deps, ns: str, name: str, key: str, *, workspace_only: bool = False) -> None:
     digest, size = hashlib.sha256(), 0
     with tempfile.SpooledTemporaryFile(max_size=8 << 20) as buf:
         try:
@@ -555,7 +560,7 @@ def _restore(d: Deps, ns: str, name: str, key: str) -> None:
             res = d.run_exec(
                 ns,
                 name,
-                RESTORE_CMD + [str(size)],
+                (SEED_RESTORE_CMD if workspace_only else RESTORE_CMD) + [str(size)],
                 stdin=buf,
                 max_output=4096,
                 deadline=SNAPSHOT_DEADLINE,
