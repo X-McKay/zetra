@@ -296,7 +296,7 @@ def test_ops_use_actual_kubernetes_models_and_api_client_without_transport_calls
         metadata=client.V1ObjectMeta(name="worker", uid="worker-uid"),
         spec=client.V1PodSpec(
             containers=[client.V1Container(name="runner", image=image)],
-            service_account_name="session-runner-tenant-test",
+            service_account_name="session-runner",
         ),
         status=client.V1PodStatus(
             phase="Running",
@@ -331,7 +331,7 @@ def test_ops_use_actual_kubernetes_models_and_api_client_without_transport_calls
     ]
     actual = ops.workers()
     assert (
-        actual[0]["service_account"] == "session-runner-tenant-test"
+        actual[0]["service_account"] == "session-runner"
         and actual[0]["image"] == image
         and actual[0]["ready"] is True
     )
@@ -432,7 +432,7 @@ def test_worker_receipt_rejects_source_change_during_log_read(monkeypatch, fault
         metadata=client.V1ObjectMeta(name="worker", uid="worker-uid"),
         spec=client.V1PodSpec(
             containers=[client.V1Container(name="runner", image=image)],
-            service_account_name="session-runner-tenant-test",
+            service_account_name="session-runner",
         ),
         status=client.V1PodStatus(
             phase="Running",
@@ -626,3 +626,56 @@ async def test_case_deadline_cancels_hung_observation_and_still_restores_root_cl
         and report["evidence"]["cleanup"]["session_closed"]
     )
     assert cancels[0]["rpc_timeout"].total_seconds() == 5
+
+
+@pytest.mark.parametrize(
+    "service_account,accepted",
+    [
+        ("session-runner", True),
+        ("session-runner-tenant-test", False),
+        ("default", False),
+    ],
+)
+async def test_validate_requires_actual_trusted_worker_service_account(
+    monkeypatch, service_account, accepted
+):
+    from runner import conformance_generation_runtime as runtime
+    from tests.test_conformance_generation import config
+
+    cfg = config()
+    worker = {
+        "ready": True,
+        "image": cfg["worker_image"],
+        "image_id": "sha256:pinned",
+        "service_account": service_account,
+    }
+
+    def release(kind, name):
+        return {
+            "metadata": {"generation": 1},
+            "spec": {
+                "approval": {"approved": True},
+                "agent": "conformance-b"
+                if name == cfg["probe_release"]
+                else "conformance-checkpoint",
+            },
+            "status": {
+                "ready": True,
+                "signatureVerified": True,
+                "policyDrift": False,
+                "identityMode": "agent",
+            },
+        }
+
+    async def immediate(function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "read_io", immediate)
+    harness = runtime.GenerationHarness(
+        None, NS(object=release, workers=lambda: [worker]), NS(config=cfg, read=lambda: None)
+    )
+    if accepted:
+        assert await harness.validate() == worker
+    else:
+        with pytest.raises(ValueError, match="isolated trusted worker"):
+            await harness.validate()

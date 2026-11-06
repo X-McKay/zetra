@@ -411,7 +411,7 @@ class GenerationHarness:
             or not worker[0]["ready"]
             or worker[0]["image"] != self.cfg["worker_image"]
             or not worker[0]["image_id"]
-            or worker[0]["service_account"] != "session-runner-tenant-test"
+            or worker[0]["service_account"] != "session-runner"
         ):
             raise ValueError("T21 isolated trusted worker is not exact Ready pinned runner")
         return worker[0]
