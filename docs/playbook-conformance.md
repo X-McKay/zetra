@@ -157,7 +157,8 @@ compatibility tuples and measurement limits.
 
 `platform/runner` adds opt-in T9a, T9b and T22 cases to `agent-conformance`.
 These are implementation and local-test coverage; they establish no live-cluster
-pass until a retained report records the named Kyverno policy and rule. Every
+pass until a retained report records the expected admission evidence. T9b requires
+the named Kyverno policy and rule. Every
 malformed Pod and ephemeral-container request uses server-side dry-run. T22's
 attach request targets a real, valid runner sandbox, which is cancelled and
 confirmed absent afterwards. Generic RBAC or API errors never count as admission
@@ -185,3 +186,13 @@ fixture, AgentRelease `get` restricted to the signed/unsigned fixture releases,
 and AgentRelease `patch` restricted to the signed release. No status permission
 is required. Existing Temporal client access remains necessary. Kubernetes RBAC
 cannot restrict a verb to dry-run; this guarantee is in the harness implementation.
+
+Run15 exposed that Pod Security Admission rejects T22's hostPath and hostNetwork
+cases before Kyverno. Those two shapes now accept only their exact HTTP403
+Restricted-profile violation messages, while preserving the named Kyverno
+alternative. Reports retain the admission layer, policy/profile, exact violation
+and denial text. Unrelated PSA violations, generic RBAC/API errors and every T9b
+case remain strict errors. The extra-container case clones the valid container,
+including its security context, so it reaches the intended container-count rule.
+All direct requests remain server-side dry-runs; no cluster policy is weakened.
+The original run15 errors remain historical evidence pending a new live rerun.
