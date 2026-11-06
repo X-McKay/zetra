@@ -238,6 +238,16 @@ the verdict; no model summary substitutes for a 403. Tests require both warmed
 APS replicas, measured conservative timing bounds, controller-produced drift,
 failed new-session preflight and CRD image immutability.
 
+T15 mutates `Agent.spec.enabled: false` on the exact `conformance-b` Agent,
+then restores its original spec. `deny.release_unapproved` is the specified APS
+reason for a disabled Agent as well as an unapproved release; the reason alone
+does not identify the edit. Reports now retain the exact Agent target/UID,
+resource versions, spec patch and observed enabled value for disable and restore.
+Both writes require current-object readback before their evidence is accepted.
+The five-second edit bound, both-replica denial requirement and first-actual-stop
+cancellation clock are unchanged. This adds provenance to the existing Agent
+mutation path; it does not reclassify earlier run results.
+
 Cancellation deliberately injects a DELETE denial for one exact Pod name and UID
 through an operator-created namespaced Kyverno Policy. The harness restores that
 rule and the exact Agent spec under shield, refuses concurrent edits, and requires
