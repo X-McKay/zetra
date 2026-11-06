@@ -274,3 +274,23 @@ def test_persistent_backstop_failure_is_explicit_and_never_disarms_held_cleanup(
     active.release()
     assert active.cleanup_confirmed and core.pod.metadata.finalizers == []
     assert active.receipt["operator_errors"] == ["TimeoutError"] * 3
+
+
+def test_recovered_removal_timeout_is_durable_and_still_fails_context():
+    core = Core()
+    patch = core.patch_namespaced_pod
+
+    def timeout_after_removal(*args, **kwargs):
+        result = patch(*args, **kwargs)
+        if core.pod.metadata.finalizers == []:
+            raise TimeoutError("private-response-not-exported")
+        return result
+
+    core.patch_namespaced_pod = timeout_after_removal
+    with pytest.raises(RuntimeError, match="recorded operator errors"):
+        with guard(core):
+            pass
+    assert core.pod.metadata.finalizers == []
+    receipt = Control(core).finalizer_receipt("00000000-0000-4000-8000-000000000002")
+    assert receipt["operator_errors"] == ["TimeoutError"]
+    assert receipt["finalizer_removed"] is True and receipt["hold_expired"] is False

@@ -176,6 +176,7 @@ class FinalizerGuard:
                 self.cleanup_confirmed = True  # no Pod mutation was ever attempted
                 self.timer.cancel()
                 return
+            patch_error = None
             try:
                 pod = self.pod()
                 finalizers = list(pod.metadata.finalizers or [])
@@ -203,7 +204,9 @@ class FinalizerGuard:
                 started = self.now_ns()
                 try:
                     self.patch_finalizers(pod, [f for f in finalizers if f != FINALIZER])
-                except Exception:
+                except Exception as exc:
+                    patch_error = exc
+                    self.receipt["operator_errors"].append(type(exc).__name__)
                     # A timeout is not proof of failure; verify the exact old UID.
                     try:
                         if FINALIZER in (self.pod().metadata.finalizers or []):
@@ -231,7 +234,8 @@ class FinalizerGuard:
                 if isinstance(exc, ApiException) and exc.status == 404:
                     self.cleanup_confirmed = True  # exact old name is absent
                 self.error_type = type(exc).__name__
-                self.receipt["operator_errors"].append(type(exc).__name__)
+                if exc is not patch_error:
+                    self.receipt["operator_errors"].append(type(exc).__name__)
                 raise
             finally:
                 if self.cleanup_confirmed:
@@ -280,3 +284,5 @@ class FinalizerGuard:
             raise RuntimeError("root T21 guard failed: " + self.error_type)
         if self.receipt["hold_expired"]:
             raise TimeoutError("root T21 finalizer hold expired")
+        if self.receipt["operator_errors"]:
+            raise RuntimeError("root T21 guard recorded operator errors")
