@@ -329,9 +329,17 @@ def test_transport_join_requires_complete_unique_selected_session_ids(fault):
                 "x-agent-id": "tenant-test/conformance-checkpoint",
                 "x-agent-generation": "1",
             },
-            "status": 200,
+            "method": "POST",
+            "path": "/mcp",
+            "rpc_method": rpc,
+            "status": 202 if rpc == "notifications/initialized" else 200,
         }
         for row in aps
+        for rpc in (
+            ["initialize"]
+            if row["method"] == "initialize"
+            else ["initialize", "notifications/initialized", row["method"]]
+        )
     ]
     if fault == "extra_capture":
         capture.append(

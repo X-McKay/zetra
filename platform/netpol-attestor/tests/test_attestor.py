@@ -138,7 +138,9 @@ def _pod(name, ip, ns="tenant-a", annotations=None, phase="Running", deleting=Fa
         metadata=SimpleNamespace(
             name=name,
             namespace=ns,
-            annotations=annotations,
+            uid="b68ebc6f-54ec-44f9-86cf-353aeff3eb66",
+            resource_version="123",
+            annotations=dict(annotations) if annotations is not None else None,
             deletion_timestamp=NOW if deleting else None,
         ),
         status=SimpleNamespace(pod_ip=ip, phase=phase),
@@ -155,8 +157,27 @@ class FakeCore:
         assert label_selector == "agentplatform.io/sandbox=true"
         return SimpleNamespace(items=self.pods)
 
-    def patch_namespaced_pod(self, name, namespace, body):
-        self.patches.append((namespace, name, body["metadata"]["annotations"][attestor.ANNOTATION]))
+    def patch_namespaced_pod(self, name, namespace, body, **kwargs):
+        pod = next(
+            p for p in self.pods if (p.metadata.name, p.metadata.namespace) == (name, namespace)
+        )
+        assert body[0]["value"] == pod.metadata.uid
+        assert body[1]["value"] == pod.metadata.resource_version
+        op = body[-1]
+        if op["op"] == "remove":
+            value = None
+            pod.metadata.annotations.pop(attestor.ANNOTATION)
+        else:
+            value = op["value"]
+            if isinstance(value, dict):
+                value = value[attestor.ANNOTATION]
+            pod.metadata.annotations = {
+                **(pod.metadata.annotations or {}),
+                attestor.ANNOTATION: value,
+            }
+        pod.metadata.resource_version = "124"
+        self.patches.append((namespace, name, value))
+        return pod
 
 
 def test_run_pass(monkeypatch):

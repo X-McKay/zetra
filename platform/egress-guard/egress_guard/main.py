@@ -15,14 +15,44 @@ import argparse
 import ast
 import datetime
 import errno
+import itertools
 import json
 import pathlib
+import re
 import select
 import socket
 import sys
 import time
+import uuid
 
 EXIT_OK, EXIT_LEAK, EXIT_TIMEOUT, EXIT_USAGE = 0, 3, 4, 2
+PROCESS_ID = str(uuid.uuid4())
+SEQUENCE = itertools.count(1)
+
+
+def receipt(event: str, **fields) -> None:
+    print(
+        json.dumps(
+            {
+                "schema": "egress-guard-v1",
+                "event": event,
+                "process_id": PROCESS_ID,
+                "sequence": next(SEQUENCE),
+                "observed_ns": time.time_ns(),
+                "monotonic_ns": time.monotonic_ns(),
+                **fields,
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+
+
+def annotation_fields(value: str) -> dict:
+    # Do not export arbitrary Downward API content. This format narrows only
+    # evidence eligibility, never the existing guard's acceptance predicate.
+    safe = re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ;KUBE-POD-FW-[A-Z0-9]{1,32}", value)
+    return {"annotation_recorded": bool(safe), "annotation": value if safe else None}
 
 
 def parse_target(value: str) -> tuple[str, int]:
@@ -76,12 +106,16 @@ def valid_attestation(value: str) -> bool:
     return True
 
 
-def attested(path: pathlib.Path, key: str) -> bool:
+def attestation_value(path: pathlib.Path, key: str) -> str | None:
     try:
         value = read_annotations(path).get(key)
     except (OSError, UnicodeDecodeError):
-        return False
-    return value is not None and valid_attestation(value)
+        return None
+    return value if value is not None and valid_attestation(value) else None
+
+
+def attested(path: pathlib.Path, key: str) -> bool:
+    return attestation_value(path, key) is not None
 
 
 def guard(a: argparse.Namespace) -> int:
@@ -93,12 +127,19 @@ def guard(a: argparse.Namespace) -> int:
         for host, port in forbidden:
             if can_connect(host, port, a.connect_timeout):
                 print(f"LEAK {host}:{port}", file=sys.stderr, flush=True)
+                receipt("guard_exit", exit_code=EXIT_LEAK)
                 return EXIT_LEAK  # immediate failure; never retried
-        if attested(attestation, a.attestation_key) and can_connect(*gateway, a.connect_timeout):
-            print("egress-guard ok: attested, gateway reachable", flush=True)
-            return EXIT_OK
+        value = attestation_value(attestation, a.attestation_key)
+        if value is not None:
+            observation = {"observation_id": str(uuid.uuid4()), **annotation_fields(value)}
+            receipt("annotation_observed", **observation)
+            if can_connect(*gateway, a.connect_timeout):
+                print("egress-guard ok: attested, gateway reachable", flush=True)
+                receipt("guard_exit", exit_code=EXIT_OK, **observation)
+                return EXIT_OK
         time.sleep(a.interval)
     print("no attestation or gateway unreachable within timeout", file=sys.stderr, flush=True)
+    receipt("guard_exit", exit_code=EXIT_TIMEOUT)
     return EXIT_TIMEOUT
 
 

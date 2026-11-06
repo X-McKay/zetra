@@ -46,6 +46,12 @@ def checkpoint_state(root, key):
 
 
 def read_evidence(session, aps, gateway, captures):
+    """Join one APS/gateway decision to the exact pinned stateless MCP expansion.
+
+    v1.7.0 initializes an upstream session before each non-initialize legacy
+    request. Those two handshake messages carry the same decision ID as the
+    original request; they are not additional tools/call completions.
+    """
     selected_aps = [
         d for d in aps if d.get("session_id") == session and ("decision_id" in d or d.get("route"))
     ]
@@ -59,40 +65,81 @@ def read_evidence(session, aps, gateway, captures):
         "capture": [c.get("x_agent", {}).get("x-agent-decision-id") for c in selected_captures],
     }
     complete = (
-        all(
-            all(isinstance(key, str) and key for key in values) and len(values) == len(set(values))
-            for values in ids.values()
-        )
+        all(all(isinstance(key, str) and key for key in values) for values in ids.values())
+        and all(len(ids[source]) == len(set(ids[source])) for source in ("aps", "gateway"))
         and set(ids["aps"]) == set(ids["gateway"]) == set(ids["capture"])
         and all(d.get("route") == "mcp" and d.get("backend") == "kubernetes" for d in selected_aps)
         and all(g.get("http.path") == "/kubernetes/mcp" for g in selected_gateway)
     )
-    decisions = [d for d in selected_aps if d.get("method") == "tools/call"]
-    records = []
-    for d in decisions:
-        key = d.get("decision_id")
+    records, expansions = [], []
+    for d in selected_aps:
+        key, method = d.get("decision_id"), d.get("method")
+        # Match globally by ID too: a changed session header must not disappear
+        # from the join just because it no longer selects this session.
         gw = [g for g in gateway if g.get("agent.decision_id") == key]
         cp = [c for c in captures if c.get("x_agent", {}).get("x-agent-decision-id") == key]
-        headers = cp[0].get("x_agent", {}) if len(cp) == 1 else {}
+        expected = (
+            ["initialize"]
+            if method == "initialize"
+            else ["initialize", "notifications/initialized", method]
+        )
+        bound = all(
+            c.get("x_agent", {}).get("x-agent-session-id") == session
+            and c.get("x_agent", {}).get("x-agent-id") == "tenant-test/conformance-checkpoint"
+            and c.get("x_agent", {}).get("x-agent-generation") == str(d.get("generation"))
+            and c.get("method") == "POST"
+            and c.get("path") == "/mcp"
+            for c in cp
+        )
+        valid = (
+            method in {"initialize", "notifications/initialized", "tools/list", "tools/call"}
+            and d.get("reason") == "allow"
+            and sum(row.get("decision_id") == key for row in aps) == 1
+            and len(gw) == 1
+            and gw[0].get("agent.session_id") == session
+            and str(gw[0].get("http.status"))
+            == ("202" if method == "notifications/initialized" else "200")
+            and [c.get("rpc_method") for c in cp] == expected
+            and all(
+                c.get("status") == (202 if m == "notifications/initialized" else 200)
+                for c, m in zip(cp, expected)
+            )
+            and bound
+        )
+        complete = complete and valid
+        expansions.append(
+            {
+                "decision_id": key,
+                "method": method,
+                "expected": expected,
+                "observed": [c.get("rpc_method") for c in cp],
+                "valid": valid,
+            }
+        )
+        if method != "tools/call":
+            continue
+        calls = [c for c in cp if c.get("rpc_method") == "tools/call"]
         records.append(
             {k: d.get(k) for k in ("decision_id", "generation", "pod", "tool", "reason")}
         )
         records[-1].update(
             gateway_count=len(gw),
-            capture_count=len(cp),
-            gateway_status=gw[0].get("http.status") if len(gw) == 1 else None,
-            capture_status=cp[0].get("status") if len(cp) == 1 else None,
-            capture_bound=(
-                headers.get("x-agent-session-id") == session
-                and headers.get("x-agent-id") == "tenant-test/conformance-checkpoint"
-                and headers.get("x-agent-generation") == str(d.get("generation"))
+            capture_count=len(calls),
+            backend_request_count=len(cp),
+            handshake_count=sum(
+                c.get("rpc_method") in {"initialize", "notifications/initialized"} for c in cp
             ),
+            gateway_status=gw[0].get("http.status") if len(gw) == 1 else None,
+            capture_status=calls[0].get("status") if len(calls) == 1 else None,
+            capture_bound=valid,
         )
     return {
         "reads": records,
         "read_coverage": {
             "complete": complete,
             "ids": ids,
+            "backend_requests": len(selected_captures),
+            "expansions": expansions,
             "control_methods": dict(
                 Counter(
                     str(d.get("method")) for d in selected_aps if d.get("method") != "tools/call"
