@@ -9,6 +9,7 @@ that signal never arrives, and always removes only its exact test finalizer.
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ from kubernetes.client.exceptions import ApiException
 
 from runner.activities import pod_name
 from runner.conformance_generation_control import FINALIZER, NAMESPACE
+from runner.conformance_lifecycle_control import canonical_uuid
 
 
 class FinalizerGuard:
@@ -41,6 +43,8 @@ class FinalizerGuard:
             != 0
         ):
             raise ValueError("root T21 guard requires its own API client with retries=0")
+        if not canonical_uuid(pod_uid) or not canonical_uuid(worker_uid):
+            raise ValueError("root T21 requires exact Pod and worker UUIDs")
         self.core, self.control = core, control
         self.pod_uid, self.worker_uid = pod_uid, worker_uid
         self.session = control.config["sessions"]["blocked_deletion"]
@@ -58,9 +62,14 @@ class FinalizerGuard:
         }
         self.lock = threading.Lock()
         self.timer = timer_factory(hold_seconds, self._expire)
-        self.timer.daemon = True
+        # Keep the owning process alive if __enter__ raises before a context
+        # manager can invoke __exit__. Only confirmed cleanup cancels this owner.
+        self.timer.daemon = False
         self.error_type = None
         self.add_resource_version = None
+        self.cleanup_confirmed = False
+        self.persistent_cleanup_failure = False
+        self._retry_sleep = time.sleep
 
     def pod(self):
         pod = self.core.read_namespaced_pod(self.name, "tenant-test", _request_timeout=5)
@@ -160,7 +169,12 @@ class FinalizerGuard:
 
     def release(self):
         with self.lock:
-            if self.receipt["finalizer_removed"]:
+            if self.cleanup_confirmed:
+                self.timer.cancel()
+                return
+            if self.add_resource_version is None and not self.receipt["finalizer_added"]:
+                self.cleanup_confirmed = True  # no Pod mutation was ever attempted
+                self.timer.cancel()
                 return
             try:
                 pod = self.pod()
@@ -169,10 +183,12 @@ class FinalizerGuard:
                     if self.receipt["finalizer_added"]:
                         raise ValueError("T21 finalizer disappeared before guarded removal")
                     if self.add_resource_version is None:
+                        self.cleanup_confirmed = True
                         return
                     if pod.metadata.resource_version != self.add_resource_version:
                         # Original JSON Patch tested its old RV, so it cannot
                         # commit after this newer version was observed.
+                        self.cleanup_confirmed = True
                         return
                     # An add response may have been lost before application.
                     # Commit our own exact finalizer CAS first, advancing RV so
@@ -201,6 +217,7 @@ class FinalizerGuard:
                 except ApiException as exc:
                     if exc.status != 404:
                         raise
+                self.cleanup_confirmed = True
                 old = self.control.finalizer_receipt(self.pod_uid)
                 self.receipt.update(
                     finalizer_removed=True,
@@ -211,21 +228,48 @@ class FinalizerGuard:
                 self.write("receipt-blocked_deletion", self.receipt, expected=old)
                 self.error_type = None
             except Exception as exc:
+                if isinstance(exc, ApiException) and exc.status == 404:
+                    self.cleanup_confirmed = True  # exact old name is absent
                 self.error_type = type(exc).__name__
                 self.receipt["operator_errors"].append(type(exc).__name__)
                 raise
             finally:
-                self.timer.cancel()
+                if self.cleanup_confirmed:
+                    self.timer.cancel()
 
     def _expire(self):
         with self.lock:
-            if self.receipt["finalizer_removed"]:
+            if self.cleanup_confirmed:
                 return
             self.receipt["hold_expired"] = True
-        try:
-            self.release()
-        except Exception:
-            pass  # retained as error_type; never print API exception/credentials
+        # Every API request is bounded, retries=0. Reconcile fresh exact-UID
+        # state on each attempt; a transient failure cannot disarm the owner.
+        for attempt in range(3):
+            try:
+                self.release()
+            except Exception:
+                if self.cleanup_confirmed:
+                    return
+            if self.cleanup_confirmed:
+                return
+            if attempt < 2:
+                self._retry_sleep(1)
+        self.persistent_cleanup_failure = True
+        print(
+            json.dumps(
+                {
+                    "event": "t21_root_persistent_cleanup_failure",
+                    "run_id": self.control.config["run_id"],
+                    "session_id": self.session,
+                    "pod_uid": self.pod_uid,
+                    "attempts": 3,
+                    "error_type": self.error_type,
+                    "action": "root must retain cleanup ownership; qualification failed",
+                }
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
 
     def __exit__(self, *_):
         self.release()

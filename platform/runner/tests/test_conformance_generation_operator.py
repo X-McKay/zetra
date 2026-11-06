@@ -1,5 +1,6 @@
 import copy
 import json
+import itertools
 from types import SimpleNamespace as NS
 
 import pytest
@@ -13,12 +14,14 @@ from tests.test_conformance_generation import config
 class Timer:
     def __init__(self, seconds, function):
         self.seconds, self.function = seconds, function
+        self.cancelled = False
+        self.started = False
 
     def start(self):
-        pass
+        self.started = True
 
     def cancel(self):
-        pass
+        self.cancelled = True
 
     def join(self):
         pass
@@ -35,7 +38,7 @@ class Core:
         }
         self.pod = NS(
             metadata=NS(
-                uid="pod-uid",
+                uid="00000000-0000-4000-8000-000000000002",
                 resource_version="1",
                 labels={
                     "agentplatform.io/" + k: v
@@ -87,12 +90,12 @@ class Core:
 
 
 def guard(core):
-    ticks = iter([100, 200])
+    ticks = itertools.count(100, 100)
     return FinalizerGuard(
         core,
         Control(core),
-        "pod-uid",
-        "worker-uid",
+        "00000000-0000-4000-8000-000000000002",
+        "00000000-0000-4000-8000-000000000001",
         timer_factory=Timer,
         now_ns=lambda: next(ticks),
         boot_id=core.cfg["run_id"],
@@ -104,9 +107,12 @@ def test_context_always_removes_exact_finalizer_and_records_root_clock_bounds():
     with guard(core):
         assert core.pod.metadata.finalizers == [FINALIZER]
         command = json.loads(core.doc["data"]["command-blocked_deletion"])
-        assert command["pod_uid"] == "pod-uid" and command["worker_uid"] == "worker-uid"
+        assert (
+            command["pod_uid"] == "00000000-0000-4000-8000-000000000002"
+            and command["worker_uid"] == "00000000-0000-4000-8000-000000000001"
+        )
     assert core.pod.metadata.finalizers == []
-    receipt = Control(core).finalizer_receipt("pod-uid")
+    receipt = Control(core).finalizer_receipt("00000000-0000-4000-8000-000000000002")
     assert receipt["finalizer_added"] and receipt["finalizer_removed"]
     assert (receipt["removal_started_ns"], receipt["removal_acknowledged_ns"]) == (100, 200)
 
@@ -169,6 +175,102 @@ def test_ambiguous_unapplied_add_is_fenced_before_final_cleanup():
         guard(core).__enter__()
     assert core.pod.metadata.finalizers == []
     assert len(core.patches) == 2  # own add changes RV, then own removal; old CAS is stale
-    receipt = Control(core).finalizer_receipt("pod-uid")
+    receipt = Control(core).finalizer_receipt("00000000-0000-4000-8000-000000000002")
     assert receipt["operator_errors"] == ["TimeoutError"]
     assert receipt["finalizer_removed"] is True
+
+
+def test_enter_ambiguous_add_and_first_cleanup_failure_keep_backstop_armed():
+    core = Core()
+    core.fail_add = True
+    read = core.read_namespaced_pod
+    failed = False
+
+    def transient(*args, **kwargs):
+        nonlocal failed
+        if core.patches and not failed:
+            failed = True
+            raise TimeoutError("private-response-never-exported")
+        return read(*args, **kwargs)
+
+    core.read_namespaced_pod = transient
+    active = guard(core)
+    with pytest.raises(TimeoutError):
+        active.__enter__()
+    assert core.pod.metadata.finalizers == [FINALIZER]
+    assert active.timer.started and not active.timer.cancelled
+    assert active.timer.daemon is False
+    active.timer.function()
+    assert core.pod.metadata.finalizers == []
+    assert active.cleanup_confirmed is True and active.timer.cancelled
+    receipt = Control(core).finalizer_receipt("00000000-0000-4000-8000-000000000002")
+    assert receipt["hold_expired"] is True and receipt["operator_errors"] == [
+        "TimeoutError",
+        "TimeoutError",
+    ]
+
+
+@pytest.mark.parametrize("fault", ["read_timeout", "patch_conflict"])
+def test_backstop_reconciles_transient_failures_before_confirmed_cleanup(fault):
+    from kubernetes.client.exceptions import ApiException
+
+    core = Core()
+    active = guard(core)
+    active.__enter__()
+    active._retry_sleep = lambda _: None
+    calls = 0
+    read = core.read_namespaced_pod
+    patch = core.patch_namespaced_pod
+
+    def transient_read(*args, **kwargs):
+        nonlocal calls
+        if fault == "read_timeout" and calls < 2:
+            calls += 1
+            raise TimeoutError("private-body-not-exported")
+        return read(*args, **kwargs)
+
+    def transient_patch(*args, **kwargs):
+        nonlocal calls
+        if fault == "patch_conflict" and calls < 2:
+            calls += 1
+            raise ApiException(status=409, reason="private-body-not-exported")
+        return patch(*args, **kwargs)
+
+    core.read_namespaced_pod = transient_read
+    core.patch_namespaced_pod = transient_patch
+    active.timer.function()
+    assert calls == 2 and active.cleanup_confirmed and active.timer.cancelled
+    assert core.pod.metadata.finalizers == []
+    receipt = Control(core).finalizer_receipt("00000000-0000-4000-8000-000000000002")
+    assert receipt["hold_expired"] is True
+    assert len(receipt["operator_errors"]) == 2
+    assert not active.persistent_cleanup_failure
+
+
+def test_persistent_backstop_failure_is_explicit_and_never_disarms_held_cleanup(capsys):
+    core = Core()
+    active = guard(core)
+    active.__enter__()
+    active._retry_sleep = lambda _: None
+    read = core.read_namespaced_pod
+    calls = 0
+
+    def unavailable(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        raise TimeoutError("Bearer sensitive-response-never-exported")
+
+    core.read_namespaced_pod = unavailable
+    active.timer.function()
+    assert calls == 3 and active.persistent_cleanup_failure
+    assert not active.cleanup_confirmed and not active.timer.cancelled
+    assert core.pod.metadata.finalizers == [FINALIZER]
+    output = capsys.readouterr()
+    notice = json.loads(output.err)
+    assert notice["event"] == "t21_root_persistent_cleanup_failure" and notice["attempts"] == 3
+    assert "sensitive-response" not in output.out + output.err
+    # Root explicitly retains ownership and can finish after the outage clears.
+    core.read_namespaced_pod = read
+    active.release()
+    assert active.cleanup_confirmed and core.pod.metadata.finalizers == []
+    assert active.receipt["operator_errors"] == ["TimeoutError"] * 3

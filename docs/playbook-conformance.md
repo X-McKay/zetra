@@ -1198,7 +1198,13 @@ fresh ready-delete signal. Supply a dedicated root API client configured with
 `retries=0` before construction; each guard API request has a five-second timeout. Its context arms an independent maximum 720-second
 hold before the first mutation, performs exact UID/RV patches, writes only the
 blocked command/receipt, and removes its own finalizer in `finally` or on hold
-expiry even if no scheduled-removal gate arrives. It preserves other finalizers
+expiry even if no scheduled-removal gate arrives. The non-daemon backstop keeps
+the owning process alive even when context entry and its immediate cleanup both
+fail. Failed reads/PATCH conflicts/timeouts never cancel that backstop; expiry
+reconciles fresh exact-UID state with three bounded attempts and one-second retry
+spacing. Only confirmed absence/removal disarms cleanup. Exhausted attempts emit
+a fixed typed persistent-cleanup-failure event and retain explicit root cleanup
+ownership; they do not silently succeed or export API error bodies. It preserves other finalizers
 and refuses replacement UIDs. An ambiguous, not-yet-applied add is fenced by
 a verified resourceVersion-changing own-finalizer CAS before removal, preventing
 its older CAS from applying after cleanup. The root coordinator must keep the guard process
