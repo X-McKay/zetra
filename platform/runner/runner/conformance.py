@@ -1294,6 +1294,7 @@ class Harness:
         protocol=None,
         revocation=None,
         budget=None,
+        fail_closed=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1321,6 +1322,7 @@ class Harness:
         self.protocol = protocol
         self.revocation = revocation
         self.budget = budget
+        self.fail_closed = fail_closed
 
     async def run_session(
         self,
@@ -1615,6 +1617,8 @@ class Harness:
                     target = self.budget
                 if t in REVOCATION_TESTS:
                     target = self.revocation
+                if t == "T17":
+                    target = self.fail_closed
                 if target is None:
                     raise ValueError("selected test requires its Kubernetes adapter")
                 results.append(await getattr(target, t.lower())())
@@ -1811,6 +1815,19 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             args.revocation_fixture_release,
             allow_mutations=args.allow_revocation_mutations,
         )
+    if "T17" in args.tests:
+        from runner.conformance_fail_closed_runtime import FailClosedHarness, OutageOps
+
+        harness.fail_closed = FailClosedHarness(
+            temporal,
+            OutageOps(core, k8s.CustomObjectsApi(), k8s.AppsV1Api()),
+            harness.gateway_logs,
+            args.fail_closed_fixture_release,
+            args.aps_outage_marker,
+            args.aps_outage_duration,
+            harness.artifact_dir,
+            timeout=args.session_timeout,
+        )
     return await harness.run(args.tests)
 
 
@@ -1827,6 +1844,18 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--admission-fixture-agent", help="dedicated T9a/T9b mutation fixture")
     parser.add_argument("--admission-fixture-release", help="that fixture's signed Ready release")
     parser.add_argument("--admission-unsigned-release", help="approved, unsigned fixture release")
+    parser.add_argument(
+        "--fail-closed-fixture-release", help="T17 signed Ready conformance-b release"
+    )
+    parser.add_argument(
+        "--aps-outage-marker", help="T17 operator receipt marker: 16 lowercase hex digits"
+    )
+    parser.add_argument("--aps-outage-duration", type=int, default=180)
+    parser.add_argument(
+        "--observe-aps-outage",
+        action="store_true",
+        help="T17: observe operator-controlled APS outage; never mutate",
+    )
     parser.add_argument("--protocol-fixture-agent", help="dedicated signed T25 protocol fixture")
     parser.add_argument("--protocol-fixture-release", help="that fixture's approved Ready release")
     parser.add_argument(
@@ -1852,7 +1881,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)
-    supported = (*TESTS, *ADMISSION_TESTS, *PROTOCOL_TESTS, *REVOCATION_TESTS, *BUDGET_TESTS)
+    supported = (*TESTS, *ADMISSION_TESTS, *PROTOCOL_TESTS, *REVOCATION_TESTS, *BUDGET_TESTS, "T17")
     known = {t.upper(): t for t in supported}
     args.tests = [
         known.get(t.strip().upper(), t.strip().upper()) for t in args.tests.split(",") if t.strip()
@@ -1860,6 +1889,17 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     unknown = [t for t in args.tests if t not in supported]
     if unknown:
         parser.error(f"unknown tests {unknown}; known: {', '.join(supported)}")
+    if "T17" in args.tests and not (
+        args.tests == ["T17"]
+        and args.tenant == "tenant-test"
+        and args.observe_aps_outage
+        and args.fail_closed_fixture_release
+        and re.fullmatch(r"[0-9a-f]{16}", args.aps_outage_marker or "")
+        and 60 <= args.aps_outage_duration <= 240
+    ):
+        parser.error(
+            "T17 requires exclusive selection, tenant-test, explicit signed fixture, 16-hex marker and --observe-aps-outage (duration 60..240)"
+        )
     if "T25" in args.tests and not (
         args.protocol_fixture_agent == "conformance-protocol"
         and args.protocol_fixture_release

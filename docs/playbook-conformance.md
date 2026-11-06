@@ -341,3 +341,85 @@ Local Redis/memory races, HTTP lifecycle tests and Temporal history replays cove
 these fixes. They do not constitute live T24 qualification: the retained live
 report must measure each fault's cleanup within ten minutes and independently
 confirm Pod absence, no grant and no active generation.
+
+## T17: operator-controlled APS outage
+
+T17 is opt-in and exclusive. A newly signed `conformance-b` release containing
+`probe_fail_closed` schedules exactly five independent MCP initialize requests per
+second through the existing TLS gateway. It pins one agent token with at least
+probe duration plus 15 seconds remaining. Duration is 60–240 seconds (default 180).
+Slow responses do not postpone later starts; requests are never retried.
+Transport errors, missing/duplicate gateway traces, scheduling lateness above
+50 ms or inter-request gaps above 300 ms fail. Complete token-free evidence is read
+from `workspace/t17/requests.json` in the SHA256-verified accepted snapshot; only a
+compact summary enters the next model boundary.
+
+The harness never changes replicas or Flux. The operator prepares ConfigMap
+`agent-platform/conformance-aps-outage-control`, with `data.receipt.json`:
+
+```json
+{"schema":"t17-v1","marker":"0123456789abcdef","deployment_uid":"ACTUAL-APS-UID","original_replicas":2}
+```
+
+The ConfigMap UID is pinned. The operator uses Deployment UID/resourceVersion
+preconditions to change replicas and appends `down`, then `up`, once each:
+
+```json
+{"started_ns":1793980000000000000,"acknowledged_ns":1793980000100000000,"resource_version":"ACTUAL-PATCH-RESPONSE-RV","generation":2}
+```
+
+Times are Unix nanoseconds immediately before the scale request and after its
+response. Generation/resourceVersion come from that response. Previously written
+receipt fields cannot change. The response resourceVersion is retained as
+operator evidence; controller status updates can advance it before observation.
+The harness independently verifies Deployment UID/generations, unchanged spec
+excluding replicas, Pod UIDs/image IDs and ready/not-ready Endpoints. Operator,
+observer and sandbox clocks must be synchronized; the probe also compares wall
+clock to its monotonic schedule.
+
+With ordinary Temporal and artifact-store mounts:
+
+```sh
+python -m runner.conformance --tenant tenant-test --agent conformance \
+  --release MAIN-APPROVED-RELEASE --tests T17 \
+  --fail-closed-fixture-release NEW-SIGNED-B-RELEASE \
+  --aps-outage-marker 0123456789abcdef --aps-outage-duration 180 \
+  --observe-aps-outage --session-timeout 900 --report /tmp/report.json
+```
+
+Wait for stderr JSON `phase: baseline_ready` (the first 26 successful traces), then
+scale two replicas to zero and append `down`. Record request timing before waiting
+for Pods to disappear: every request starting one second after scale-down request
+start, including shutdown, must return real 403 until scale-up starts. Wait for
+`zero_confirmed_restore_now` (12 seconds observed zero Pods/empty Endpoints), restore
+two replicas and append `up`. Final evaluation requires at least 10 seconds of
+continuous zero observations and 50 corresponding requests, then two new Ready Pod
+UIDs with matching Endpoints. All requests beginning one second after observed
+readiness must be 200 for at least five seconds. Every response needs exactly one
+matching gateway `trace.id` record. The session must complete in generation one
+with confirmed cleanup. The operator restores exact original replicas and Flux
+annotation in a finally/trap even if the harness fails; an incomplete report does
+not authorize leaving the outage active.
+
+Additional harness rights in `agent-platform` are read-only and named:
+
+```yaml
+- apiGroups: [apps]
+  resources: [deployments]
+  resourceNames: [agent-policy-service]
+  verbs: [get]
+- apiGroups: [""]
+  resources: [endpoints]
+  resourceNames: [agent-policy-service]
+  verbs: [get]
+- apiGroups: [""]
+  resources: [configmaps]
+  resourceNames: [conformance-aps-outage-control]
+  verbs: [get]
+```
+
+Existing Pod list/log rights cover APS inventory and gateway evidence. The tenant
+role needs get on the exact new AgentRelease and existing sandbox Pod list.
+No scale, patch, status, exec, Secret or Flux privileges enter the harness.
+Local tests cover scheduling, evidence completeness and cancellation; they do not
+establish a live T17 pass.
