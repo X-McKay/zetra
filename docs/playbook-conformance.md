@@ -860,3 +860,32 @@ bound workflows are closed and Pods absent. Qualification requires stable worker
 UIDs/images/restarts, unchanged fixture UID/spec, and confirmed ordinary cleanup
 for both sessions. Unit tests, dummy-process lifetime tests and installed-image
 validation establish these local paths; they do not constitute live T27 evidence.
+
+### T23 backend protocol expansion evidence
+
+The pinned agentgateway v1.7.0 MCP backend uses `sessionRouting: Stateless`.
+Its `stateless_send_and_initialize` path sends a synthetic `initialize` and
+`notifications/initialized` before each non-initialize legacy RPC. Run29's
+healthy control therefore had four APS/gateway decisions and ten backend HTTP
+requests, including exactly one tool call. The run remains a historical failure:
+its capture image did not record RPC method metadata, so those rows cannot now
+prove which requests were handshakes.
+
+The capture proxy now emits `rpc_method`, a fixed enum limited to `initialize`,
+`notifications/initialized`, `tools/list`, `tools/call`, or `unclassified`, for
+MCP POST requests only. This is protocol classification, not request-body logging:
+no arguments, tool parameters, RPC IDs, arbitrary method strings, or body bytes
+are emitted. A passive observer keeps at most 64 KiB of bytes the proxy actually
+reads; oversized, incomplete, duplicate-key, malformed, batch, or unknown RPCs
+are unclassified. Forwarding retains the original bytes, errors, and streaming;
+model bodies are not inspected.
+
+T23 requires one unique APS and gateway decision ID, then the exact ordered
+backend expansion: initialize alone (200), or initialize (200), initialized
+notification (202), and the original RPC (202 for initialized notification,
+200 for tools/list or tools/call). Every row must match the session, generation,
+agent, POST method and `/mcp` backend path. Exactly one tools/call row counts as
+one completed read, corroborated by the signed fixture's actual SDK completion
+and accepted checkpoint. Duplicate calls, missing handshakes, failed responses,
+unclassified rows and orphan IDs fail. Fresh qualification requires both the
+new runner and MCP capture images; an old capture log does not qualify.
