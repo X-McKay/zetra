@@ -244,7 +244,28 @@ class AgentFixture:
         timing = {"request_start_ns": time.monotonic_ns(), "request_epoch_ns": time.time_ns()}
         await settled(asyncio.to_thread(self.ops.patch_agent, current, spec))
         timing["acknowledged_ns"] = time.monotonic_ns()
-        return timing
+        observed = await self.current()
+        if observed["spec"] != self.expected:
+            raise FixtureConflict("Agent mutation readback differs from requested spec")
+        return {**timing, **self.receipt(current, observed)}
+
+    def receipt(self, before, observed):
+        return {
+            "target": {
+                "api_version": "agentplatform.io/v1alpha1",
+                "kind": "Agent",
+                "namespace": observed["metadata"].get("namespace"),
+                "name": FIXTURE_AGENT,
+                "uid": observed["metadata"]["uid"],
+            },
+            "before_resource_version": before["metadata"].get("resourceVersion"),
+            "spec_patch": merge_patch(before["spec"], observed["spec"]),
+            "readback": {
+                "resource_version": observed["metadata"].get("resourceVersion"),
+                "enabled": observed["spec"].get("enabled", True),
+            },
+            "readback_observed_ns": time.monotonic_ns(),
+        }
 
     async def restore(self):
         current = await self.current()
@@ -252,8 +273,12 @@ class AgentFixture:
             if current["spec"] != self.expected:
                 raise FixtureConflict("Agent changed concurrently; restoration refused")
             await asyncio.to_thread(self.ops.patch_agent, current, self.original["spec"])
-        self.expected = copy.deepcopy(self.original["spec"])
         await asyncio.to_thread(self.ops.wait_release, self.release, ready)
+        observed = await self.current()
+        if observed["spec"] != self.original["spec"]:
+            raise FixtureConflict("Agent restoration readback differs from original spec")
+        self.expected = copy.deepcopy(self.original["spec"])
+        return self.receipt(current, observed)
 
     async def finish(self):
         await self.restore()
@@ -849,13 +874,14 @@ class RevocationHarness:
                         }
                     )
                 restore_start = time.monotonic_ns()
-                await settled(fixture.restore())
+                restored = await settled(fixture.restore())
                 await evidence.wait(lambda _: evidence.allowed(restore_start), timeout=30)
                 cases.append(
                     {
                         "case": "same_session_reenabled",
                         "result": "pass",
                         "checks": {"both_replicas_allow_after_restore": True},
+                        "mutation": restored,
                     }
                 )
                 if test == "T15":

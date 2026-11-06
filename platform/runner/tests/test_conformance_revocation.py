@@ -623,3 +623,137 @@ def test_later_idempotent_stop_cannot_reset_original_stop_bound(later_source):
         assert result["evidence"]["same_replica_upper_ms"] == 2101
     else:
         assert result["evidence"]["same_replica_upper_ms"] is None
+
+
+async def test_agent_mutation_receipt_identifies_disabled_field_and_real_readback():
+    store = AgentStore()
+    store.tenant = "tenant-test"
+    store.value["metadata"].update(namespace="tenant-test", resourceVersion="100")
+    async with r.AgentFixture(store, "signed") as fixture:
+        receipt = await fixture.change({**fixture.expected, "enabled": False})
+        assert receipt["target"] == {
+            "api_version": "agentplatform.io/v1alpha1",
+            "kind": "Agent",
+            "namespace": "tenant-test",
+            "name": "conformance-b",
+            "uid": "original-agent",
+        }
+        assert receipt["spec_patch"] == {"enabled": False}
+        assert receipt["readback"] == {"resource_version": "100", "enabled": False}
+        restored = await fixture.restore()
+        assert restored["spec_patch"] == {"enabled": None}
+        assert restored["readback"]["enabled"] is True
+        assert restored["target"] == receipt["target"]
+
+
+@pytest.mark.parametrize("fault", ["ignored_write", "replacement"])
+async def test_agent_change_never_reports_unobserved_or_replacement_mutation(fault):
+    store = AgentStore()
+    fixture = await r.AgentFixture(store, "signed").__aenter__()
+    write = store.patch_agent
+
+    def broken_write(current, spec=None, annotation=...):
+        if fault == "replacement":
+            write(current, spec, annotation)
+            store.value["metadata"]["uid"] = "replacement-agent"
+        return store.object()
+
+    store.patch_agent = broken_write
+    with pytest.raises(FixtureConflict):
+        await fixture.change({**fixture.expected, "enabled": False})
+    if fault == "ignored_write":
+        store.patch_agent = write
+        await fixture.finish()
+    else:
+        assert store.value["metadata"]["uid"] == "replacement-agent"
+
+
+async def test_restore_requires_current_agent_readback_not_only_release_ready():
+    store = AgentStore()
+    fixture = await r.AgentFixture(store, "signed").__aenter__()
+    await fixture.change({**fixture.expected, "enabled": False})
+    write = store.patch_agent
+    store.patch_agent = lambda *_: store.object()
+    with pytest.raises(FixtureConflict):
+        await fixture.restore()
+    store.patch_agent = write
+    await fixture.finish()
+
+
+async def test_t15_actual_api_path_disables_agent_without_release_approval_mutation(monkeypatch):
+    class CustomAPI:
+        def __init__(self):
+            self.agent = {
+                "metadata": {
+                    "name": "conformance-b",
+                    "namespace": "tenant-test",
+                    "uid": "agent-uid",
+                    "resourceVersion": "1",
+                },
+                "spec": {"enabled": True, "capabilities": {"mcp": []}},
+            }
+            self.release = {"spec": {"agent": "conformance-b", "approval": {"approved": True}}}
+            self.writes = []
+
+        def get_namespaced_custom_object(self, group, version, namespace, plural, name, **kwargs):
+            assert (group, version, namespace) == ("agentplatform.io", "v1alpha1", "tenant-test")
+            assert (plural, name) in (("agents", "conformance-b"), ("agentreleases", "signed"))
+            return copy.deepcopy(self.agent if plural == "agents" else self.release)
+
+        def patch_namespaced_custom_object(
+            self, group, version, namespace, plural, name, body, **kwargs
+        ):
+            assert (group, version, namespace, plural, name) == (
+                "agentplatform.io",
+                "v1alpha1",
+                "tenant-test",
+                "agents",
+                "conformance-b",
+            )
+            assert body["metadata"]["resourceVersion"] == self.agent["metadata"]["resourceVersion"]
+            self.writes.append(copy.deepcopy(body))
+            if "spec" in body:
+                self.agent["spec"].update(body["spec"])
+            if "annotations" in body["metadata"]:
+                self.agent["metadata"]["annotations"] = {
+                    k: v for k, v in body["metadata"]["annotations"].items() if v is not None
+                }
+            self.agent["metadata"]["resourceVersion"] = str(
+                int(self.agent["metadata"]["resourceVersion"]) + 1
+            )
+            return copy.deepcopy(self.agent)
+
+    custom = CustomAPI()
+    core = SimpleNamespace(list_namespaced_pod=lambda *a, **k: SimpleNamespace(items=[]))
+    ops = r.RevocationOps(core, custom, "tenant-test")
+    ops.invariant = lambda *_: {}
+    ops.wait_release = lambda *_: custom.release
+    harness = r.RevocationHarness(ops, None, None, "signed", allow_mutations=True)
+
+    class Active:
+        evidence = None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+    class ReachedDenial(Exception):
+        pass
+
+    async def deny(probe, start, reason, limit):
+        assert custom.agent["spec"]["enabled"] is False
+        assert custom.release["spec"]["approval"]["approved"] is True
+        assert reason == "deny.release_unapproved" and limit == 5
+        raise ReachedDenial
+
+    monkeypatch.setattr(harness, "_deny", deny)
+    with pytest.raises(ReachedDenial):
+        await harness._round_body("T15", 1, r.AgentFixture(ops, "signed"), Active(), [])
+    assert [write["spec"] for write in custom.writes if "spec" in write] == [
+        {"enabled": False},
+        {"enabled": True},
+    ]
+    assert custom.agent["spec"]["enabled"] is True
+    assert custom.release["spec"]["approval"]["approved"] is True
