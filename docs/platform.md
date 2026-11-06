@@ -189,12 +189,16 @@ still runs normal `stop_session`; deletion is deliberately denied so the running
 sandbox can observe revocation. The policy is restored under shield before the
 existing trusted cleanup reconciler removes any remaining pod.
 
-Timing is conservative: mutation request-start to observed gateway 403 includes
-log delivery. The cancellation gate requires both replicas' responses observed
-within one second of cancellation request-start, in addition to measuring the
-actual APS stop event to a 403 on that same replica (plus one millisecond for
-timestamp truncation). This may fail on a slow observation path despite prompt
-revocation; it cannot understate the stop bound through cross-node clock skew.
+Timing is conservative: the disable bound runs from mutation request-start to
+observed gateway 403 and includes log delivery. Cancellation-to-observed-403
+latency is recorded as informational; T15's one-second gate runs from the actual
+earliest actual APS stop event to a real gateway 403 decision on that same replica, with one
+millisecond added for timestamp truncation. Both Ready replicas must return real
+403s. Sampling continues until a valid same-replica stop/denial pair is available,
+including when the first decision's truncated timestamp precedes the stop. Such
+an ambiguous pair is rejected; a later pair must still satisfy the original
+one-second bound. Later idempotent stops cannot reset this clock. This avoids cross-node clock skew and does not count Temporal
+cancellation scheduling or log delivery against the stop-to-denial bound.
 
 Restoration of the Agent spec, its per-resource Flux reconciliation annotation,
 inert Policy rule, original policy digest/ConfigMaps and pod cleanup are gates.
