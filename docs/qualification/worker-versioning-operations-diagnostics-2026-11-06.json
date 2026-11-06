@@ -1,0 +1,8 @@
+{
+  "scope": "owned local test only",
+  "diagnostic": "Initial operations probe failed no_visible_open_runs assertion because visibility query used deprecated dot form instead of actual colon form. No server-drained or retirement pass was credited.",
+  "workflow_id": "retained-a-81245c64",
+  "cleanup": "terminated exact local fixture after preserving failed history",
+  "fix": "Pinned1.29.1 primary implementation and actual version metadata verified; regression added, distinct fresh run1196c386 passed with real3minute default drain grace.",
+  "seven_day_retention": "not established; local namespace configured86400seconds"
+}
