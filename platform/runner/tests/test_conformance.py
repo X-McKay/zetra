@@ -572,6 +572,119 @@ def test_t8_upstream_half_checks_what_the_server_received():
     assert out["result"] == "pass" and "not captured" in out["evidence"]["upstream_capture"]
 
 
+def jwt(claims: dict) -> str:
+    import base64
+
+    seg = lambda b: base64.urlsafe_b64encode(b).rstrip(b"=").decode()  # noqa: E731
+    return seg(b'{"alg":"none"}') + "." + seg(json.dumps(claims).encode()) + "." + seg(b"sig")
+
+
+def test_t26_reads_the_stashed_token_from_the_snapshot_store(tmp_path):
+    import hashlib
+    import io
+    import tarfile
+
+    token = jwt({"jti": "trrtcc:stash", "aud": "agent-gateway"})
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tar:
+        data = token.encode()
+        info = tarfile.TarInfo("workspace/t26/token")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+        other = tarfile.TarInfo("workspace/report.md")
+        other.size = 2
+        tar.addfile(other, io.BytesIO(b"hi"))
+    key = hashlib.sha256(buf.getvalue()).hexdigest()
+    (tmp_path / key[:2]).mkdir()
+    (tmp_path / key[:2] / key).write_bytes(buf.getvalue())
+    assert c.read_stashed_token(str(tmp_path), key) == token
+    assert c.jwt_jti(token) == "trrtcc:stash" and c.jwt_jti("opaque") is None
+    with pytest.raises(ValueError):
+        c.read_stashed_token(str(tmp_path), "not-a-key")
+
+
+def test_t26_present_case_presents_the_stash_and_carries_no_token():
+    case = c.t26_present_case("same_agent_other_session")
+    assert case.tool == "probe_http" and case.args["auth"] == "stash" and case.expect_status == 403
+    assert case.args["host_header"] == c.MCP_HOST and case.args["path"] == "/kubernetes/mcp"
+    assert "Authorization" not in json.loads(case.args["headers"])
+    assert json.loads(case.args["body"])["method"] == "initialize"
+    SessionInput(TENANT, AGENT, "r1", SESSION, None, case.task(), seed="ab" * 32).validate()
+    with pytest.raises(Exception, match="seed"):
+        SessionInput(TENANT, AGENT, "r1", SESSION, None, case.task(), seed="nope").validate()
+    with pytest.raises(Exception, match="tokens or credentials"):
+        # The channel the spec forbids: a token in the session input.
+        SessionInput(TENANT, AGENT, "r1", SESSION, None, {"token": FAKE_JWT}).validate()
+
+
+def t26_runs():
+    stash = run(tool="probe_token_stash", summary='{"stashed":"/sandbox/workspace/t26/token"}')
+    stash.snapshot = "ab" * 32
+    same = run(
+        tool="probe_http",
+        summary='{"status": 403, "body": "forbidden"}',
+        session="1" * 8 + "-2222-4333-8444-" + "5" * 12,
+    )
+    same.pod = pod_name(same.session_id, 1)
+    other = run(
+        tool="probe_http",
+        summary='{"status": 403, "body": "forbidden"}',
+        session="2" * 8 + "-2222-4333-8444-" + "5" * 12,
+    )
+    other.pod = pod_name(other.session_id, 1)
+    return stash, same, other
+
+
+def t26_lines(stash, same, other, same_reason=c.DENY_BOUND, other_reason=c.DENY_MISMATCH):
+    return [
+        {**issued(stash.pod), "jti": "trrtcc:stash"},
+        {**decision(same.pod, None, same_reason, "d1"), "method": "initialize", "tool": None},
+        {**decision(other.pod, None, other_reason, "d2"), "method": "initialize", "tool": None},
+    ]
+
+
+def test_t26_passes_when_both_foreign_sandboxes_are_refused_for_the_right_reason():
+    stash, same, other = t26_runs()
+    out = c.evaluate_t26(
+        stash, same, other, "trrtcc:stash", None, t26_lines(stash, same, other), TENANT
+    )
+    assert out["result"] == "pass" and all(out["checks"].values()), out["checks"]
+    assert out["evidence"]["token_jti"] == "trrtcc:stash"
+    assert "eyJ" not in json.dumps(out)
+
+
+@pytest.mark.parametrize(
+    "same_reason,other_reason,jti,read_error,failed_check",
+    [
+        ("allow", c.DENY_MISMATCH, "trrtcc:stash", None, "same_agent_never_allowed"),
+        (
+            c.DENY_MISMATCH,
+            c.DENY_MISMATCH,
+            "trrtcc:stash",
+            None,
+            "same_agent_denied_bound_elsewhere",
+        ),
+        (c.DENY_BOUND, "allow", "trrtcc:stash", None, "other_agent_never_allowed"),
+        (c.DENY_BOUND, c.DENY_BOUND, "trrtcc:stash", None, "other_agent_denied_mismatch"),
+        (c.DENY_BOUND, c.DENY_MISMATCH, "trrtcc:someone-else", None, "token_is_the_stash_pods"),
+        (
+            c.DENY_BOUND,
+            c.DENY_MISMATCH,
+            None,
+            "FileNotFoundError: workspace/t26/token",
+            "token_read_from_snapshot",
+        ),
+    ],
+)
+def test_t26_fails_without_its_required_evidence(
+    same_reason, other_reason, jti, read_error, failed_check
+):
+    stash, same, other = t26_runs()
+    lines = t26_lines(stash, same, other, same_reason, other_reason)
+    out = c.evaluate_t26(stash, same, other, jti, read_error, lines, TENANT)
+    assert out["result"] == "fail" and out["checks"][failed_check] is False
+
+
 def test_t8_passes_when_the_decision_carries_the_sandboxes_identity():
     r = run(tool="probe_mcp", summary='{"calls":["ok"]}')
     out = c.evaluate_t8(r, [decision(r.pod, c.MCP_ALLOWED_TOOL, "allow", "a0")], TENANT, AGENT)
@@ -709,5 +822,17 @@ async def test_t5_direct_case_is_an_error_when_the_token_file_is_missing(fake_ap
 def test_cli_rejects_unknown_tests(capsys):
     with pytest.raises(SystemExit):
         c.parse_args(["--release", "r1", "--tests", "T4,T99"])
-    args = c.parse_args(["--release", "r1", "--tests", "t5,T19,t8,t11,T12"])
-    assert args.tests == ["T5", "T19", "T8", "T11", "T12"] and args.tenant == "tenant-test"
+    args = c.parse_args(
+        [
+            "--release",
+            "r1",
+            "--tests",
+            "t5,T19,t8,t11,T12,t26",
+            "--agent-b",
+            "b",
+            "--release-b",
+            "rb",
+        ]
+    )
+    assert args.tests == ["T5", "T19", "T8", "T11", "T12", "T26"] and args.tenant == "tenant-test"
+    assert args.agent_b == "b" and args.release_b == "rb"

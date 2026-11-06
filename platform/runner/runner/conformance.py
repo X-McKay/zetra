@@ -33,6 +33,14 @@ Tests covered so far (the Phase B gate is 22; the rest are added batch by batch)
   exchange for that pod. (The native-exchange configuration of spec 8.11 is not deployed.)
 - T8 also reads the capture: the server received the APS-set `x-agent-*` values for the
   session, none of the forged ones, and no `x-agent-decision-reason`.
+- T26: token binding. Session 1 (`probe_token_stash`) writes its agent token into the
+  workspace, which the runner snapshots unredacted into the artifact store. Session 2 of the
+  same agent and a session of agent B are *seeded* from that snapshot (`SessionInput.seed`),
+  so the token is in their workspaces and in no session input (10.2 forbids that), and each
+  presents it on the MCP route with `probe_http(auth="stash")`. Expected: 403
+  `deny.token_bound_elsewhere` for the same agent, 403 `deny.pod_agent_mismatch` for agent
+  B. The harness reads the snapshot from the store (mounted read-only) only to compare the
+  token by `jti` (15.4); the token goes nowhere else.
 
 Reports never carry token material: every string is scrubbed with the runner's token patterns
 before it is written (spec 13.6).
@@ -42,10 +50,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import os
 import re
 import sys
+import tarfile
 import time
 import urllib.error
 import urllib.parse
@@ -83,6 +93,7 @@ SESSION_TIMEOUT = 900.0
 # pods_get is in the gateway's role policy for the backend but not in the bundle, so the APS
 # must deny it on every request.
 MCP_ROUTE = "mcp"
+MCP_HOST = "mcp.agents.internal"
 MCP_BACKEND = "kubernetes"
 MCP_ALLOWED_TOOL = "pods_list_in_namespace"
 MCP_FORBIDDEN_TOOL = "pods_get"
@@ -98,7 +109,11 @@ FORGED_HEADERS = {
 # The probe reports {"status": 403, ...}; the model is told to repeat the result as JSON.
 STATUS_JSON = re.compile(r"[\"']?status[\"']?\s*[:=]\s*[\"']?([1-5][0-9]{2})")
 STATUS_WORD = re.compile(r"\b([45][0-9]{2})\b")
-TESTS = ("T4", "T5", "T8", "T11", "T12", "T19")
+TESTS = ("T4", "T5", "T8", "T11", "T12", "T19", "T26")
+DEFAULT_ARTIFACT_DIR = "/var/lib/agent-artifacts"
+TOKEN_STASH_MEMBER = "workspace/t26/token"  # what probe_token_stash writes, as the tar names it
+DENY_BOUND = "deny.token_bound_elsewhere"
+DENY_MISMATCH = "deny.pod_agent_mismatch"
 CAPTURE_NAMESPACE, CAPTURE_LABEL, CAPTURE_CONTAINER = (
     "mcp",
     "app.kubernetes.io/name=kubernetes-mcp",
@@ -242,6 +257,61 @@ def t11_case(tenant: str) -> SandboxCase:
     )
 
 
+def t26_stash_case() -> SandboxCase:
+    return SandboxCase("token_stash", "probe_token_stash", {})
+
+
+def t26_present_case(name: str) -> SandboxCase:
+    """Present the token another sandbox stashed, on the MCP route (an `initialize`, which the
+    APS admits for a sandbox's own token). The session is seeded from the stash session's
+    snapshot, so the token is in this sandbox's workspace and never in any session input
+    (10.2 forbids that, and the runner enforces it)."""
+    body = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    return SandboxCase(
+        name,
+        "probe_http",
+        {
+            "host_header": MCP_HOST,
+            "path": f"/{MCP_BACKEND}/mcp",
+            "auth": "stash",
+            "headers": json.dumps(
+                {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                },
+                separators=(",", ":"),
+            ),
+            "body": json.dumps(body, separators=(",", ":")),
+        },
+        403,
+    )
+
+
+def jwt_jti(token: str) -> str | None:
+    """The jti of a compact JWT, read without verification; the APS is what verifies."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        payload = base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4))
+        return str(json.loads(payload).get("jti") or "") or None
+    except (ValueError, AttributeError):
+        return None
+
+
+def read_stashed_token(artifact_dir: str, snapshot: str) -> str:
+    """The token probe_token_stash left in the workspace, from the session's final snapshot in
+    the artifact store (FilesystemStore: <root>/<key[:2]>/<key>, a tar of workspace and state)."""
+    if len(snapshot) != 64 or any(c not in "0123456789abcdef" for c in snapshot):
+        raise ValueError("snapshot key must be a SHA-256 hex digest")
+    path = Path(artifact_dir) / snapshot[:2] / snapshot
+    with tarfile.open(path, "r:*") as tar:
+        member = tar.extractfile(TOKEN_STASH_MEMBER)
+        if member is None:
+            raise FileNotFoundError(TOKEN_STASH_MEMBER)
+        return member.read().decode("utf-8").strip()
+
+
 def t19_case(tenant: str, rounds: int = T19_ROUNDS) -> SandboxCase:
     return SandboxCase(
         "alternating_tools",
@@ -278,6 +348,7 @@ class SessionRun:
     final_summary: str = ""
     started: str = ""
     finished: str = ""
+    snapshot: str | None = None  # the final workspace snapshot's key in the artifact store
 
     def tool_boundaries(self, tool: str) -> list[dict]:
         return [b for b in self.boundaries if b["kind"] == "tool" and b["tool"] == tool]
@@ -748,6 +819,91 @@ def evaluate_t19(run: SessionRun, aps_lines: list[dict], rounds: int = T19_ROUND
     }
 
 
+def mcp_decisions_of(run: SessionRun, aps_lines: list[dict]) -> list[dict]:
+    """Every APS decision on the MCP route for this session's sandbox, in time order."""
+    prefix = sandbox_prefix(run.session_id)
+    found = [
+        line
+        for line in aps_lines
+        if "decision_id" in line
+        and line.get("route") == MCP_ROUTE
+        and str(line.get("pod", "")).startswith(prefix)
+    ]
+    return sorted(found, key=lambda line: str(line.get("ts", "")))
+
+
+def evaluate_t26(
+    stash: SessionRun,
+    same: SessionRun,
+    other: SessionRun,
+    token_jti: str | None,
+    read_error: str | None,
+    aps_lines: list[dict],
+    tenant: str,
+) -> dict:
+    prefix = sandbox_prefix(stash.session_id)
+    issued = [
+        str(line.get("jti") or "")
+        for line in aps_lines
+        if line.get("msg") == "token issued"
+        and str(line.get("pod", "")).startswith(prefix)
+        and line.get("namespace") == tenant
+    ]
+    same_reasons = [d.get("reason") for d in mcp_decisions_of(same, aps_lines)]
+    other_reasons = [d.get("reason") for d in mcp_decisions_of(other, aps_lines)]
+    checks = {
+        "stash_session_completed": stash.outcome == "COMPLETED",
+        "stash_probe_ran": bool(stash.tool_boundaries("probe_token_stash")),
+        "snapshot_recorded": bool(stash.snapshot),
+        "token_read_from_snapshot": read_error is None and token_jti is not None,
+        "token_is_the_stash_pods": token_jti is not None and token_jti in issued,
+        "same_agent_session_completed": same.outcome == "COMPLETED",
+        "same_agent_status_403": status_from_summary(same.final_summary) == 403,
+        "same_agent_denied_bound_elsewhere": DENY_BOUND in same_reasons,
+        "same_agent_never_allowed": "allow" not in same_reasons,
+        "other_agent_session_completed": other.outcome == "COMPLETED",
+        "other_agent_status_403": status_from_summary(other.final_summary) == 403,
+        "other_agent_denied_mismatch": DENY_MISMATCH in other_reasons,
+        "other_agent_never_allowed": "allow" not in other_reasons,
+    }
+    required = (
+        "stash_session_completed",
+        "stash_probe_ran",
+        "token_read_from_snapshot",
+        "token_is_the_stash_pods",
+        "same_agent_session_completed",
+        "same_agent_denied_bound_elsewhere",
+        "same_agent_never_allowed",
+        "other_agent_session_completed",
+        "other_agent_denied_mismatch",
+        "other_agent_never_allowed",
+    )
+    return {
+        "result": "pass" if all(checks[k] for k in required) else "fail",
+        "checks": checks,
+        "evidence": {
+            "stash": {**asdict(stash), "snapshot_read_error": read_error},
+            "token_jti": token_jti,
+            "issued_jti": issued,
+            "same_agent": {
+                "session": asdict(same),
+                "decisions": [
+                    {k: d.get(k) for k in DECISION_FIELDS}
+                    for d in mcp_decisions_of(same, aps_lines)
+                ],
+            },
+            "other_agent": {
+                "session": asdict(other),
+                "decisions": [
+                    {k: d.get(k) for k in DECISION_FIELDS}
+                    for d in mcp_decisions_of(other, aps_lines)
+                ],
+            },
+            "aps_log_unreadable": unreadable_pods(aps_lines),
+        },
+    }
+
+
 def evaluate_t5_direct(case: DirectCase, status: int | None, body: str, error: str | None) -> dict:
     checks = {"status_expected": status == case.expect_status, "no_token_in_reply": True}
     if "access_token" in body:
@@ -802,6 +958,9 @@ class Harness:
         aps_token_path: str = DEFAULT_APS_TOKEN_PATH,
         session_timeout: float = SESSION_TIMEOUT,
         post: Callable[[str, dict[str, str]], tuple[int, str]] = post_token_form,
+        artifact_dir: str = DEFAULT_ARTIFACT_DIR,
+        agent_b: str | None = None,
+        release_b: str | None = None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -813,10 +972,26 @@ class Harness:
         self.aps_token_path = aps_token_path
         self.session_timeout = session_timeout
         self.post = post
+        self.artifact_dir = artifact_dir  # the runner's artifact store, mounted read-only
+        self.agent_b, self.release_b = agent_b, release_b  # the second agent T26 needs
 
-    async def run_session(self, case: SandboxCase) -> SessionRun:
+    async def run_session(
+        self,
+        case: SandboxCase,
+        agent: str | None = None,
+        release: str | None = None,
+        seed: str | None = None,
+    ) -> SessionRun:
         session_id = str(uuid.uuid4())
-        inp = SessionInput(self.tenant, self.agent, self.release, session_id, None, case.task())
+        inp = SessionInput(
+            self.tenant,
+            agent or self.agent,
+            release or self.release,
+            session_id,
+            None,
+            case.task(),
+            seed=seed,
+        )
         run = SessionRun(session_id, pod_name(session_id, 1), "SUBMITTED", started=utcnow())
         handle = await submit(self.client, inp)
         try:
@@ -824,6 +999,7 @@ class Harness:
             run.outcome = result.outcome
             run.generation = max(result.generation, 1)
             run.pod = pod_name(session_id, run.generation)
+            run.snapshot = result.snapshot
         except WorkflowFailureError as e:
             run.outcome = f"FAILED:{failure_type(e.cause)}"
         except TimeoutError:
@@ -955,6 +1131,38 @@ class Harness:
             **evaluate_t12(run, lines, captures, self.tenant),
         }
 
+    async def t26(self) -> dict:
+        if not self.agent_b or not self.release_b:
+            return {
+                "id": "T26",
+                "name": "token binding",
+                "result": "error",
+                "error": "T26 needs --agent-b and --release-b (a second approved agent)",
+            }
+        started = time.time()
+        stash = await self.run_session(t26_stash_case())
+        try:
+            # Read only to compare by jti (15.4); the token itself goes nowhere.
+            token = read_stashed_token(self.artifact_dir, stash.snapshot or "")
+        except (OSError, ValueError, KeyError) as e:
+            token, read_error = "", f"{type(e).__name__}: {e}"
+        else:
+            read_error = None
+        same = await self.run_session(
+            t26_present_case("same_agent_other_session"), seed=stash.snapshot
+        )
+        other = await self.run_session(
+            t26_present_case("other_agent"), self.agent_b, self.release_b, seed=stash.snapshot
+        )
+        jti = jwt_jti(token)
+        del token
+        lines = await self.aps_lines_since(started)
+        return {
+            "id": "T26",
+            "name": "token binding",
+            **evaluate_t26(stash, same, other, jti, read_error, lines, self.tenant),
+        }
+
     async def t19(self) -> dict:
         started = time.time()
         run = await self.run_session(t19_case(self.tenant))
@@ -1057,6 +1265,9 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
         issuer_token_path=os.environ.get("ISSUER_TOKEN_PATH", DEFAULT_ISSUER_TOKEN_PATH),
         aps_token_path=os.environ.get("APS_TOKEN_PATH", DEFAULT_APS_TOKEN_PATH),
         session_timeout=args.session_timeout,
+        artifact_dir=os.environ.get("ARTIFACT_DIR", DEFAULT_ARTIFACT_DIR),
+        agent_b=args.agent_b,
+        release_b=args.release_b,
     )
     return await harness.run(args.tests)
 
@@ -1069,6 +1280,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--release", required=True, help="AgentRelease name of the conformance agent"
     )
     parser.add_argument("--tests", default=",".join(TESTS), help="comma-separated, e.g. T4,T5")
+    parser.add_argument("--agent-b", default=None, help="T26: a second agent of the tenant")
+    parser.add_argument("--release-b", default=None, help="T26: that agent's approved release")
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)

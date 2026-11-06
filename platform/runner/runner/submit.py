@@ -48,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     task.add_argument("--task", help="task as a JSON document")
     task.add_argument("--task-file", type=Path)
     parser.add_argument("--max-boundaries", type=int, default=64)
+    parser.add_argument("--seed", default=None, help="snapshot key to restore into generation 1")
     args = parser.parse_args(argv)
     try:
         raw = args.task_file.read_text() if args.task_file else args.task
@@ -59,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
             grant_handle=args.grant_handle,
             task=json.loads(raw),
             max_boundaries=args.max_boundaries,
+            seed=args.seed,
         )
         inp.validate()
     except (InvalidInput, ValueError) as e:
