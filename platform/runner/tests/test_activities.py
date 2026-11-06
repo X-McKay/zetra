@@ -277,6 +277,54 @@ def test_t25_unknown_exit_code(tmp_path, rc):
     unknown(tmp_path, FakeWS([boundary_doc(3)], rc=rc))
 
 
+@pytest.mark.parametrize(
+    "stderr,stdout,diagnostic",
+    [
+        ("agent_runtime.step: bad length header\n", b"", "bad length header"),
+        ("agent_runtime.step: length out of range\n", b"", "length out of range"),
+        ("agent_runtime.step: short body\n", b"", "short body"),
+        ("agent_runtime.step: invalid JSON\n", b"", "invalid JSON"),
+        (
+            "agent_runtime.step: request is not an object with a task\n",
+            b"",
+            "request is not an object with a task",
+        ),
+        ("agent_runtime.step: bad boundary\n", b"", "bad boundary"),
+        (
+            "confinement warning\n",
+            boundary_doc(3, summary="boundary mismatch"),
+            "boundary mismatch",
+        ),
+        ("private stderr", b"private stdout", "unrecognized"),
+        ("agent_runtime.step: bad boundary private suffix\n", b"", "unrecognized"),
+    ],
+)
+def test_protocol_failure_reports_only_known_diagnostics(
+    tmp_path, caplog, stderr, stdout, diagnostic
+):
+    # Losing stderr/summary hides framing vs restore failures; copying arbitrary output leaks
+    # agent content. Exercise the Activity's actual failure and emitted audit record.
+    d = setup(tmp_path)
+    d.exec = lambda *args, **kwargs: act.ExecResult(5, stdout, stderr, False)
+    err = refused(act.run_boundary, BoundaryIn(inp(), 1, 3))
+    assert err.type == "OutcomeUnknown" and not err.non_retryable
+    assert f"protocol_error={diagnostic}" in str(err)
+    records = [json.loads(r.message) for r in caplog.records if r.name == "runner.records"]
+    assert records == [
+        {
+            "event": "boundary_failed",
+            "session_id": SESSION,
+            "generation": 1,
+            "boundary": 3,
+            "rc": 5,
+            "truncated": False,
+            "timed_out": False,
+            "protocol_error": diagnostic,
+        }
+    ]
+    assert "private" not in str(err) + caplog.text
+
+
 def test_t25_no_output(tmp_path):
     unknown(tmp_path, FakeWS([], rc=0))
 

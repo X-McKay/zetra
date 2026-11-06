@@ -11,6 +11,15 @@ logger = logging.getLogger("runner.records")
 FIELDS = {
     "session_started": {"tenant", "agent", "release", "session_id", "delegated", "grant_handle"},
     "sandbox_created": {"session_id", "generation", "pod", "node", "boot_ms"},
+    "boundary_failed": {
+        "session_id",
+        "generation",
+        "boundary",
+        "rc",
+        "truncated",
+        "timed_out",
+        "protocol_error",
+    },
     "boundary_accepted": {
         "session_id",
         "generation",

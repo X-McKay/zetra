@@ -32,6 +32,21 @@ cannot resolve ambiguous remote commits alone or replace Temporal's accepted
 progress authority. Production deployment, signed provenance and continuous
 lifecycle operations require independent design and qualification.
 
+## Agent Runtime Platform image qualification
+
+Kubani's Phase B run 12 (2026-11-06) still failed T26 before either seeded session
+accepted boundary 0. The `12369f4` image had the workspace-only restore fix in
+`/app/runner`, but its console entrypoint imported an older wheel from
+`site-packages` that restored the donor's `state/` too. A diagnostic using the
+source copy restored no `state/` and completed boundary 0. The same diagnostic
+through the installed package restored donor state and returned rc=5 with
+`boundary mismatch`; both sandboxes were deleted. This is not a T26 pass.
+The runner image build now explicitly reinstalls the local package and compares
+every installed Python module with the copied source under isolated Python.
+Protocol failures also record only known framing or boundary-mismatch diagnostics,
+never arbitrary guest stderr or stdout. A rebuilt image must be deployed to the
+runner, cleanup reconciler and harness before the next T26 qualification run.
+
 ## Review hardening
 
 Worker release allowlists restrict active operations while preserving revoked-release
