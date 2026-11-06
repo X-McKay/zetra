@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, timedelta
+import hashlib
+
+from google.protobuf.json_format import MessageToJson
+from temporalio.client import WorkflowHistory
 
 from temporalio.api.deployment.v1 import WorkerDeploymentVersion
 from temporalio.api.workflowservice import v1 as api
@@ -12,6 +16,51 @@ from runner.types import worker_deployment
 from runner.worker_versioning import BUILD_RE, IMAGE_RE, GuardError, UNVERSIONED, sha256
 
 RETENTION = timedelta(days=7)
+
+
+async def bounded_history(
+    handle, workflow_id, *, max_events=100000, max_bytes=64 << 20, max_pages=1000
+):
+    """Retain only capped raw events; hash the exact SDK History.to_json bytes.
+
+    The SDK buffers one requested page. No all-history fetch/JSON allocation is
+    performed; wire-size and exact JSON-size checks precede each retained event.
+    Payload bytes stay opaque and unchanged for the Replayer's tenant codec.
+    """
+    stream = handle.fetch_history_events(page_size=100, rpc_timeout=timedelta(seconds=10))
+    events = []
+    prefix = b'{\n  "events": [\n'
+    suffix = b"\n  ]\n}"
+    size = len(prefix) + len(suffix)
+    digest = hashlib.sha256()
+    for _ in range(max_pages):
+        await stream.fetch_next_page()
+        page = stream.current_page
+        if page is None or len(page) > 100:
+            raise GuardError("history page exceeds bound")
+        for event in page:
+            if len(events) >= max_events or size + event.ByteSize() > max_bytes:
+                raise GuardError("history exceeds event or serialized-byte bound")
+            encoded = ("    " + MessageToJson(event).replace("\n", "\n    ")).encode()
+            separator = b",\n" if events else b""
+            if size + len(separator) + len(encoded) > max_bytes:
+                raise GuardError("history exceeds serialized-byte bound")
+            # Nothing is appended until all caps for this event have passed.
+            if not events:
+                digest.update(prefix)
+            digest.update(separator)
+            digest.update(encoded)
+            size += len(separator) + len(encoded)
+            events.append(event)
+        if not stream.next_page_token:
+            break
+    else:
+        raise GuardError("history exceeds page bound")
+    if events:
+        digest.update(suffix)
+    else:
+        digest.update(b"{}")
+    return WorkflowHistory(workflow_id=workflow_id, events=events), digest.hexdigest()
 
 
 class WorkerOperations:
@@ -186,10 +235,9 @@ class WorkerOperations:
             or actual.versioning_info.deployment_version != version
         ):
             raise GuardError("history receipt is not bound to exact run/queue/version")
-        history = await client.get_workflow_handle(workflow_id, run_id=run_id).fetch_history()
-        raw = history.to_json().encode()
-        if len(history.events) > 100000 or len(raw) > 64 << 20:
-            raise GuardError("history exceeds bounded private inspection")
+        history, history_digest = await bounded_history(
+            client.get_workflow_handle(workflow_id, run_id=run_id), workflow_id
+        )
         pods = {p["name"] for p in prepared["workers"]["pods"]}
 
         def owned(identity):
@@ -242,7 +290,7 @@ class WorkerOperations:
             "workflow_id": workflow_id,
             "run_id": run_id,
             "workflow_status": actual.status,
-            "history_sha256": sha256(raw),
+            "history_sha256": history_digest,
             "events": len(history.events),
             "workers": prepared["workers"],
             "workflow_tasks": workflows,
@@ -286,10 +334,9 @@ class WorkerOperations:
             from runner.workflow import SessionWorkflow, CleanupReconcilerWorkflow
 
             workflows = [SessionWorkflow, CleanupReconcilerWorkflow]
-        history = await client.get_workflow_handle(workflow_id, run_id=run_id).fetch_history()
-        raw = history.to_json().encode()
-        if len(history.events) > 100000 or len(raw) > 64 << 20:
-            raise GuardError("history exceeds bounded private replay")
+        history, history_digest = await bounded_history(
+            client.get_workflow_handle(workflow_id, run_id=run_id), workflow_id
+        )
         options = {"workflows": workflows, "data_converter": client.data_converter}
         if workflow_runner is not None:
             options["workflow_runner"] = workflow_runner
@@ -303,7 +350,7 @@ class WorkerOperations:
             "build_id": build_id,
             "workflow_id": workflow_id,
             "run_id": run_id,
-            "history_sha256": sha256(raw),
+            "history_sha256": history_digest,
             "events": len(history.events),
             "replayed": True,
             "workflow_sources_sha256": sources,

@@ -56,8 +56,12 @@ is neither written nor printed by the wrapper. Output includes only identifiers,
 event count, history digest and workflow source digests. Run it inside each
 verified retained source/image when qualifying that source; a successful replay
 against some other installed image does not prove retained-binary equality.
-Open, unknown-status, mismatched-run/queue/version/namespace and overbound
-histories fail. SDK nondeterminism remains a failure, never a replay pass.
+History is fetched through capped SDK pages (100events/page, at most1000pages,
+100000events and64MiB exact serialized JSON), with event wire/JSON size checked
+before retention. Opaque payload bytes stay unchanged for the codec. Streaming
+hashing matches the exact SDK History.to_json serialization without allocating
+the complete JSON. Open, unknown-status, mismatched-run/queue/version/namespace
+and overbound histories fail. SDK nondeterminism remains a failure, never a replay pass.
 
 Example commands inside the reviewed operator environment (all pins are exact
 published values, not moving tags):

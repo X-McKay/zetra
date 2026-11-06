@@ -189,7 +189,7 @@ async def test_replay_refuses_unbound_or_open_history_before_fetching_payloads(b
 )
 async def test_history_receipt_correlates_real_started_events_without_payload_output(broken):
     from types import SimpleNamespace as N
-    from unittest.mock import AsyncMock, Mock
+    from unittest.mock import Mock
     from temporalio.api.history.v1 import HistoryEvent
 
     class Service(TemporalService):
@@ -228,10 +228,12 @@ async def test_history_receipt_correlates_real_started_events_without_payload_ou
             },
         ),
     ]
-    history = N(events=events, to_json=lambda: "private-history")
+    from tests.test_worker_history_bounds import Pages
+
+    pages = Pages([events, []])
     client = N(
         namespace="agents-tenant-test",
-        get_workflow_handle=Mock(return_value=N(fetch_history=AsyncMock(return_value=history))),
+        get_workflow_handle=Mock(return_value=N(fetch_history_events=Mock(return_value=pages))),
     )
     ops = WorkerOperations(
         VersioningOperator(Service(), HealthyInventory(), tenant="tenant-test", now=lambda: NOW)
