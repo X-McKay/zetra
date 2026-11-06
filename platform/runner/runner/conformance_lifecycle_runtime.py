@@ -39,7 +39,7 @@ def timestamp(value):
     return value.seconds + value.nanos / 1_000_000_000
 
 
-async def decode_history(events, converter, session):
+async def decode_history(events, converter, session, *, expected_agent="conformance-lifecycle"):
     """Trusted payload decoding; only fixed lifecycle metadata is retained."""
     rows, terminal, progress = {}, {}, {}
     if len(events) > 10000:
@@ -68,16 +68,16 @@ async def decode_history(events, converter, session):
             if not isinstance(nested, dict) or nested.get("session_id") != session:
                 continue
             owner = nested if name not in {"close_session", "delete_orphan"} else arg
-            if (
-                owner.get("tenant") != "tenant-test"
-                or nested.get("agent") != "conformance-lifecycle"
-            ):
+            if owner.get("tenant") != "tenant-test" or nested.get("agent") != expected_agent:
                 raise ValueError("lifecycle history owner mismatch")
             rows[event.event_id] = {
                 "activity": name,
+                "activity_id": attrs.activity_id,
                 "scheduled_id": event.event_id,
                 "scheduled_at": at,
                 "completed_at": None,
+                "completed_id": None,
+                "pod_name": nested.get("name") if name == "delete_orphan" else None,
                 "result": None,
                 "failure_type": None,
                 "attempt": None,
@@ -119,7 +119,7 @@ async def decode_history(events, converter, session):
                     raise ValueError("invalid lifecycle cleanup receipt")
             else:
                 value = None
-            row.update(completed_at=at, result=value)
+            row.update(completed_at=at, completed_id=event.event_id, result=value)
         elif kind in (
             EventType.EVENT_TYPE_ACTIVITY_TASK_FAILED,
             EventType.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
@@ -145,7 +145,7 @@ async def decode_history(events, converter, session):
                     "DeletionNotConfirmed",
                 }:
                     failure_type = "OtherFailure"
-                row.update(completed_at=at, failure_type=failure_type)
+                row.update(completed_at=at, completed_id=event.event_id, failure_type=failure_type)
         elif kind in (
             EventType.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
             EventType.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,

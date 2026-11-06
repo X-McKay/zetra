@@ -1299,6 +1299,7 @@ class Harness:
         lifecycle=None,
         transport=None,
         policy_repair=None,
+        generation=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1331,6 +1332,7 @@ class Harness:
         self.lifecycle = lifecycle
         self.transport = transport
         self.policy_repair = policy_repair
+        self.generation = generation
 
     async def run_session(
         self,
@@ -1639,6 +1641,8 @@ class Harness:
                     target = self.checkpoint
                 if t == "T28":
                     target = self.policy_repair
+                if t == "T21":
+                    target = self.generation
                 if t == "T27":
                     target = self.transport
                 if t == "T17":
@@ -1860,6 +1864,16 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             args.agent,
             args.release,
         )
+    if "T21" in args.tests:
+        from runner.conformance_generation_control import Control
+        from runner.conformance_generation_runtime import GenerationHarness, GenerationOps
+
+        control = Control(core)
+        if control.config["run_id"] != args.generation_run_id:
+            raise ValueError("T21 selected run differs from immutable control")
+        harness.generation = GenerationHarness(
+            temporal, GenerationOps(core, k8s.CustomObjectsApi(), control), control
+        )
     if "T17" in args.tests:
         from runner.conformance_fail_closed_runtime import FailClosedHarness, OutageOps
 
@@ -2001,6 +2015,12 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--policy-repair-digest",
         help="T28: independently rendered canonical sha256 NetworkPolicy digest",
     )
+    parser.add_argument("--generation-run-id", help="T21 exact root-created control run UUID")
+    parser.add_argument(
+        "--observe-generation-faults",
+        action="store_true",
+        help="T21 read-only root fault coordination",
+    )
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)
@@ -2015,6 +2035,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "T24",
         "T27",
         "T28",
+        "T21",
     )
     known = {t.upper(): t for t in supported}
     args.tests = [
@@ -2033,6 +2054,20 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         parser.error(
             "T28 requires exclusive tenant-test/conformance, --allow-policy-repair-mutation and independently rendered --policy-repair-digest"
         )
+    if "T21" in args.tests:
+        from runner.conformance_lifecycle_control import canonical_uuid
+
+        if not (
+            args.tests == ["T21"]
+            and args.tenant == "tenant-test"
+            and args.agent == "conformance"
+            and canonical_uuid(args.generation_run_id)
+            and args.observe_generation_faults
+            and args.session_timeout >= 1200
+        ):
+            parser.error(
+                "T21 requires exclusive tenant-test/conformance, exact --generation-run-id, --observe-generation-faults and --session-timeout >=1200"
+            )
     if "T27" in args.tests and not (
         args.tests == ["T27"]
         and args.tenant == "tenant-test"

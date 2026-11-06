@@ -1102,3 +1102,112 @@ has only one-day retention; seven-day configuration/observation and production
 qualification remain open. No retirement API or assertion-only drain bypass is
 provided. Existing legacy conformance observers do not prove governed-pool
 behavior; governed observers must consume exact current-version discovery.
+
+### T21: separate fence-only and confirmed-delete recovery
+
+The accepted 2026-11-06 contract preserves confirmed deletion before replacement.
+T21 now has three separate fresh sessions. No production workflow, delete
+algorithm, generation fencing, or reconciliation schedule is changed. Existing
+signed `conformance-b` and `conformance-checkpoint` releases are reused; no agent
+release or grant is created for this preparation.
+
+Root stages `conformance-generation-control` in `agent-platform`, with immutable
+`data.config` containing exactly version=1, a fresh UUID `run_id`, tenant-test,
+`probe_release` (the Ready conformance-b release), `recovery_release` (the Ready
+checkpoint release), queue=`conformance-generation-<run_id>`, the immutable
+published `worker_image`, and distinct fresh UUIDs under sessions.fence_only,
+sessions.blocked_deletion and sessions.recovery_control. Config text and ConfigMap
+UID cannot change during a run. Neither workload writes the control. Root may add
+only the exact command/receipt keys described by
+`conformance_generation_control.py`; wrong run/session/Pod/worker/action is refused.
+
+The temporary worker runs `python -m runner.conformance_generation_worker` on that
+unique queue with downward-API `POD_UID` and matching `GENERATION_RUN_ID`. It uses
+the existing trusted `session-runner-tenant-test` service account, normal mounted
+runner credentials/artifact paths and existing runner network role labels; do not
+grant the conformance harness runner mutation authority. Add only exact GET access
+to this control for the worker/harness. Label its Pod
+`agentplatform.io/generation-run: <run_id>`; the harness requires one Ready,
+pinned worker with unchanged UID/image/imageID/restarts/service account throughout.
+The worker registers the unchanged SessionWorkflow and delegates to real
+production activities. Run no normal queue poller for this temporary queue.
+
+Harness invocation (only root performs live operations):
+
+```sh
+agent-conformance --tenant tenant-test --agent conformance \
+  --release "$ORDINARY_CONFORMANCE_RELEASE" --tests T21 \
+  --generation-run-id "$RUN_ID" --observe-generation-faults \
+  --session-timeout 1200 --report /tmp/t21-report.json
+```
+
+The ordinary top-level release is report metadata; both case fixture releases
+come from the exact control and are independently checked for approval, verified
+signature, Ready/no drift and genuine no-grant semantics. Run exclusively with
+no concurrent qualification, rollout, or Schedule/configuration writer. Root
+retains actual Job/Pod/source imageIDs and configuration receipts.
+
+For fence_only, the real existing probe sends bounded, side-effect-free MCP
+initialize requests with one fixed token. Wait for `ready_fence_only`, which
+requires actual allowed responses joined to both APS replicas. Root CAS-adds
+`command-fence_only` with exactly run_id, session_id, current pod_uid, worker_uid,
+and action=`fence_generation_2`. A monitor within the trusted activity advances
+only the APS fence using normal runner authentication and records the genuine
+API acknowledgement. It never extracts a Pod token or provisions a replacement.
+The harness requires that exact acknowledgement, same-token actual gateway 403s
+joined to `deny.generation_stale` decisions from both replicas, the original
+Pod still Running with its original UID, and no generation 2+ provisioning.
+Then ordinary cancellation confirms cleanup. There is no fence rollback or
+ledger reset. Missing/expired traffic, late fence, extra generation or cancelled
+proof is retained as failed evidence.
+
+For blocked_deletion and recovery_control, boundary zero is genuinely committed
+and snapshotted before the worker holds the next real boundary at a heartbeat
+gate. Wait for `ready_delete_for_recovery`. For blocked_deletion, root first adds
+only `agentplatform.io/t21-conformance-hold` to the exact original Pod UID using
+resourceVersion CAS and confirms it; recovery_control requires no finalizers.
+Root adds the exact case command with action=`delete_for_recovery`. The worker
+issues a UID-conditional real DELETE. It observes actual terminated containers
+plus the held deleting Pod for blocked_deletion, or actual HTTP404 for control,
+then calls the real production exec. That genuine failure drives unchanged
+ordinary recovery. No synthetic ActivityError or deletion result is supplied.
+
+The blocked session must end with its original business result NOT_CONFIRMED,
+real timed NOT_CONFIRMED deletion activity, and no generation 2+. A successful
+later reconciler does not rewrite that original result. The harness waits for
+the ordinary active five-minute Schedule's genuine pending delete_orphan for
+that exact session/Pod name, confirms the same UID is still held, records its
+own monotonic observation, and emits
+`scheduled_delete_pending_remove_finalizer_now`. Root now removes only the
+exact test finalizer with UID/resourceVersion CAS and writes the root receipt.
+Root must not trigger the Schedule manually or change its interval/overlap/queue.
+
+The root receipt preserves its own boot ID and monotonic PATCH start/ack bounds.
+The root host and harness Pod may have different clocks: they are never
+subtracted or assumed equivalent. The <=300-second gate is a conservative upper
+bound from the harness's own pre-removal held observation to its observations
+of both actual API404 and the real scheduled DELETED history result. It includes
+root reaction/API latency. The report separately records held-wait duration.
+This intentionally scheduled gate does not measure random-phase five-minute
+convergence. Missing scheduled provenance, changed Schedule, absent removal
+receipt or late confirmation fails.
+
+Use root-only `FinalizerGuard` from `conformance_generation_operator.py` in the
+root coordinator after validating the exact active harness Job/Pod/run and its
+fresh ready-delete signal. Its context arms an independent maximum 720-second
+hold before the first mutation, performs exact UID/RV patches, writes only the
+blocked command/receipt, and removes its own finalizer in `finally` or on hold
+expiry even if no scheduled-removal gate arrives. It preserves other finalizers
+and refuses replacement UIDs. The root coordinator must keep the guard process
+alive, inspect/record `error_type`, and treat expired holds or cleanup/API errors
+as failed attempts. It must finish root cleanup on interruption; the read-only
+harness only emits `restore_exact_finalizer_now` and cannot remove finalizers.
+Never launch a blocked case without this bounded root owner. Utility tests are
+not proof that a disconnected or killed root process can perform cleanup.
+
+Finally recovery_control must show real deletion/404 and a DELETED activity
+before any generation 2 creation event, a distinct new Pod UID and real
+checkpoint completion on generation 2. Reports preserve all three cases and
+stop after the first failed case. Local unit/mock checks cover protocol binding,
+real API call options, strict evidence joins, clock bounds and bounded guard
+cleanup; live qualification remains required on the deployed compatible runner.
