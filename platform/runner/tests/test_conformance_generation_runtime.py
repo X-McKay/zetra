@@ -529,7 +529,6 @@ async def test_case_deadline_cancels_hung_observation_and_still_restores_root_cl
     from tests.test_conformance_generation import config, data
 
     cfg = config()
-    sid = cfg["sessions"]["blocked_deletion"]
     pod = data("blocked_deletion")["initial_pod"]
     worker = {"uid": "worker"}
     state = {"held": False, "closed": False, "reads": 0, "read_cancelled": False}
