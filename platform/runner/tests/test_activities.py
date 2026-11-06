@@ -309,7 +309,11 @@ def test_protocol_failure_reports_only_known_diagnostics(
     err = refused(act.run_boundary, BoundaryIn(inp(), 1, 3))
     assert err.type == "OutcomeUnknown" and not err.non_retryable
     assert f"protocol_error={diagnostic}" in str(err)
-    records = [json.loads(r.message) for r in caplog.records if r.name == "runner.records"]
+    records = [
+        json.loads(r.message)
+        for r in caplog.records
+        if r.name == "runner.records" and '"boundary_failed"' in r.message
+    ]
     assert records == [
         {
             "event": "boundary_failed",

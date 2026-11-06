@@ -196,3 +196,35 @@ case remain strict errors. The extra-container case clones the valid container,
 including its security context, so it reaches the intended container-count rule.
 All direct requests remain server-side dry-runs; no cluster policy is weakened.
 The original run15 errors remain historical evidence pending a new live rerun.
+
+### T25 protocol fixture harness
+
+T25 is opt-in and requires `--protocol-fixture-agent conformance-protocol`, its
+explicit signed/approved Ready `--protocol-fixture-release`, and
+`--session-timeout 1800` or longer. The dedicated image intentionally replaces
+the installed SDK step module; ordinary tool output cannot exercise these faults
+because the SDK normalizes it. A healthy control precedes five fault sessions,
+and another healthy session follows each fault. Each fault first commits boundary0,
+then repeats the actual wire fault at boundary1 through the three-generation limit.
+
+The verdict decodes real Temporal inputs/results with the tenant codec. It checks
+the one durable checkpoint, unchanged restored snapshot, no accepted faulty
+boundary, confirmed deletion before generation fencing and creation, final cleanup,
+and pod absence. The hang uses the unchanged 290-second exec deadline, observed
+by trusted monotonic worker telemetry. No fixture injection or shortened timeout
+is added to the production runner.
+
+Every exec boundary records Linux process RSS/high-water and the actual cgroup
+memory limit at start/end and at most once per five seconds during heartbeats.
+The kernel high-water mark captures peaks between samples. T25 requires complete
+observations, one worker process and pod UID/image, unchanged restart count,
+at most 64 MiB RSS and high-water growth from the initial baseline, and at least
+64 MiB high-water headroom below the cgroup limit. These are process-wide bounds;
+run the batch exclusively. Another session's samples, missing telemetry, unreadable
+worker logs, a process change, or an unbounded cgroup cannot establish a pass.
+The harness needs worker pod/log read access and tenant session pod list/release
+get access; it needs no additional exec or fixture mutation privileges.
+
+Local subprocess and history tests establish implementation coverage only. The
+fixture must still pass the signed release pipeline and live admission, and a new
+retained report must establish the actual T25 gate. Historical failures remain.

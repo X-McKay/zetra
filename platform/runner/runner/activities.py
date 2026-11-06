@@ -26,6 +26,7 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from runner import records
+from runner.memory_audit import MemoryAudit
 from runner.aps import APS
 from runner.types import (
     ApsSession,
@@ -474,6 +475,15 @@ def _protocol_error(res: ExecResult) -> str | None:
 
 @activity.defn
 def run_boundary(b: BoundaryIn) -> BoundaryOut:
+    memory = MemoryAudit(b)
+    memory.sample("start")
+    try:
+        return _run_boundary(b, memory)
+    finally:
+        memory.sample("end")
+
+
+def _run_boundary(b: BoundaryIn, memory: MemoryAudit) -> BoundaryOut:
     d = deps()
     ns, name = b.inp.tenant, pod_name(b.inp.session_id, b.generation)
     payload = json.dumps(
@@ -482,6 +492,11 @@ def run_boundary(b: BoundaryIn) -> BoundaryOut:
     if len(payload) > MAX_INPUT:
         raise _forbidden("task too large")
     frame = f"{len(payload)}\n".encode() + payload  # the guest never waits for EOF
+
+    def heartbeat():
+        activity.heartbeat()
+        memory.sample("periodic")
+
     try:
         res = d.run_exec(
             ns,
@@ -490,7 +505,7 @@ def run_boundary(b: BoundaryIn) -> BoundaryOut:
             stdin=frame,
             max_output=MAX_OUTPUT,
             deadline=EXEC_DEADLINE,
-            heartbeat=activity.heartbeat,
+            heartbeat=heartbeat,
         )
     except ExecNotStarted:
         raise ApplicationError("exec could not start", type="SandboxLost") from None

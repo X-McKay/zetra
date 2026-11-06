@@ -9,6 +9,19 @@ import logging
 logger = logging.getLogger("runner.records")
 
 FIELDS = {
+    "boundary_memory": {
+        "session_id",
+        "generation",
+        "boundary",
+        "phase",
+        "sampled_at",
+        "elapsed_ms",
+        "process_id",
+        "rss_bytes",
+        "hwm_bytes",
+        "limit_bytes",
+        "error",
+    },
     "session_started": {"tenant", "agent", "release", "session_id", "delegated", "grant_handle"},
     "sandbox_created": {"session_id", "generation", "pod", "node", "boot_ms"},
     "boundary_failed": {
