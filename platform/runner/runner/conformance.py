@@ -115,6 +115,7 @@ FORGED_HEADERS = {
 STATUS_JSON = re.compile(r"[\"']?status[\"']?\s*[:=]\s*[\"']?([1-5][0-9]{2})")
 STATUS_WORD = re.compile(r"\b([45][0-9]{2})\b")
 TESTS = ("T4", "T5", "T6", "T7", "T8", "T11", "T12", "T19", "T26")
+ADMISSION_TESTS = ("T9a", "T9b", "T22")
 DEFAULT_ARTIFACT_DIR = "/var/lib/agent-artifacts"
 TOKEN_STASH_MEMBER = "workspace/t26/token"  # what probe_token_stash writes, as the tar names it
 DENY_BOUND = "deny.token_bound_elsewhere"
@@ -1091,6 +1092,7 @@ class Harness:
         model_capture_logs: Callable[[float], Awaitable[str]] | None = None,
         model_url: str = "",
         backend_key_file: str = "",
+        admission=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1106,6 +1108,7 @@ class Harness:
         self.agent_b, self.release_b = agent_b, release_b  # the second agent T26 needs
         self.model_capture_logs = model_capture_logs
         self.model_url, self.backend_key_file = model_url, backend_key_file
+        self.admission = admission
 
     async def run_session(
         self,
@@ -1342,7 +1345,10 @@ class Harness:
         results = []
         for t in tests:
             try:
-                results.append(await getattr(self, t.lower())())
+                target = self.admission if t in ADMISSION_TESTS else self
+                if target is None:
+                    raise ValueError("admission tests require the Kubernetes admission adapter")
+                results.append(await getattr(target, t.lower())())
             except Exception as e:  # noqa: BLE001 - one broken test must not hide the others
                 results.append({"id": t, "result": "error", "error": type(e).__name__})
         return scrub(
@@ -1421,8 +1427,26 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
 
     config.load_incluster_config()
     core = k8s.CoreV1Api()
+    temporal = await connect(args.tenant)
+    admission = None
+    if any(t in ADMISSION_TESTS for t in args.tests):
+        from runner.conformance_admission import (
+            AdmissionHarness,
+            AdmissionSessions,
+            KubernetesAdmission,
+        )
+
+        ops = KubernetesAdmission(core, k8s.CustomObjectsApi(), args.tenant)
+        admission = AdmissionHarness(
+            ops,
+            AdmissionSessions(temporal, ops, timeout=args.session_timeout),
+            args.admission_fixture_agent or args.agent,
+            args.admission_fixture_release or args.release,
+            unsigned_release=args.admission_unsigned_release,
+            allow_mutations=args.allow_admission_mutations,
+        )
     harness = Harness(
-        await connect(args.tenant),
+        temporal,
         args.tenant,
         args.agent,
         args.release,
@@ -1441,6 +1465,7 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
         ),
         model_url=os.environ.get("T6_MODEL_URL", ""),
         backend_key_file=os.environ.get("BACKEND_KEY_FILE", ""),
+        admission=admission,
     )
     return await harness.run(args.tests)
 
@@ -1455,13 +1480,40 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--tests", default=",".join(TESTS), help="comma-separated, e.g. T4,T5")
     parser.add_argument("--agent-b", default=None, help="T26: a second agent of the tenant")
     parser.add_argument("--release-b", default=None, help="T26: that agent's approved release")
+    parser.add_argument("--admission-fixture-agent", help="dedicated T9a/T9b mutation fixture")
+    parser.add_argument("--admission-fixture-release", help="that fixture's signed Ready release")
+    parser.add_argument("--admission-unsigned-release", help="approved, unsigned fixture release")
+    parser.add_argument(
+        "--allow-admission-mutations",
+        action="store_true",
+        help="temporarily revoke approval/drift the explicit fixture, then restore",
+    )
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)
-    args.tests = [t.strip().upper() for t in args.tests.split(",") if t.strip()]
-    unknown = [t for t in args.tests if t not in TESTS]
+    known = {t.upper(): t for t in (*TESTS, *ADMISSION_TESTS)}
+    args.tests = [
+        known.get(t.strip().upper(), t.strip().upper()) for t in args.tests.split(",") if t.strip()
+    ]
+    unknown = [t for t in args.tests if t not in (*TESTS, *ADMISSION_TESTS)]
     if unknown:
-        parser.error(f"unknown tests {unknown}; known: {', '.join(TESTS)}")
+        parser.error(f"unknown tests {unknown}; known: {', '.join((*TESTS, *ADMISSION_TESTS))}")
+    if bool(args.admission_fixture_agent) != bool(args.admission_fixture_release):
+        parser.error("admission fixture agent and release must be supplied together")
+    if any(t in ("T9a", "T9b") for t in args.tests):
+        if not (
+            args.allow_admission_mutations
+            and args.admission_fixture_agent
+            and args.admission_fixture_release
+            and args.admission_unsigned_release
+        ):
+            parser.error(
+                "T9a/T9b require explicit fixture agent/release, unsigned release and --allow-admission-mutations"
+            )
+        if args.admission_fixture_agent == args.agent:
+            parser.error(
+                "admission mutations must use a separate agent, never the primary conformance agent"
+            )
     return args
 
 

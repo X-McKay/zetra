@@ -134,3 +134,36 @@ eight fresh Kubani qualifications passed, with final native/Kubernetes session
 resource absence and the exact new-image native credential/isolation control.
 See [the qualification report](qualification.md) for retained initial failures,
 compatibility tuples and measurement limits.
+
+### Agent Runtime Platform admission harness
+
+`platform/runner` adds opt-in T9a, T9b and T22 cases to `agent-conformance`.
+These are implementation and local-test coverage; they establish no live-cluster
+pass until a retained report records the named Kyverno policy and rule. Every
+malformed Pod and ephemeral-container request uses server-side dry-run. T22's
+attach request targets a real, valid runner sandbox, which is cancelled and
+confirmed absent afterwards. Generic RBAC or API errors never count as admission
+enforcement; each batch first requires its signed positive control to be admitted.
+
+T22 can run with the normal `--agent` and `--release`. T9a/T9b additionally require
+`--admission-fixture-agent`, `--admission-fixture-release`,
+`--admission-unsigned-release` and `--allow-admission-mutations`. The mutable fixture
+must be a different agent from the main conformance agent. Its signed release must
+be approved, signature-verified, Ready and drift-free; its unsigned release must
+be approved, controller-confirmed not signature-verified, not Ready and drift-free.
+The harness neither creates releases nor writes status. It temporarily changes
+the signed fixture's approval or Agent capabilities, waits for controller-produced
+state, and restores the exact original spec with resourceVersion concurrency
+checks. A concurrent spec edit makes restoration fail visibly instead of being
+overwritten. Run these tests exclusively on that fixture and retain the restoration
+result. T9a separately proves generation zero, preflight `Forbidden`, no scheduled
+pod-creation activity and no session pod; a real signed runner sandbox is its
+positive control.
+
+Required tenant RBAC is Pod `create` (dry-run), `list`, and
+`pods/ephemeralcontainers` `patch` (dry-run), ConfigMap `get` restricted to the
+fixture's pod-template ConfigMap, Agent `get`/`patch` restricted to the mutable
+fixture, AgentRelease `get` restricted to the signed/unsigned fixture releases,
+and AgentRelease `patch` restricted to the signed release. No status permission
+is required. Existing Temporal client access remains necessary. Kubernetes RBAC
+cannot restrict a verb to dry-run; this guarantee is in the harness implementation.
