@@ -451,6 +451,27 @@ def wait_ready(g: GenIn) -> None:
     raise ApplicationError("sandbox not ready", type="SandboxLost")
 
 
+def _protocol_error(res: ExecResult) -> str | None:
+    """Only fixed step diagnostics may enter logs; arbitrary guest output is task content."""
+    if res.rc != 5:
+        return None
+    for reason in (
+        "bad length header",
+        "length out of range",
+        "short body",
+        "invalid JSON",
+        "request is not an object with a task",
+        "bad boundary",
+    ):
+        if f"agent_runtime.step: {reason}" in res.stderr.splitlines():
+            return reason
+    try:
+        out = BoundaryOut.parse_strict(json.loads(res.stdout.decode("utf-8")))
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        return "unrecognized"
+    return "boundary mismatch" if out.summary == "boundary mismatch" else "unrecognized"
+
+
 @activity.defn
 def run_boundary(b: BoundaryIn) -> BoundaryOut:
     d = deps()
@@ -478,8 +499,20 @@ def run_boundary(b: BoundaryIn) -> BoundaryOut:
             "exec lost before the outcome was known", type="ExecFailed"
         ) from None
     if res.truncated or res.timed_out or res.rc not in (0, 2, 3, 4) or not res.stdout.strip():
+        protocol_error = _protocol_error(res)
+        records.emit(
+            "boundary_failed",
+            session_id=b.inp.session_id,
+            generation=b.generation,
+            boundary=b.boundary,
+            rc=res.rc,
+            truncated=res.truncated,
+            timed_out=res.timed_out,
+            protocol_error=protocol_error,
+        )
         raise ApplicationError(
-            f"rc={res.rc} truncated={res.truncated} timed_out={res.timed_out}",
+            f"rc={res.rc} truncated={res.truncated} timed_out={res.timed_out}"
+            f" protocol_error={protocol_error}",
             type="OutcomeUnknown",
         )
     try:

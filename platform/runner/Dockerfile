@@ -8,8 +8,15 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
 COPY runner ./runner
+# A source-only change does not invalidate uv's cached local-project wheel by default.
+# Rebuild it explicitly: console scripts import site-packages, not /app/runner.
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-editable \
-    --compile-bytecode
+    --reinstall-package agent-platform-runner --compile-bytecode
+# Verify the package the entrypoints actually import, with the source directory off sys.path.
+RUN /app/.venv/bin/python -I -c \
+    'from pathlib import Path; import runner; \
+    files = lambda root: {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*.py")}; \
+    assert files(Path("/app/runner")) == files(Path(runner.__file__).parent), "stale runner install"'
 ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 USER 1600:1600
 # --role sessions (Deployment session-runner-<tenant>) or --role reconciler; TENANT from env.
