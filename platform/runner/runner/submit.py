@@ -19,7 +19,7 @@ from runner.workflow import EXECUTION_TIMEOUT, SessionWorkflow
 
 
 async def submit(
-    client: Client, inp: SessionInput
+    client: Client, inp: SessionInput, *, rpc_timeout: timedelta | None = None
 ) -> WorkflowHandle[SessionWorkflow, SessionResult]:
     inp.validate()
     try:
@@ -31,6 +31,7 @@ async def submit(
             id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
             execution_timeout=EXECUTION_TIMEOUT,
             task_timeout=timedelta(seconds=10),
+            rpc_timeout=rpc_timeout,
         )
     except WorkflowAlreadyStartedError:
         # A resubmission with the same session ID is a no-op that returns the original handle.

@@ -67,7 +67,7 @@ async def test_runtime_preserves_races_and_always_cleans_exact_owned_extra(monke
 
     handle = NS(id="session:tenant-test:conformance:sid", result=result, cancel=cancel)
 
-    async def start(client, inp):
+    async def start(client, inp, **kwargs):
         submitted.append(inp)
         if fault == "submit_error":
             raise RuntimeError("submit failed")
@@ -170,7 +170,7 @@ async def test_cancellation_settles_mutation_and_cleans_owned_objects(monkeypatc
             await release.wait()
         return value
 
-    async def start(client, inp):
+    async def start(client, inp, **kwargs):
         if stage == "submit":
             began.set()
             await release.wait()
@@ -237,7 +237,7 @@ async def test_missing_repair_cleans_at_deadline_without_waiting_for_session(mon
 
     handle = NS(id="session:tenant-test:conformance:sid", result=result, cancel=cancel)
 
-    async def start(client, inp):
+    async def start(client, inp, **kwargs):
         return handle
 
     monkeypatch.setattr(runtime, "submit", start)
@@ -322,3 +322,66 @@ def test_gate_accepts_only_release_modes_that_need_no_grant(mode, required, acce
     else:
         with pytest.raises(ValueError):
             ops.gate("conformance", "signed")
+
+
+@pytest.mark.asyncio
+async def test_hanging_start_cannot_keep_allow_all_policy_past_independent_lease(monkeypatch):
+    ops = Ops()
+    entered, lease_ready, expire, release_start, removed = [asyncio.Event() for _ in range(5)]
+
+    async def immediate(function, *args):
+        return function(*args)
+
+    original_sleep = asyncio.sleep
+
+    async def sleep(seconds):
+        if seconds > 10:
+            assert seconds <= 60
+            lease_ready.set()
+            await expire.wait()
+        else:
+            await original_sleep(seconds)
+
+    def remove(extra):
+        ops.removed += 1
+        removed.set()
+        return ops.removed == 1
+
+    ops.remove_owned = remove
+
+    async def result():
+        return NS(outcome="FAILED")
+
+    async def cancel():
+        pass
+
+    handle = NS(id="session:tenant-test:conformance:sid", result=result, cancel=cancel)
+
+    async def start(client, inp, **kwargs):
+        assert kwargs["rpc_timeout"].total_seconds() == 5
+        entered.set()
+        await release_start.wait()
+        return handle
+
+    monkeypatch.setattr(runtime.asyncio, "to_thread", immediate)
+    monkeypatch.setattr(runtime.asyncio, "sleep", sleep)
+    monkeypatch.setattr(runtime, "submit", start)
+    monkeypatch.setattr(runtime.uuid, "uuid4", lambda: "sid")
+    harness = runtime.PolicyRepairHarness(None, ops, "conformance", "signed")
+
+    async def proof(handle, task):
+        await task
+        return ops.data["session"]
+
+    monkeypatch.setattr(harness, "session_evidence", proof)
+    running = asyncio.create_task(harness.t28())
+    await entered.wait()
+    await lease_ready.wait()
+    expire.set()
+    await removed.wait()
+    assert not running.done()  # cleanup was independent of the still-unsettled start
+    release_start.set()
+    report = await running
+    assert report["result"] == "fail"
+    assert report["evidence"]["cleanup"]["operator_deleted"] is True
+    assert report["evidence"]["cleanup"]["session_closed"] is True

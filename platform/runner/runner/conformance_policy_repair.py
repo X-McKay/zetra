@@ -17,7 +17,8 @@ def evaluate(data: dict) -> dict:
     expected_names = set(baseline.get("names", [])) | {extra.get("name")}
     policies = details.get("policies") or []
     checks = {
-        "no_runtime_error": "error_type" not in data,
+        "no_runtime_error": "error_type" not in data
+        and not any(k.endswith("error_type") for k in cleanup),
         "confirmed_policy_creation": extra.get("creation_confirmed") is True,
         "canonical_clean_baseline": baseline.get("valid") is True,
         "canonical_repair_within_60_seconds": (

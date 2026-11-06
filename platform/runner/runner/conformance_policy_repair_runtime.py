@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 import uuid
+from datetime import timedelta
 
 from kubernetes.client.exceptions import ApiException
 from temporalio.api.enums.v1 import EventType
@@ -256,6 +257,7 @@ class PolicyRepairHarness:
         }
         extra = handle = task = None
         create_attempted = False
+        lease = None
         policy_name = "t28-" + sid
         try:
             await asyncio.to_thread(self.ops.gate, self.agent, self.release)
@@ -272,6 +274,21 @@ class PolicyRepairHarness:
                 data["extra"] = extra
 
             await settled(create_owned())
+
+            async def remove_at_deadline():
+                await asyncio.sleep(max(0, 60 - (time.monotonic() - began)))
+
+                async def remove():
+                    try:
+                        deleted = await asyncio.to_thread(self.ops.remove_owned, extra)
+                        data["cleanup"]["operator_deleted"] |= deleted
+                        data["cleanup"]["deadline_cleanup_ran"] = True
+                    except Exception as exc:
+                        data["cleanup"]["deadline_error_type"] = type(exc).__name__
+
+                await settled(remove())
+
+            lease = asyncio.create_task(remove_at_deadline())
             data["create_elapsed"] = time.monotonic() - began
             if not extra["creation_confirmed"]:
                 raise ValueError("ambiguous T28 create response")
@@ -301,7 +318,7 @@ class PolicyRepairHarness:
                 nonlocal handle, task
                 data["cleanup"]["session_closed"] = False
                 try:
-                    handle = await submit(self.client, inp)
+                    handle = await submit(self.client, inp, rpc_timeout=timedelta(seconds=5))
                 except Exception:
                     # A lost start response may already have created the exact
                     # workflow. Recover its deterministic handle for cancellation.
@@ -339,6 +356,9 @@ class PolicyRepairHarness:
 
             async def cleanup():
                 nonlocal extra
+                if lease is not None:
+                    lease.cancel()
+                    await asyncio.gather(lease, return_exceptions=True)
                 if create_attempted and extra is None:
                     try:
                         extra = await asyncio.to_thread(self.ops.recover_owned, policy_name)
@@ -350,7 +370,7 @@ class PolicyRepairHarness:
                         data["cleanup"]["recovery_error_type"] = type(exc).__name__
                 if extra is not None:
                     try:
-                        data["cleanup"]["operator_deleted"] = await asyncio.to_thread(
+                        data["cleanup"]["operator_deleted"] |= await asyncio.to_thread(
                             self.ops.remove_owned, extra
                         )
                         until = time.monotonic() + 10

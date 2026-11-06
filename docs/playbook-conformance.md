@@ -1017,7 +1017,11 @@ stop, delay or pause the controller to manufacture a refusal.
 
 Repair is measured with the harness's monotonic clock from before the create API
 call to observing the original canonical set and injected-name absence. The bound
-is exactly 60 seconds, including API latency. A successful controller
+is exactly 60 seconds, including API latency. An independent 60-second policy
+lease starts immediately after creation and removes the owned extra even if
+Temporal submission is stalled; that operator deletion forces failure. The start
+RPC has an explicit five-second deadline and settles before deterministic-handle
+cleanup, so no start task is abandoned in the background. A successful controller
 UID-conditional DELETE emits a bounded name/UID/resourceVersion receipt; 404 or
 conflict emits no receipt. The harness requires that receipt from the same
 unchanged controller Pod/image, separately confirms policy absence and the
