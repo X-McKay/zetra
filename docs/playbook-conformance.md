@@ -1039,6 +1039,12 @@ Deploy the new controller and runner images together before qualification: the
 controller receipt and preflight failure details are both required. Source tests
 exercise event dispatch, exact-UID API options, evaluator controls and cleanup;
 they do not establish live repair latency or full T28 acceptance.
+The snapshot adapter also has a real Kubernetes ApiClient/V1NetworkPolicy
+regression against the canonical controller renderer. It passes the serializer
+object to the shared digest algorithm; passing its bound function instead failed
+read-only baseline evaluation. Clean, extra, edited and missing-policy cases are
+checked without API calls. This correction requires a fresh runner pin before
+qualification; an older published image is not live T28 evidence.
 
 ## Worker Versioning: disjoint-pool adapter milestone (2026-11-06)
 
