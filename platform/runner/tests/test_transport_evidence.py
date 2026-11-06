@@ -132,3 +132,30 @@ def test_capture_must_continue_until_real_final_exec_gate():
         "after_exec": data["capture_complete"]["ended_at"] + 1,
     }
     assert evaluate(data)["result"] == "fail"
+
+
+@pytest.mark.parametrize("missing", [None, {}, [], "missing"])
+def test_missing_capture_completion_reports_failed_checks(missing):
+    data = evidence()
+    data["capture_complete"] = missing
+    report = evaluate(data)
+    assert report["result"] == "fail"
+    assert report["evidence"]["capture_complete"] == missing
+    for name in (
+        "capture_bound_to_exact_gate",
+        "capture_covers_exact_issuance",
+        "capture_complete_tls_streams",
+        "no_bearer_in_cleartext",
+        "capture_had_no_packet_loss",
+        "capture_stayed_within_bound_and_identity",
+        "capture_digest_retained",
+    ):
+        assert report["checks"][name] is False
+
+
+def test_strict_tls_fatal_alert_refusal_is_accepted_only_with_credentials_absent():
+    data = evidence()
+    data["probe"]["plaintext"]["result"] = "tls_fatal_alert"
+    assert evaluate(data)["result"] == "pass"
+    data["probe"]["plaintext"]["credential_free"] = False
+    assert evaluate(data)["result"] == "fail"

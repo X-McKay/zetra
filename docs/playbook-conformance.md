@@ -861,6 +861,33 @@ UIDs/images/restarts, unchanged fixture UID/spec, and confirmed ordinary cleanup
 for both sessions. Unit tests, dummy-process lifetime tests and installed-image
 validation establish these local paths; they do not constitute live T27 evidence.
 
+### T27 missing-capture and fatal-alert regression (2026-11-06)
+
+Run31 remains ERROR: host capture did not start within the unchanged 240-second
+window, and the missing completion receipt triggered an evaluator AttributeError.
+An explicit null or malformed completion receipt now produces failed capture
+checks while retaining the original evidence. No historical result is upgraded.
+
+The companion transport fixture recognizes only a complete single TLS alert
+record with legacy version 0x0303, length two, fatal level two and description
+unexpected_message(10) or decode_error(50). Unknown responses remain failures.
+The credential-free host diagnostic `15030300020232` is a fatal decode_error,
+not HTTP; it cannot establish what the sandbox received. Recognition follows
+[RFC 5246 sections 6.2.1 and 7.2](https://www.rfc-editor.org/rfc/rfc5246).
+The deployed gateway's recorded v1.7.0 digest is
+`sha256:60216aafb03d37f94e952ff3d51d2f630a65b10ecaebdc0a864882f92610c45b`;
+[its pinned source](https://github.com/agentgateway/agentgateway/tree/26f5aebe99a36a037fe54f8080a608aca5547e15)
+locks rustls 0.23.46. Its
+[alert writer](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/common_state.rs)
+uses fatal alerts; its [message builder](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/msgs/message/mod.rs)
+uses TLSv1_2 for the record and its [connection parser](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/conn.rs)
+emits fatal decode_error on invalid input.
+
+These are local regressions only. Publish a fresh signed transport fixture and
+updated runner from merged main, verify installed/source equality, then coordinate
+a new bounded operator capture during exact T4. No image was built, released or
+qualified by these tests; run31 and its absence of packet evidence remain intact.
+
 ### Explicit second daily-budget retry identity
 
 `conformance-budget-day-retry2` adds one exact selectable T13 identity after

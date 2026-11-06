@@ -4,10 +4,33 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from egress_guard import main as eg
 
 KEY = "agentplatform.io/netpol-attested"
 VALUE = "2026-11-06T12:00:00Z;KUBE-POD-FW-ABCDEF0123456789"
+
+
+@pytest.fixture(autouse=True)
+def guard_clock(monkeypatch):
+    # Receipt tests exercise causal reads and deadlines, not host scheduling.
+    # A loaded CI host can spend more than the 20ms test budget writing a file.
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    monkeypatch.setattr(
+        eg,
+        "time",
+        SimpleNamespace(
+            monotonic=lambda: now[0],
+            monotonic_ns=lambda: int(now[0] * 1_000_000_000),
+            time_ns=lambda: 1_793_923_200_000_000_000 + int(now[0] * 1_000_000_000),
+            sleep=sleep,
+        ),
+    )
 
 
 def arguments(tmp_path, value=VALUE):

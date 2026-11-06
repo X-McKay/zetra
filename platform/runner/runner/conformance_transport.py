@@ -43,7 +43,12 @@ def evaluate(data):
     positive, plain, foreign = (probe.get(k, {}) for k in ("positive", "plaintext", "foreign_ca"))
     gate = data.get("gate", {})
     start, end = data.get("capture_start"), data.get("capture_complete", {})
+    # Runtime records None when the operator capture never completed. Preserve
+    # that raw evidence, but evaluate missing/malformed receipts as failed checks.
+    end = end if isinstance(end, dict) else {}
     analysis, stats = end.get("analysis", {}), end.get("stats", {})
+    analysis = analysis if isinstance(analysis, dict) else {}
+    stats = stats if isinstance(stats, dict) else {}
     session = t4.get("evidence", {}).get("session", {})
     try:
         bound = capture_started(start, gate)
@@ -75,7 +80,7 @@ def evaluate(data):
         and positive.get("tls_url") is True
         and positive.get("credential_free") is True,
         "plaintext_refused_by_reachable_tls_listener": plain.get("result")
-        in {"closed_without_http", "connection_reset", "explicit_tls_required"}
+        in {"closed_without_http", "connection_reset", "explicit_tls_required", "tls_fatal_alert"}
         and plain.get("credential_free") is True,
         "foreign_ca_positive_and_sdk_rejection": foreign.get("positive_status") == 200
         and foreign.get("positive_requests") == 1
