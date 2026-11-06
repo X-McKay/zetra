@@ -1,0 +1,364 @@
+{
+  "scope": "isolated Temporal1.29.1 only; Kubernetes inventory synthetic, no cluster qualification",
+  "build": "local-ea970eac",
+  "old_result": {
+    "deployment": "",
+    "first": "legacy",
+    "second": "legacy"
+  },
+  "new_result": {
+    "deployment": "session-runner-tenant-test-governed-v1",
+    "first": "governed",
+    "second": "governed"
+  },
+  "deployment_stale_cas_error": "RPCError",
+  "deployment_stale_cas_status": "FAILED_PRECONDITION",
+  "schedule_stale_cas_status": "RPC acknowledged; stale update ignored (readback unchanged)",
+  "schedule_to_governed": "confirmed",
+  "schedule_rollback": "confirmed",
+  "schedule_roundtrip_identical": true,
+  "journal": [
+    {
+      "schema": "worker-versioning-operation-v1",
+      "namespace": "agents-tenant-test",
+      "deployment": "session-runner-tenant-test-governed-v1",
+      "build_id": "local-ea970eac",
+      "image": "registry.almckay.io/platform/session-runner:test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "current": "local-066a4c2e",
+      "conflict_sha256": "5a19c586c8ebf76ae11f09f79ec3cb144f9c7638728d038d59d7fc6921e9afb6",
+      "workers": {
+        "pods": [
+          {
+            "name": "worker-new",
+            "uid": "local-new"
+          }
+        ],
+        "scope": "synthetic-local-inventory"
+      },
+      "pollers": [
+        {
+          "queue": "sessions-tenant-test-governed-v1",
+          "type": 1,
+          "pollers": [
+            {
+              "identity": "1@worker-new",
+              "last_access_time": "2026-11-06T20:34:06.629110271Z"
+            }
+          ]
+        },
+        {
+          "queue": "sessions-tenant-test-governed-v1",
+          "type": 2,
+          "pollers": [
+            {
+              "identity": "1@worker-new",
+              "last_access_time": "2026-11-06T20:34:06.751973422Z"
+            }
+          ]
+        }
+      ],
+      "observed_at": "2026-11-06T20:34:11.711129+00:00",
+      "legacy": {
+        "workers": {
+          "pods": [
+            {
+              "name": "legacy-worker",
+              "uid": "local-old"
+            }
+          ],
+          "scope": "synthetic-local-inventory"
+        },
+        "pollers": [
+          {
+            "queue": "sessions-tenant-test",
+            "type": 1,
+            "pollers": [
+              {
+                "identity": "1@legacy-worker",
+                "last_access_time": "2026-11-06T20:34:06.490040977Z"
+              }
+            ]
+          },
+          {
+            "queue": "sessions-tenant-test",
+            "type": 2,
+            "pollers": [
+              {
+                "identity": "1@legacy-worker",
+                "last_access_time": "2026-11-06T20:34:06.482602308Z"
+              }
+            ]
+          }
+        ]
+      },
+      "status": "mutation_pending",
+      "requested_at": "2026-11-06T20:34:11.712192+00:00"
+    },
+    {
+      "schema": "worker-versioning-operation-v1",
+      "namespace": "agents-tenant-test",
+      "deployment": "session-runner-tenant-test-governed-v1",
+      "build_id": "local-ea970eac",
+      "image": "registry.almckay.io/platform/session-runner:test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "current": "local-ea970eac",
+      "conflict_sha256": "5a19c586c8ebf76ae11f09f79ec3cb144f9c7638728d038d59d7fc6921e9afb6",
+      "workers": {
+        "pods": [
+          {
+            "name": "worker-new",
+            "uid": "local-new"
+          }
+        ],
+        "scope": "synthetic-local-inventory"
+      },
+      "pollers": [
+        {
+          "queue": "sessions-tenant-test-governed-v1",
+          "type": 1,
+          "pollers": [
+            {
+              "identity": "1@worker-new",
+              "last_access_time": "2026-11-06T20:34:06.629110271Z"
+            }
+          ]
+        },
+        {
+          "queue": "sessions-tenant-test-governed-v1",
+          "type": 2,
+          "pollers": [
+            {
+              "identity": "1@worker-new",
+              "last_access_time": "2026-11-06T20:34:06.751973422Z"
+            }
+          ]
+        }
+      ],
+      "observed_at": "2026-11-06T20:34:11.711129+00:00",
+      "legacy": {
+        "workers": {
+          "pods": [
+            {
+              "name": "legacy-worker",
+              "uid": "local-old"
+            }
+          ],
+          "scope": "synthetic-local-inventory"
+        },
+        "pollers": [
+          {
+            "queue": "sessions-tenant-test",
+            "type": 1,
+            "pollers": [
+              {
+                "identity": "1@legacy-worker",
+                "last_access_time": "2026-11-06T20:34:06.490040977Z"
+              }
+            ]
+          },
+          {
+            "queue": "sessions-tenant-test",
+            "type": 2,
+            "pollers": [
+              {
+                "identity": "1@legacy-worker",
+                "last_access_time": "2026-11-06T20:34:06.482602308Z"
+              }
+            ]
+          }
+        ]
+      },
+      "status": "confirmed",
+      "requested_at": "2026-11-06T20:34:11.712192+00:00",
+      "completed_at": "2026-11-06T20:34:11.978170+00:00"
+    },
+    {
+      "schema": "worker-versioning-operation-v1",
+      "namespace": "agents-tenant-test",
+      "deployment": "cleanup-reconciler-tenant-test-governed-v1",
+      "build_id": "local-ea970eac",
+      "image": "registry.almckay.io/platform/session-runner:test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "current": "local-066a4c2e",
+      "conflict_sha256": "f45051f8f8cea2dc2256fccbdac5a81e0dbc72b269593ef490ccb611ce17bbb8",
+      "workers": {
+        "pods": [
+          {
+            "name": "worker-new",
+            "uid": "local-new"
+          }
+        ],
+        "scope": "synthetic-local-inventory"
+      },
+      "pollers": [
+        {
+          "queue": "cleanup-tenant-test-governed-v1",
+          "type": 1,
+          "pollers": [
+            {
+              "identity": "1@worker-new",
+              "last_access_time": "2026-11-06T20:34:06.753472198Z"
+            }
+          ]
+        },
+        {
+          "queue": "cleanup-tenant-test-governed-v1",
+          "type": 2,
+          "pollers": [
+            {
+              "identity": "1@worker-new",
+              "last_access_time": "2026-11-06T20:34:06.626574424Z"
+            }
+          ]
+        }
+      ],
+      "observed_at": "2026-11-06T20:34:11.986273+00:00",
+      "legacy": {
+        "workers": {
+          "pods": [
+            {
+              "name": "legacy-worker",
+              "uid": "local-old"
+            }
+          ],
+          "scope": "synthetic-local-inventory"
+        },
+        "pollers": [
+          {
+            "queue": "cleanup-tenant-test",
+            "type": 1,
+            "pollers": [
+              {
+                "identity": "1@legacy-worker",
+                "last_access_time": "2026-11-06T20:34:06.482527547Z"
+              }
+            ]
+          },
+          {
+            "queue": "cleanup-tenant-test",
+            "type": 2,
+            "pollers": [
+              {
+                "identity": "1@legacy-worker",
+                "last_access_time": "2026-11-06T20:34:06.482638638Z"
+              }
+            ]
+          }
+        ]
+      },
+      "status": "mutation_pending",
+      "requested_at": "2026-11-06T20:34:11.987542+00:00"
+    },
+    {
+      "schema": "worker-versioning-operation-v1",
+      "namespace": "agents-tenant-test",
+      "deployment": "cleanup-reconciler-tenant-test-governed-v1",
+      "build_id": "local-ea970eac",
+      "image": "registry.almckay.io/platform/session-runner:test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "current": "local-ea970eac",
+      "conflict_sha256": "f45051f8f8cea2dc2256fccbdac5a81e0dbc72b269593ef490ccb611ce17bbb8",
+      "workers": {
+        "pods": [
+          {
+            "name": "worker-new",
+            "uid": "local-new"
+          }
+        ],
+        "scope": "synthetic-local-inventory"
+      },
+      "pollers": [
+        {
+          "queue": "cleanup-tenant-test-governed-v1",
+          "type": 1,
+          "pollers": [
+            {
+              "identity": "1@worker-new",
+              "last_access_time": "2026-11-06T20:34:06.753472198Z"
+            }
+          ]
+        },
+        {
+          "queue": "cleanup-tenant-test-governed-v1",
+          "type": 2,
+          "pollers": [
+            {
+              "identity": "1@worker-new",
+              "last_access_time": "2026-11-06T20:34:06.626574424Z"
+            }
+          ]
+        }
+      ],
+      "observed_at": "2026-11-06T20:34:11.986273+00:00",
+      "legacy": {
+        "workers": {
+          "pods": [
+            {
+              "name": "legacy-worker",
+              "uid": "local-old"
+            }
+          ],
+          "scope": "synthetic-local-inventory"
+        },
+        "pollers": [
+          {
+            "queue": "cleanup-tenant-test",
+            "type": 1,
+            "pollers": [
+              {
+                "identity": "1@legacy-worker",
+                "last_access_time": "2026-11-06T20:34:06.482527547Z"
+              }
+            ]
+          },
+          {
+            "queue": "cleanup-tenant-test",
+            "type": 2,
+            "pollers": [
+              {
+                "identity": "1@legacy-worker",
+                "last_access_time": "2026-11-06T20:34:06.482638638Z"
+              }
+            ]
+          }
+        ]
+      },
+      "status": "confirmed",
+      "requested_at": "2026-11-06T20:34:11.987542+00:00",
+      "completed_at": "2026-11-06T20:34:12.246915+00:00"
+    },
+    {
+      "schema": "cleanup-schedule-routing-v1",
+      "schedule_id": "cleanup-reconciler-tenant-test",
+      "previous_queue": "cleanup-tenant-test",
+      "target_queue": "cleanup-tenant-test-governed-v1",
+      "status": "mutation_pending",
+      "conflict_sha256": "cd2662154e6d76b2b2b92e70c0cac3ccf534f9b74eb5b89819ec509083d00a50",
+      "schedule_sha256": "11d3b100a4ee4486b8799c1072170e02c8accb04bafe6b1e17d4117782870d85"
+    },
+    {
+      "schema": "cleanup-schedule-routing-v1",
+      "schedule_id": "cleanup-reconciler-tenant-test",
+      "previous_queue": "cleanup-tenant-test",
+      "target_queue": "cleanup-tenant-test-governed-v1",
+      "status": "confirmed",
+      "conflict_sha256": "cd2662154e6d76b2b2b92e70c0cac3ccf534f9b74eb5b89819ec509083d00a50",
+      "schedule_sha256": "11d3b100a4ee4486b8799c1072170e02c8accb04bafe6b1e17d4117782870d85"
+    },
+    {
+      "schema": "cleanup-schedule-routing-v1",
+      "schedule_id": "cleanup-reconciler-tenant-test",
+      "previous_queue": "cleanup-tenant-test-governed-v1",
+      "target_queue": "cleanup-tenant-test",
+      "status": "mutation_pending",
+      "conflict_sha256": "cd04a4754498e06db5a13c5f371f1f04ff6d2470f24aa9bd886540e5dce77f70",
+      "schedule_sha256": "e6536428f726edd87dc82cc2f5c891799d66485e15e1715de709b29a7ccf648e"
+    },
+    {
+      "schema": "cleanup-schedule-routing-v1",
+      "schedule_id": "cleanup-reconciler-tenant-test",
+      "previous_queue": "cleanup-tenant-test-governed-v1",
+      "target_queue": "cleanup-tenant-test",
+      "status": "confirmed",
+      "conflict_sha256": "cd04a4754498e06db5a13c5f371f1f04ff6d2470f24aa9bd886540e5dce77f70",
+      "schedule_sha256": "e6536428f726edd87dc82cc2f5c891799d66485e15e1715de709b29a7ccf648e"
+    }
+  ]
+}

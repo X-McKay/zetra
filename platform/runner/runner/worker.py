@@ -26,18 +26,18 @@ from temporalio.worker import Worker, WorkerDeploymentConfig
 
 from runner import activities as act
 from runner.codec import AesGcmCodec, data_converter
-from runner.types import TENANT_RE
+from runner.types import TENANT_RE, worker_queue, worker_deployment
 from runner.workflow import CleanupReconcilerWorkflow, SessionWorkflow
 
 RECONCILE_EVERY = timedelta(minutes=5)
 
 
-def session_queue(tenant: str) -> str:
-    return f"sessions-{tenant}"
+def session_queue(tenant: str, pool: str = "legacy") -> str:
+    return worker_queue(tenant, "sessions", pool)
 
 
-def cleanup_queue(tenant: str) -> str:
-    return f"cleanup-{tenant}"
+def cleanup_queue(tenant: str, pool: str = "legacy") -> str:
+    return worker_queue(tenant, "cleanup", pool)
 
 
 async def connect(tenant: str) -> Client:
@@ -66,15 +66,24 @@ async def connect(tenant: str) -> Client:
     )
 
 
-def _deployment() -> WorkerDeploymentConfig | None:
+def _deployment(tenant: str, role: str) -> WorkerDeploymentConfig | None:
+    pool = os.environ.get("WORKER_POOL", "legacy")
+    expected = worker_deployment(tenant, role, pool)
     build_id = os.environ.get("WORKER_BUILD_ID")
-    if not build_id:
+    deployment = os.environ.get("WORKER_DEPLOYMENT")
+    if pool == "legacy":
+        if build_id or deployment not in (None, "", expected):
+            raise ValueError("legacy queues must remain unversioned")
         return None
+    import re
+
+    if not build_id or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", build_id):
+        raise ValueError("governed workers require an exact build ID")
+    if deployment != expected:
+        raise ValueError("worker deployment differs from the exact role/pool")
     # Pinned: an in-flight history replays only on the build that started it (14.4).
     return WorkerDeploymentConfig(
-        version=WorkerDeploymentVersion(
-            os.environ.get("WORKER_DEPLOYMENT", "session-runner"), build_id
-        ),
+        version=WorkerDeploymentVersion(deployment, build_id),
         use_worker_versioning=True,
         default_versioning_behavior=VersioningBehavior.PINNED,
     )
@@ -83,28 +92,33 @@ def _deployment() -> WorkerDeploymentConfig | None:
 def session_worker(client: Client, tenant: str, executor: ThreadPoolExecutor) -> Worker:
     return Worker(
         client,
-        task_queue=session_queue(tenant),
+        task_queue=session_queue(tenant, os.environ.get("WORKER_POOL", "legacy")),
         workflows=[SessionWorkflow],
         activities=act.SESSION_ACTIVITIES,
         activity_executor=executor,
         max_concurrent_activities=16,
-        deployment_config=_deployment(),
+        deployment_config=_deployment(tenant, "sessions"),
     )
 
 
 def reconciler_worker(client: Client, tenant: str, executor: ThreadPoolExecutor) -> Worker:
     return Worker(
         client,
-        task_queue=cleanup_queue(tenant),
+        task_queue=cleanup_queue(tenant, os.environ.get("WORKER_POOL", "legacy")),
         workflows=[CleanupReconcilerWorkflow],
         activities=act.RECONCILER_ACTIVITIES,
         activity_executor=executor,
         max_concurrent_activities=16,
-        deployment_config=_deployment(),
+        deployment_config=_deployment(tenant, "cleanup"),
     )
 
 
 async def ensure_reconciler_schedule(client: Client, tenant: str) -> None:
+    pool = os.environ.get("WORKER_POOL", "legacy")
+    worker_queue(tenant, "cleanup", pool)
+    if pool != "legacy":
+        # Future action routing changes only through the reviewed CAS operator.
+        return
     try:
         await client.create_schedule(
             f"cleanup-reconciler-{tenant}",

@@ -24,6 +24,7 @@ CREDENTIAL_KEYS = {
     "authorization",
     "client_assertion",
 }
+WORKER_POOLS = ("legacy", "governed-v1")
 MAX_TASK_BYTES = 65536
 MAX_BOUNDARIES = 64
 MAX_SUMMARY = 512
@@ -31,6 +32,21 @@ MAX_SUMMARY = 512
 
 class InvalidInput(ValueError):
     pass
+
+
+def worker_queue(tenant: str, role: str, pool: str = "legacy") -> str:
+    if not isinstance(tenant, str) or not TENANT_RE.fullmatch(tenant):
+        raise InvalidInput("invalid worker tenant")
+    if role not in ("sessions", "cleanup") or pool not in WORKER_POOLS:
+        raise InvalidInput("invalid worker role or pool")
+    base = f"{role}-{tenant}"
+    return base if pool == "legacy" else f"{base}-{pool}"
+
+
+def worker_deployment(tenant: str, role: str, pool: str = "legacy") -> str:
+    worker_queue(tenant, role, pool)
+    base = f"{'session-runner' if role == 'sessions' else 'cleanup-reconciler'}-{tenant}"
+    return base if pool == "legacy" else f"{base}-{pool}"
 
 
 def looks_like_token(text: str) -> bool:
@@ -62,16 +78,20 @@ class SessionInput:
     # choice, like the task. The conformance harness uses it for T26.
     seed: str | None = None
 
+    # Absent in historical payloads: never redirect replay to a new pool.
+    worker_pool: str = "legacy"
+
     @property
     def workflow_id(self) -> str:
         return f"session:{self.tenant}:{self.agent}:{self.session_id}"
 
     @property
     def task_queue(self) -> str:
-        return f"sessions-{self.tenant}"
+        return worker_queue(self.tenant, "sessions", self.worker_pool)
 
     def validate(self) -> None:
         """Section 10.2: identifiers in their fixed formats, no credentials, task at most 64 KiB."""
+        worker_queue(self.tenant, "sessions", self.worker_pool)
         if not TENANT_RE.match(self.tenant):
             raise InvalidInput("tenant must match ^tenant-[a-z0-9-]{1,50}$")
         if not NAME_RE.match(self.agent) or not NAME_RE.match(self.release):
