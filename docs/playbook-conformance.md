@@ -536,3 +536,155 @@ Operator cleanup independently removes the temporary worker, ConfigMap and RBAC
 after completion or failure, and confirms no bound sessions or Pods remain.
 Use new root-created bindings for a new run. Local unit and real Temporal-history
 adapter tests verify the implementation; they do not constitute a live T23 pass.
+
+### T24 lifecycle cleanup: isolated worker and read-only fault observation
+
+`--tests T24 --lifecycle-fixture-release <signed-ready-release>
+--observe-lifecycle-faults` is exclusive and requires `tenant-test`. It runs the
+four exact 15.2 faults (APS unavailable during cleanup, finalizer-blocked deletion,
+isolated worker loss mid-cleanup, and Temporal hard termination) plus success,
+cancellation, actual activity loss and retry-exhaustion controls. The production
+SessionWorkflow, retry/deletion policies and five-minute reconciler Schedule are
+unchanged. This batch does **not** qualify the production eight-hour business
+clock; it neither accelerates that clock nor adds a deadline input API.
+
+The dedicated signed `conformance-lifecycle` guest writes one real checkpoint,
+then completes, or emits invalid boundary wire for the retry-exhaustion case.
+It makes no model/MCP/network calls and never receives human access or refresh
+tokens. Its manifest retains the ordinary SDK factory validation; only this
+fixture image explicitly installs its deterministic boundary driver. Its model
+capability has one token per day and per session, below the real backend's
+unchanged reservation bound. A release and local tests alone do not establish a
+live T24 pass.
+
+APS optionally exposes `GET /v1/conformance/sessions/<session>?agent=conformance-lifecycle`.
+Both `APS_LIFECYCLE_OBSERVER_SUBJECT=system:serviceaccount:agent-platform:conformance-harness`
+and `APS_LIFECYCLE_OBSERVER_AGENTS=conformance-lifecycle` must be configured together.
+TokenReview requires the APS audience and this exact caller; trusted stored
+ownership must be `tenant-test/conformance-lifecycle`. An atomic store snapshot supplies
+actual grant-record/vault presence and remaining TTL, explicit generation-key
+presence/value, stopped and stop-pending booleans. Two safe flags additionally
+confirm the bound encrypted vault contains a refresh token and its access token
+is current. They prove metadata presence/lifetime, not an attempted refresh.
+The initial baseline requires both; root must supply genuine issuer credentials.
+The observer never exposes a grant handle,
+credential, arbitrary store key, or write operation. Normal lazy key expiry still
+applies. Owner metadata stays bounded to the same 24-hour lifetime in both stores,
+including after discovery removes a fully cleaned session. Missing/expired owner
+metadata is a refusal, not evidence of cleanup. Deploy the orphan-grant discovery
+fix as well: a missing vault is not proof that its grant record was deleted.
+
+For every case the harness requires an initial committed checkpoint, an actual
+activity heartbeat on the exact Ready isolated worker, a genuine grant and vault
+with more than 600 seconds remaining TTL, and an active generation. Cleanup must
+be observed within 600 seconds of the actual cleanup/termination event under both
+wall-clock and monotonic bounds. The original grant/vault expiry must be later
+than final observation, so natural expiry cannot satisfy cleanup. Final proof is
+independent Kubernetes 404 for every created Pod name, empty session Pod listing,
+no generation key, no actual grant record/vault, stopped=true and pending=false.
+The finalizer case also proves stop and grant deletion while the Pod is still
+blocked and records the real 110-second `NOT_CONFIRMED` result. The APS outage
+case records both failed cleanup calls while actual APS Pods/Endpoints are empty,
+confirmed Pod deletion during that outage, and later scheduled reconciliation.
+Hard termination must be the Temporal TERMINATED event, never cancellation.
+
+The operator creates exactly `agent-platform/conformance-lifecycle-control`.
+Its `data.config` is JSON with these fields:
+
+```json
+{
+  "version": 1,
+  "run_id": "<fresh-lowercase-UUIDv4>",
+  "tenant": "tenant-test",
+  "agent": "conformance-lifecycle",
+  "release": "<exact-signed-ready-lifecycle-release>",
+  "queue": "conformance-lifecycle-<same-run-id>",
+  "worker_image": "registry.almckay.io/platform/session-runner:<commit>@sha256:<digest>",
+  "sessions": {
+    "success": "<fresh-UUIDv4>", "aps_down": "<fresh-UUIDv4>",
+    "finalizer": "<fresh-UUIDv4>", "worker_kill": "<fresh-UUIDv4>",
+    "terminate": "<fresh-UUIDv4>", "cancel": "<fresh-UUIDv4>",
+    "activity_crash": "<fresh-UUIDv4>", "retry_exhaustion": "<fresh-UUIDv4>"
+  }
+}
+```
+
+All session IDs must be distinct. The harness and isolated worker pin the
+ConfigMap UID and exact raw configuration; replacement/drift fails closed.
+Both receive only named `get` access to this control object, never patch rights.
+The harness also needs named get of APS Deployment/Endpoints, existing Pod list/get,
+exact Agent/AgentRelease reads, and its normal tenant Temporal/observer credentials.
+It has no Pod delete, exec, Secret read, scale, approval or status-write operation.
+The worker reuses the ordinary tenant session-runner identity and artifact mounts;
+its only new behavior is waiting at exact fixture-bound activity gates.
+
+Launch one same-image ephemeral worker Deployment (one replica) with
+`python -m runner.conformance_lifecycle_worker`, the exact run-specific queue
+configuration, `LIFECYCLE_RUN_ID`, and `POD_UID` from the downward API. Label it
+`agentplatform.io/lifecycle-run=<run-id>`. Preserve the ordinary sandbox/artifact
+mounts and network identity; place it where the artifact PVC can be mounted.
+Run only this isolated queue on the ephemeral worker. Leave the ordinary worker
+and reconciler running. A controller may replace the ephemeral worker after its
+exact Pod UID is killed; the replacement must use the same pinned image and run
+configuration. Initial and replacement Pods must have the same ReplicaSet
+controller owner UID; an unrelated same-image Pod is not recovery evidence.
+Do not restart or change shared workloads during another batch.
+
+The root operator alone appends the following exact keys using JSONPatch tests
+on ConfigMap UID, resourceVersion and unchanged `data.config`. Values are JSON
+strings. Preserve every prior value; a receipt may only gain `restored_at`.
+
+- On stderr `grant_required`, deposit a genuine refresh-backed grant for the exact
+  actor `agent-tenant-test-conformance-lifecycle` and announced session. Append
+  `grant-<case>` with `{"session_id":"<session>","handle":"gh_<opaque>"}`. The
+  handle is approved workflow metadata; no user/refresh token enters this object,
+  stdout or the report. Deposit just in time: the normal reconciler may clean an
+  unused grant whose workflow does not exist. Keep the deposit→control update
+  immediate, and require the observed baseline rather than assuming it succeeded.
+- After `baseline_ready`, normal success/retry-exhaustion cases can be released.
+  For fault cases establish the exact fault first. Append
+  `release-<case>-boundary1` with
+  `{"session_id":"<session>","stage":"boundary1","generation":1}`. No release
+  key is needed for cancellation, hard termination, or the activity-crash case.
+- For APS/finalizer/worker faults append `receipt-<case>` with exactly
+  `session_id`, `fault` (the case name), `target_uid` and `started_at` (Unix seconds
+  just before the actual mutation). Append `restored_at` after observed restoration.
+  The target is the original APS Deployment UID, sandbox Pod UID, or ephemeral
+  worker Pod UID respectively. Root receipts supplement independent API/history
+  observations; an error or receipt alone never proves an outage or deletion.
+
+Fault sequence and restoration obligations:
+
+1. `aps_down`: record original APS UID/spec/replicas and Flux annotation; pause only
+   that Deployment's reconciliation, scale 2→0 with UID/RV preconditions, observe
+   zero Pods and Endpoints, then release boundary 1. On
+   `cleanup_recorded_restore_fault_now`, restore exact replicas/annotation and
+   require two Ready replicas. The harness waits for the ordinary Schedule's next
+   action and matches its actual workflow/run ID and cleanup activity results;
+   it never manually triggers reconciliation.
+2. `finalizer`: add only `agentplatform.io/conformance-lifecycle` to the exact
+   sandbox UID, retaining all unrelated finalizers. Release boundary 1. Wait for
+   the actual `NOT_CONFIRMED` deletion result and independent stop/grant cleanup,
+   then remove only that finalizer with UID/RV tests. Require actual 404.
+3. `worker_kill`: release boundary 1. Wait for
+   `cleanup_waiting_kill_exact_worker`, which requires successful real stop and
+   pending delete/grant activity heartbeats on the original worker. Delete only
+   that worker Pod with its UID precondition; the replacement's ordinary activity
+   retries must execute real delete/grant calls. First attempts never fabricate
+   success or failure. Require original worker 404 and a same-image Ready replacement.
+4. `terminate`: the harness hard-terminates its exact workflow after baseline;
+   scheduled cleanup must record both session closure and confirmed orphan deletion.
+5. `activity_crash`: at baseline kill the exact ephemeral worker without releasing
+   boundary 1. The actual heartbeat timeout must replace generation 1 only after
+   confirmed deletion/fencing, restore the accepted checkpoint and complete on
+   generation 2. Restore the same-image worker as above.
+
+The operator must restore APS replicas/Flux state and remove its own finalizer
+in independent finally/trap paths even if the Job fails, is cancelled or times
+out. The harness settles normal workflow cleanup on exit and retains safe partial
+evidence/error classes, but cannot undo root-owned faults. Confirm every owned
+session is closed and cleaned before removing temporary controls/RBAC/worker.
+A missing receipt, wrong UID, changed configuration, unavailable history, lingering
+Pod/key/grant, stale worker, deadline breach or incomplete fault record fails the
+case. Genuine human grant authorization is an external prerequisite; an empty or
+fabricated initial grant never qualifies this test.

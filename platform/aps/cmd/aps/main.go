@@ -132,6 +132,7 @@ func run(log *slog.Logger) error {
 		Kube: k, Store: st, Entries: entries, Verifier: verifier, Pods: pods,
 		IssuerURL: cfg.IssuerURL, TokenEndpoint: cfg.TokenEndpoint, IdP: idp,
 		BudgetObserverSubject: cfg.BudgetObserverSubject, BudgetObserverAgents: cfg.BudgetObserverAgents,
+		LifecycleObserverSubject: cfg.LifecycleObserverSubject, LifecycleObserverAgents: cfg.LifecycleObserverAgents,
 		RunnerSubjects: cfg.RunnerSubjects, ReconcilerSubjects: cfg.ReconcilerSubjects, Log: log, Now: time.Now,
 	}
 	health := http.NewServeMux()

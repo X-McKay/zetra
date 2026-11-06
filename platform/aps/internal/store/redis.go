@@ -420,3 +420,45 @@ func (r *Redis) SessionOwner(ctx context.Context, session string) (string, strin
 	agent, _ := v[1].(string)
 	return tenant, agent, nil
 }
+
+// Reading this snapshot never runs stop/grant deletion or a ledger sweep.
+var lifecycleScript = redis.NewScript(`
+local owner = redis.call('HMGET', KEYS[1], 'tenant', 'agent', 'grant_handle')
+if not owner[1] or not owner[2] or owner[1] == '' or owner[2] == '' then return {} end
+local grant = -2
+if owner[3] and owner[3] ~= '' then grant = redis.call('PTTL', 'grant:' .. owner[3]) end
+return {owner[1], owner[2], redis.call('GET', KEYS[2]) or '0',
+ redis.call('EXISTS', KEYS[3]), redis.call('EXISTS', KEYS[4]), grant,
+ redis.call('PTTL', KEYS[5]), redis.call('EXISTS', KEYS[2])}
+`)
+
+func (r *Redis) ObserveLifecycle(ctx context.Context, session string) (LifecycleObservation, bool, error) {
+	values, err := lifecycleScript.Run(ctx, r.C, []string{"session:" + session, "gen:" + session, "stopped:" + session, "stop-pending:" + session, "vault:" + session}).Slice()
+	if err != nil {
+		return LifecycleObservation{}, false, err
+	}
+	if len(values) == 0 {
+		return LifecycleObservation{}, false, nil
+	}
+	if len(values) != 8 {
+		return LifecycleObservation{}, false, errors.New("invalid lifecycle observation")
+	}
+	tenant, tenantOK := values[0].(string)
+	agent, agentOK := values[1].(string)
+	generation, generationOK := values[2].(string)
+	stopped, stoppedOK := values[3].(int64)
+	pending, pendingOK := values[4].(int64)
+	grant, grantOK := values[5].(int64)
+	vault, vaultOK := values[6].(int64)
+	generationPresent, presentOK := values[7].(int64)
+	if !tenantOK || !agentOK || !generationOK || !stoppedOK || !pendingOK || !grantOK || !vaultOK || !presentOK {
+		return LifecycleObservation{}, false, errors.New("invalid lifecycle observation")
+	}
+	ttl := func(ms int64) int64 {
+		if ms == -1 {
+			return -1
+		}
+		return max(ms, 0) / 1000
+	}
+	return LifecycleObservation{Tenant: tenant, Agent: agent, Generation: atoi(generation), GenerationPresent: generationPresent == 1, Stopped: stopped == 1, CleanupPending: pending == 1, GrantPresent: grant != -2, VaultPresent: vault != -2, GrantTTLSeconds: ttl(grant), VaultTTLSeconds: ttl(vault)}, true, nil
+}
