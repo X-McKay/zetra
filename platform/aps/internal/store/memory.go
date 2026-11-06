@@ -340,7 +340,10 @@ func (m *Memory) ListSessions(_ context.Context, olderThan time.Time) ([]Session
 			continue
 		}
 		info := SessionInfo{SessionID: id, Tenant: s.tenant, Agent: s.agent, Since: s.since}
-		if _, held := m.get("vault:" + id); held && s.handle != "" {
+		_, vaultHeld := m.get("vault:" + id)
+		_, grantHeld := m.get("grant:" + s.handle)
+		info.HasGrant = vaultHeld || (s.handle != "" && grantHeld)
+		if info.HasGrant && s.handle != "" {
 			h := s.handle
 			info.GrantHandle = &h
 		}
@@ -348,7 +351,6 @@ func (m *Memory) ListSessions(_ context.Context, olderThan time.Time) ([]Session
 			g := atoi(string(v))
 			info.Generation = &g
 		}
-		_, info.HasGrant = m.get("vault:" + id)
 		_, info.Stopped = m.get("stopped:" + id)
 		_, info.CleanupPending = m.get("stop-pending:" + id)
 		info.Reservations = int64(len(m.ledger(SessionLedger(id)).res))

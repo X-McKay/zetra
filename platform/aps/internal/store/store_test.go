@@ -401,3 +401,70 @@ func TestVaultStoppedAndSessions(t *testing.T) {
 		}
 	})
 }
+
+// A successful stop deletes the vault before the independent grant activity.
+// If that activity fails, discovery must retain the actual grant record.
+func TestStoppedSessionRetainsOrphanGrantUntilDeleted(t *testing.T) {
+	backends(t, func(t *testing.T, s Store, c *clock) {
+		ctx := context.Background()
+		const handle = "gh_cleanup-orphan"
+		if err := s.SetGeneration(ctx, sess, 1); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.PutVault(ctx, sess, []byte("encrypted-vault"), time.Hour); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.PutGrant(ctx, handle, []byte("non-secret-grant-metadata"), time.Hour); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.TouchSession(ctx, sess, "tenant-a", "investigator", handle); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.MarkStopped(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DeleteVault(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.CompleteStop(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		for range 2 { // repeated observations must not remove still-held work
+			list, err := s.ListSessions(ctx, c.Now())
+			if err != nil || len(list) != 1 || list[0].Generation != nil || !list[0].HasGrant || list[0].GrantHandle == nil || *list[0].GrantHandle != handle {
+				t.Fatalf("orphan grant lost after successful stop: %+v %v", list, err)
+			}
+		}
+		if _, exists, err := s.GetGrant(ctx, handle); err != nil || !exists {
+			t.Fatalf("grant should still require deletion: %v %v", exists, err)
+		}
+		if err := s.DeleteGrant(ctx, handle); err != nil {
+			t.Fatal(err)
+		}
+		if list, err := s.ListSessions(ctx, c.Now()); err != nil || len(list) != 0 {
+			t.Fatalf("fully cleaned session retained: %+v %v", list, err)
+		}
+	})
+}
+
+func TestLiveVaultWithoutGrantRecordStillNeedsCleanup(t *testing.T) {
+	backends(t, func(t *testing.T, s Store, c *clock) {
+		ctx := context.Background()
+		if _, err := s.PutVault(ctx, sess, []byte("encrypted-vault"), time.Hour); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.TouchSession(ctx, sess, "tenant-a", "investigator", "gh_missing"); err != nil {
+			t.Fatal(err)
+		}
+		list, err := s.ListSessions(ctx, c.Now())
+		if err != nil || len(list) != 1 || !list[0].HasGrant || list[0].GrantHandle == nil || *list[0].GrantHandle != "gh_missing" {
+			t.Fatalf("vault cleanup work lost: %+v %v", list, err)
+		}
+		if err := s.DeleteVault(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		if list, err := s.ListSessions(ctx, c.Now()); err != nil || len(list) != 0 {
+			t.Fatalf("clean session retained: %+v %v", list, err)
+		}
+	})
+}
