@@ -34,7 +34,7 @@ class PolicyRepairOps:
     def snapshot(self):
         policies = self.net.list_namespaced_network_policy(self.tenant, _request_timeout=5).items
         namespace = self.core.read_namespace(self.tenant, _request_timeout=5)
-        names, digest = netpol_digest(policies, self.core.api_client.sanitize_for_serialization)
+        names, digest = netpol_digest(policies, self.core.api_client)
         published = (namespace.metadata.annotations or {}).get("agentplatform.io/netpol-digest")
         return {
             "names": sorted(names),
