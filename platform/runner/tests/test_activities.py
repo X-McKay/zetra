@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import functools
 import hashlib
 import io
@@ -353,6 +354,21 @@ def test_snapshot_is_content_addressed_and_restored(tmp_path):
     run(act.create_sandbox, GenIn(inp(), 2, key))
     run(act.wait_ready, GenIn(inp(), 2, key))
     assert stream.commands[1] == act.RESTORE_CMD + [str(len(blob))]
+    assert bytes(stream.used[1].stdin) == blob
+
+
+def test_seed_restores_only_the_workspace(tmp_path):
+    # T26: a session seeded from another session's snapshot gets that workspace and nothing of
+    # the donor's state/, whose state.json would make boundary 0 a mismatch (step rc 5).
+    blob = workspace_tar()
+    stream = FakeStream(FakeWS([blob], rc=0), FakeWS([], rc=0))
+    setup(tmp_path, stream=stream)
+    key = run(act.snapshot_workspace, SnapshotIn(inp(), 1, 0))
+    seeded = dataclasses.replace(inp(), session_id="b" * 32, seed=key)
+    run(act.create_sandbox, GenIn(seeded, 1, key))
+    run(act.wait_ready, GenIn(seeded, 1, key))
+    assert stream.commands[1] == act.SEED_RESTORE_CMD + [str(len(blob))]
+    assert stream.commands[1][2].endswith("workspace")
     assert bytes(stream.used[1].stdin) == blob
 
 
