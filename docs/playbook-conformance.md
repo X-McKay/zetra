@@ -56,6 +56,8 @@ or its hash. Local HTTP and capture tests exercise refusals, missing evidence an
 credential hygiene; they do not establish a live T6/T7 qualification pass. See
 [model authentication qualification](platform.md#model-authentication-qualification-t6t7)
 for the required mounts, vantage point and capture permissions.
+The capture image build uses the target OS and architecture explicitly, so an
+ARM64 model-side image can be built on an AMD64 builder without emulation.
 
 ## Review hardening
 

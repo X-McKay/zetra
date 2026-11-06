@@ -44,6 +44,9 @@ read-only copy of the same raw key the gateway presents. A configured missing,
 empty or invalid file stops startup. Omit the variable to retain the existing
 MCP capture behavior. The proxy compares the incoming bearer locally and emits
 only `backend_key_match`, never a key or key hash.
+The capture Dockerfile cross-compiles on the builder's native CPU; select
+`docker build --platform=linux/arm64 platform/capture` for the main vLLM node,
+or publish an image index containing every deployment architecture.
 
 Passing T7 requires session-correlated POST `/v1/chat/completions` records with
 status 200, a matching backend key and no JWT `jti`; the static bearer must be
