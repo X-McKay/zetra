@@ -130,6 +130,7 @@ STATUS_JSON = re.compile(r"[\"']?status[\"']?\s*[:=]\s*[\"']?([1-5][0-9]{2})")
 STATUS_WORD = re.compile(r"\b([45][0-9]{2})\b")
 TESTS = ("T4", "T5", "T6", "T7", "T8", "T11", "T12", "T19", "T26")
 ADMISSION_TESTS = ("T9a", "T9b", "T22")
+PROTOCOL_TESTS = ("T25",)
 DEFAULT_ARTIFACT_DIR = "/var/lib/agent-artifacts"
 TOKEN_STASH_MEMBER = "workspace/t26/token"  # what probe_token_stash writes, as the tar names it
 DENY_BOUND = "deny.token_bound_elsewhere"
@@ -1287,6 +1288,7 @@ class Harness:
         human_username: str = "",
         human_client_id: str = "agent-cli",
         human_jwks_url: str = "",
+        protocol=None,
     ) -> None:
         self.client = client
         self.tenant, self.agent, self.release = tenant, agent, release
@@ -1311,6 +1313,7 @@ class Harness:
         self.human_jwks_url = (
             human_jwks_url or issuer.rstrip("/") + "/protocol/openid-connect/certs"
         )
+        self.protocol = protocol
 
     async def run_session(
         self,
@@ -1594,9 +1597,15 @@ class Harness:
         results = []
         for t in tests:
             try:
-                target = self.admission if t in ADMISSION_TESTS else self
+                target = (
+                    self.protocol
+                    if t in PROTOCOL_TESTS
+                    else self.admission
+                    if t in ADMISSION_TESTS
+                    else self
+                )
                 if target is None:
-                    raise ValueError("admission tests require the Kubernetes admission adapter")
+                    raise ValueError("selected test requires its Kubernetes adapter")
                 results.append(await getattr(target, t.lower())())
             except Exception as e:  # noqa: BLE001 - one broken test must not hide the others
                 results.append({"id": t, "result": "error", "error": type(e).__name__})
@@ -1678,6 +1687,7 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
     core = k8s.CoreV1Api()
     temporal = await connect(args.tenant)
     admission = None
+    protocol = None
     if any(t in ADMISSION_TESTS for t in args.tests):
         from runner.conformance_admission import (
             AdmissionHarness,
@@ -1693,6 +1703,32 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
             args.admission_fixture_release or args.release,
             unsigned_release=args.admission_unsigned_release,
             allow_mutations=args.allow_admission_mutations,
+        )
+    if "T25" in args.tests:
+        from runner.conformance_protocol import (
+            KubernetesProtocol,
+            ProtocolHarness,
+            ProtocolSessions,
+        )
+
+        ops = KubernetesProtocol(core, k8s.CustomObjectsApi(), args.tenant)
+        protocol = ProtocolHarness(
+            ops,
+            ProtocolSessions(
+                temporal,
+                ops,
+                args.protocol_fixture_agent,
+                args.protocol_fixture_release,
+                timeout=args.session_timeout,
+            ),
+            pod_log_reader(
+                core,
+                "agent-platform",
+                "app.kubernetes.io/name=session-runner," + "agentplatform.io/tenant=" + args.tenant,
+                "runner",
+            ),
+            args.protocol_fixture_agent,
+            args.protocol_fixture_release,
         )
     harness = Harness(
         temporal,
@@ -1722,6 +1758,7 @@ async def run_in_cluster(args: argparse.Namespace) -> dict:
         human_username=os.environ.get("T5_HUMAN_USERNAME", ""),
         human_client_id=os.environ.get("T5_HUMAN_CLIENT_ID", "agent-cli"),
         human_jwks_url=os.environ.get("T5_HUMAN_JWKS_URL", ""),
+        protocol=protocol,
     )
     return await harness.run(args.tests)
 
@@ -1739,6 +1776,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--admission-fixture-agent", help="dedicated T9a/T9b mutation fixture")
     parser.add_argument("--admission-fixture-release", help="that fixture's signed Ready release")
     parser.add_argument("--admission-unsigned-release", help="approved, unsigned fixture release")
+    parser.add_argument("--protocol-fixture-agent", help="dedicated signed T25 protocol fixture")
+    parser.add_argument("--protocol-fixture-release", help="that fixture's approved Ready release")
     parser.add_argument(
         "--allow-admission-mutations",
         action="store_true",
@@ -1747,13 +1786,22 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--report", type=Path, default=None, help="write the JSON report here too")
     parser.add_argument("--session-timeout", type=float, default=SESSION_TIMEOUT)
     args = parser.parse_args(argv)
-    known = {t.upper(): t for t in (*TESTS, *ADMISSION_TESTS)}
+    supported = (*TESTS, *ADMISSION_TESTS, *PROTOCOL_TESTS)
+    known = {t.upper(): t for t in supported}
     args.tests = [
         known.get(t.strip().upper(), t.strip().upper()) for t in args.tests.split(",") if t.strip()
     ]
-    unknown = [t for t in args.tests if t not in (*TESTS, *ADMISSION_TESTS)]
+    unknown = [t for t in args.tests if t not in supported]
     if unknown:
-        parser.error(f"unknown tests {unknown}; known: {', '.join((*TESTS, *ADMISSION_TESTS))}")
+        parser.error(f"unknown tests {unknown}; known: {', '.join(supported)}")
+    if "T25" in args.tests and not (
+        args.protocol_fixture_agent == "conformance-protocol"
+        and args.protocol_fixture_release
+        and args.session_timeout >= 1800
+    ):
+        parser.error(
+            "T25 requires --protocol-fixture-agent conformance-protocol, explicit release, and --session-timeout >=1800"
+        )
     if bool(args.admission_fixture_agent) != bool(args.admission_fixture_release):
         parser.error("admission fixture agent and release must be supplied together")
     if any(t in ("T9a", "T9b") for t in args.tests):
