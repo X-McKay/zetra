@@ -716,7 +716,8 @@ APS and the dedicated backend require the exact retry identity in their fixed
 configured allowlists; gateway JWT policy, signed Agent/AgentRelease and read-only
 harness access must match it too.
 
-At the real first budget refusal, stderr emits `T13 awaiting gateway replacement`
+After the real first APS budget refusal, a recorded one-second response barrier
+precedes stderr `T13 awaiting gateway replacement`
 with `test=T13`, exact `agent` and `session_id`, original Pod identities, strict
 integer `emitted_ns` from `time.time_ns()`, and unchanged `deadline_seconds=100`.
 The external operator pins the active Job/Pod UIDs, requires two original Ready
@@ -725,12 +726,19 @@ and the emission deadline before each UID-bound deletion. No mutation is
 permitted after the Job ends or the event deadline passes. Root controls this
 operator and records its launch, polling, event and mutation receipts.
 
+The barrier is operational coordination, not proof of HTTP completion. The final
+committed request's `finished_at` must still be no later than the actual watch
+`started_at`; a guest response slower than the barrier can fail this strict check.
+Budget timestamps retain full UTC microseconds, so same-second ordering is not
+lost. Neither this pause nor timestamp precision changes the 100-second window.
+
 The read-only watcher also keeps `started_at`, local elapsed time, last observed
 inventory and a completion flag. An inventory response arriving at or after the
 100-second bound fails even if the new Pods are Ready. Successful evidence must
 show completed replacement within that bound and before the fixture's actual
 post-restart request. On any collection/orchestration error, the report retains
-the phase, bound session/release IDs, already observed ledgers, allowlisted
+the phase (including `denial_response_barrier`), its barrier receipt, bound
+session/release IDs, already observed ledgers, allowlisted
 decision correlation metadata and partial restart evidence. It records only the
 exception class, never arbitrary log/response/exception text. Evidence is frozen
 at failure without extra network collection; settled independent session cleanup

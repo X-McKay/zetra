@@ -17,6 +17,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 from temporalio.api.enums.v1 import EventType
@@ -35,9 +36,9 @@ from runner.types import SessionInput
 
 
 def utcnow():
-    from runner.conformance import utcnow as now
-
-    return now()
+    # The guest records fractional seconds. Truncating the watch start can
+    # incorrectly order a valid same-second HTTP completion after the watch.
+    return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -444,6 +445,7 @@ class BudgetHarness:
         self.decision_receipts = []
         active, sessions = [], []
         restart = None
+        barrier = None
         outcome = None
         phase = "fixture_validation"
         validated = False
@@ -462,6 +464,13 @@ class BudgetHarness:
                 await self.wait_decision(
                     primary[0].session_id, "deny.budget_exhausted", started, primary
                 )
+                # APS logs the decision before the guest receives its response.
+                # This pause coordinates signalling only; the final committed
+                # HTTP finished_at must still precede the actual watch start.
+                phase = "denial_response_barrier"
+                barrier = {"seconds": 1, "started_at": utcnow(), "completed": False}
+                await asyncio.sleep(1)
+                barrier.update(completed=True, finished_at=utcnow())
                 phase = "gateway_replacement"
                 restart = await self.gateway.replaced(
                     before, agent=primary[0].agent, session_id=primary[0].session_id
@@ -510,6 +519,7 @@ class BudgetHarness:
             ]
             outcome["evidence"]["observations"] = list(self.observations)
             outcome["evidence"]["gateway_restart"] = restart
+            outcome["evidence"]["denial_response_barrier"] = barrier
         except Exception as exc:
             # Freeze the evidence at failure. Later cleanup or operator activity
             # cannot rewrite this error into a pass. Avoid secondary network reads.
@@ -522,6 +532,7 @@ class BudgetHarness:
                     "scope": "partial budget-path observations; no qualification verdict",
                     "agent": self.agents[case],
                     "failed_at": utcnow(),
+                    "denial_response_barrier": copy.deepcopy(barrier),
                     "sessions": [
                         {
                             "session_id": r[0].session_id,

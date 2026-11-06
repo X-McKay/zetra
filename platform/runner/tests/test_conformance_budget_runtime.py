@@ -243,6 +243,7 @@ async def test_budget_timeout_retains_partial_ledger_phase_and_cleanup(monkeypat
     )
     running = (inp, None, None, None)
     closed = []
+    coordination = []
     watcher = SimpleNamespace(inventory=lambda: {"pods": []}, last_evidence=None)
     harness = BudgetHarness(
         None,
@@ -272,9 +273,13 @@ async def test_budget_timeout_retains_partial_ledger_phase_and_cleanup(monkeypat
         return running
 
     async def wait(*args):
-        return None
+        coordination.append("denial")
+
+    async def barrier(seconds):
+        coordination.append(("barrier", seconds))
 
     async def replaced(before, **kwargs):
+        coordination.append("watch")
         watcher.last_evidence = {
             "completed": False,
             "emitted_ns": 123,
@@ -291,6 +296,7 @@ async def test_budget_timeout_retains_partial_ledger_phase_and_cleanup(monkeypat
         if cleanup_error:
             raise ExceptionGroup("Bearer private-cleanup", [RuntimeError("private-cleanup")])
 
+    monkeypatch.setattr("runner.conformance_budget_runtime.asyncio.sleep", barrier)
     monkeypatch.setattr(harness, "validate", validate)
     monkeypatch.setattr(harness, "start", start)
     monkeypatch.setattr(harness, "wait_decision", wait)
@@ -303,5 +309,52 @@ async def test_budget_timeout_retains_partial_ledger_phase_and_cleanup(monkeypat
     assert report["evidence"]["sessions"][0]["session_id"] == inp.session_id
     assert report["evidence"]["gateway_restart"]["completed"] is False
     assert closed == [running]
+    assert coordination == ["denial", ("barrier", 1), "watch"]
+    assert report["evidence"]["denial_response_barrier"]["seconds"] == 1
+    assert report["evidence"]["denial_response_barrier"]["completed"] is True
     assert "private" not in json.dumps(report)
     assert ("cleanup_error" in report) is cleanup_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("denial_microsecond,expected", [(200000, True), (600000, False)])
+async def test_same_second_restart_preserves_precision_and_strict_http_completion(
+    monkeypatch, denial_microsecond, expected
+):
+    from datetime import UTC, datetime
+    from runner import conformance, conformance_budget_runtime as runtime
+    from runner.conformance_budget import gateway_replaced
+
+    fixed = datetime(2026, 11, 6, 18, 46, 44, 500000, tzinfo=UTC)
+
+    class FrozenDateTime:
+        @staticmethod
+        def now(tz):
+            return fixed
+
+    monkeypatch.setattr(conformance, "datetime", FrozenDateTime)
+    monkeypatch.setattr(runtime, "datetime", FrozenDateTime, raising=False)
+    watcher = KubernetesGatewayWatch(None)
+    before = {
+        "pods": [{"uid": uid, "ready": True, "image_id": "image"} for uid in ("old1", "old2")],
+        "configuration": "a" * 64,
+    }
+    after = {
+        "pods": [{"uid": uid, "ready": True, "image_id": "image"} for uid in ("new1", "new2")],
+        "configuration": "a" * 64,
+    }
+    monkeypatch.setattr(watcher, "inventory", lambda: after)
+    receipt = await watcher.replaced(
+        before,
+        agent="conformance-budget-day-retry",
+        session_id="00000000-0000-4000-8000-000000000001",
+    )
+    assert receipt["started_at"] == "2026-11-06T18:46:44.500000+00:00"
+    assert (
+        gateway_replaced(
+            receipt,
+            fixed.replace(microsecond=denial_microsecond).timestamp(),
+            fixed.replace(microsecond=800000).timestamp(),
+        )
+        is expected
+    )
