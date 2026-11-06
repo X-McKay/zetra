@@ -110,7 +110,19 @@ async def test_case_retains_partial_evidence_and_runs_cleanup_after_history_fail
     assert "private-never-report" not in json.dumps(result)
 
 
-async def test_success_case_assembles_independent_api_and_temporal_evidence():
+@pytest.mark.parametrize(
+    ("elapsed", "anchor_offset", "final_offset", "absence_delay", "expected"),
+    [
+        (1.0, 0.01, 0.1, 0.0, "pass"),
+        (650.0, 100.0, 650.0, 0.0, "fail"),
+        (650.0, -100.0, 450.0, 0.0, "fail"),
+        (590.0, 100.0, 590.0, 20.0, "fail"),
+    ],
+    ids=["normal", "positive-clock-skew", "negative-clock-skew", "slow-final-404"],
+)
+async def test_success_case_assembles_independent_api_and_temporal_evidence(
+    monkeypatch, elapsed, anchor_offset, final_offset, absence_delay, expected
+):
     import time
     from types import SimpleNamespace
     from runner.conformance_lifecycle_runtime import LifecycleHarness
@@ -119,6 +131,12 @@ async def test_success_case_assembles_independent_api_and_temporal_evidence():
     sid = cfg["sessions"]["success"]
     converter = DataConverter.default
     now = time.time()
+    local_clock = [0.0]
+    from runner import conformance_lifecycle_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime, "time", SimpleNamespace(time=time.time, monotonic=lambda: local_clock[0])
+    )
     inp = {
         "tenant": "tenant-test",
         "agent": "conformance-lifecycle",
@@ -162,11 +180,11 @@ async def test_success_case_assembles_independent_api_and_temporal_evidence():
         ("delete_sandbox", "DELETED"),
     ):
         arg = {"inp": inp, "generation": 1} if name == "delete_sandbox" else inp
-        await completed(name, arg, value, now + 0.01)
+        await completed(name, arg, value, now + anchor_offset)
     done = HistoryEvent(
         event_id=len(history) + 1, event_type=EventType.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED
     )
-    done.event_time.FromDatetime(datetime.fromtimestamp(now + 0.02, UTC))
+    done.event_time.FromDatetime(datetime.fromtimestamp(now + anchor_offset + 0.01, UTC))
     done.workflow_execution_completed_event_attributes.result.payloads.extend(
         await converter.encode([{"outcome": "COMPLETED", "generation": 1, "boundaries": 2}])
     )
@@ -190,6 +208,8 @@ async def test_success_case_assembles_independent_api_and_temporal_evidence():
 
         async def fetch_history_events(self):
             self.phase += 1
+            if self.phase > 1:
+                local_clock[0] = elapsed
             for event in first if self.phase == 1 else history:
                 yield event
 
@@ -243,6 +263,7 @@ async def test_success_case_assembles_independent_api_and_temporal_evidence():
             return [worker]
 
         def absent(self, namespace, pod):
+            local_clock[0] += absence_delay
             return {**pod, "http_status": 404}
 
     class Observer:
@@ -252,7 +273,7 @@ async def test_success_case_assembles_independent_api_and_temporal_evidence():
                 "session_id": sid,
                 "tenant": "tenant-test",
                 "agent": "conformance-lifecycle",
-                "observed_at": now if initial else now + 0.1,
+                "observed_at": now if initial else now + final_offset,
                 "generation": 1 if initial else 0,
                 "generation_present": initial,
                 "grant_present": initial,
@@ -283,6 +304,8 @@ async def test_success_case_assembles_independent_api_and_temporal_evidence():
     harness.reconciler = reconciler
     harness.cleanup.timeout = 0.01
     report = await harness.run_case("success")
-    assert report["result"] == "pass", report
+    assert report["result"] == expected, report
+    assert report["evidence"]["elapsed_monotonic"] == elapsed + absence_delay
     assert "gh_private" not in json.dumps(report)
-    assert report["evidence"]["pod_absence"][0]["http_status"] == 404
+    if expected == "pass":
+        assert report["evidence"]["pod_absence"][0]["http_status"] == 404

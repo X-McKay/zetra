@@ -453,6 +453,7 @@ class LifecycleHarness:
         outcome = None
         try:
             while time.monotonic() - started < 1000:
+                sample_started_mono = time.monotonic()
                 events = [e async for e in handle.fetch_history_events()]
                 data.update(
                     await decode_history(events, self.client.data_converter, inp.session_id)
@@ -507,7 +508,10 @@ class LifecycleHarness:
                                 raise ValueError(
                                     "APS must have two Ready replicas before the lifecycle fault"
                                 )
-                        baseline_mono = time.monotonic()
+                        # This local instant precedes the held-state reads and
+                        # baseline_ready, hence every authorized fault/cleanup.
+                        # Remote wall clocks must never shorten this upper bound.
+                        baseline_mono = sample_started_mono
                         self.notify(case, "baseline_ready", pod=pod_rows[0], worker=initial_worker)
                         if case == "terminate":
                             await handle.terminate(reason="T24 exact hard-termination case")
@@ -560,11 +564,9 @@ class LifecycleHarness:
                     anchor = current["started_at"]
                 if anchor is not None:
                     data["anchor"] = anchor
-                    data["elapsed_monotonic"] = (
-                        time.monotonic() - baseline_mono - (anchor - data["initial"]["observed_at"])
-                    )
-                    if data["elapsed_monotonic"] > 600:
-                        break
+                data["elapsed_monotonic"] = time.monotonic() - baseline_mono
+                if data["elapsed_monotonic"] > 600:
+                    break
                 if case in {"aps_down", "finalizer", "worker_kill", "activity_crash"}:
                     data["restored"] = bool(current.get("restored_at"))
                     if case == "aps_down":
@@ -613,7 +615,12 @@ class LifecycleHarness:
                             for pod in known_pods.values()
                         )
                     )
-                    data.update(final=observation, final_pods=pod_rows)
+                    data.update(
+                        final=observation,
+                        final_pods=pod_rows,
+                        # Include all final receipt/404 reads in the upper bound.
+                        elapsed_monotonic=time.monotonic() - baseline_mono,
+                    )
                     break
                 await asyncio.sleep(0.5)
             outcome = evaluate_case(case, data)

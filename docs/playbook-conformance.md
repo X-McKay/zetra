@@ -587,8 +587,11 @@ fix as well: a missing vault is not proof that its grant record was deleted.
 For every case the harness requires an initial committed checkpoint, an actual
 activity heartbeat on the exact Ready isolated worker, a genuine grant and vault
 with more than 600 seconds remaining TTL, and an active generation. Cleanup must
-be observed within 600 seconds of the actual cleanup/termination event under both
-wall-clock and monotonic bounds. The original grant/vault expiry must be later
+be observed within 600 seconds under both wall-clock and independent local
+monotonic bounds. The local upper bound begins before the held-state baseline
+reads and fault notification, and ends after all final receipt and Kubernetes
+404 reads. Remote cleanup/termination timestamps remain separate evidence and
+never subtract from that elapsed time. The original grant/vault expiry must be later
 than final observation, so natural expiry cannot satisfy cleanup. Final proof is
 independent Kubernetes 404 for every created Pod name, empty session Pod listing,
 no generation key, no actual grant record/vault, stopped=true and pending=false.
