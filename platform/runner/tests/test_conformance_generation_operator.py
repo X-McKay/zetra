@@ -26,6 +26,7 @@ class Timer:
 
 class Core:
     def __init__(self):
+        self.api_client = NS(configuration=NS(retries=0))
         self.cfg = config()
         sid = self.cfg["sessions"]["blocked_deletion"]
         self.doc = {
@@ -112,10 +113,12 @@ def test_context_always_removes_exact_finalizer_and_records_root_clock_bounds():
 
 def test_independent_timer_removes_hold_even_without_any_scheduled_gate():
     core = Core()
-    with guard(core) as active:
-        assert active.timer.seconds == 720
-        active.timer.function()
-        assert core.pod.metadata.finalizers == []
+    with pytest.raises(TimeoutError, match="hold expired"):
+        with guard(core) as active:
+            assert active.timer.seconds == 720
+            active.timer.function()
+            assert core.pod.metadata.finalizers == []
+            assert active.receipt["hold_expired"] is True
     assert len(core.patches) == 2
 
 
@@ -147,3 +150,25 @@ def test_existing_command_refused_before_finalizer_mutation():
     with pytest.raises(ValueError, match="fresh"):
         guard(core).__enter__()
     assert not core.patches
+
+
+def test_ambiguous_unapplied_add_is_fenced_before_final_cleanup():
+    core = Core()
+    original = core.patch_namespaced_pod
+    first = True
+
+    def patch(*args, **kwargs):
+        nonlocal first
+        if first:
+            first = False
+            raise TimeoutError()
+        return original(*args, **kwargs)
+
+    core.patch_namespaced_pod = patch
+    with pytest.raises(TimeoutError):
+        guard(core).__enter__()
+    assert core.pod.metadata.finalizers == []
+    assert len(core.patches) == 2  # own add changes RV, then own removal; old CAS is stale
+    receipt = Control(core).finalizer_receipt("pod-uid")
+    assert receipt["operator_errors"] == ["TimeoutError"]
+    assert receipt["finalizer_removed"] is True

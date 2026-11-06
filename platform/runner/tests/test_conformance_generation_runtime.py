@@ -147,6 +147,8 @@ async def test_read_only_orchestration_observes_separate_root_protocol_and_close
         "target_uid": "uid1",
         "finalizer_added": True,
         "finalizer_removed": False,
+        "hold_expired": False,
+        "operator_errors": [],
     }
 
     def finalizer_receipt(uid):

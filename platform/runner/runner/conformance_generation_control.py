@@ -118,7 +118,15 @@ class Control:
         value = self.get("receipt-blocked_deletion")
         if value is None:
             return None
-        expected = {"run_id", "session_id", "target_uid", "finalizer_added", "finalizer_removed"}
+        expected = {
+            "run_id",
+            "session_id",
+            "target_uid",
+            "finalizer_added",
+            "finalizer_removed",
+            "hold_expired",
+            "operator_errors",
+        }
         if isinstance(value, dict) and value.get("finalizer_removed") is True:
             expected |= {"clock_boot_id", "removal_started_ns", "removal_acknowledged_ns"}
         if (
@@ -129,6 +137,13 @@ class Control:
             or value["target_uid"] != pod_uid
             or type(value["finalizer_added"]) is not bool
             or type(value["finalizer_removed"]) is not bool
+            or type(value.get("hold_expired")) is not bool
+            or not isinstance(value.get("operator_errors"), list)
+            or len(value["operator_errors"]) > 8
+            or any(
+                not isinstance(error, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", error)
+                for error in value["operator_errors"]
+            )
         ):
             raise ValueError("invalid exact T21 finalizer receipt")
         if value["finalizer_removed"] and (

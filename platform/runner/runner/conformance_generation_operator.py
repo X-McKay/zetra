@@ -34,6 +34,13 @@ class FinalizerGuard:
     ):
         if type(hold_seconds) is not int or not 30 <= hold_seconds <= 720:
             raise ValueError("T21 finalizer hold must be bounded to 30..720 seconds")
+        if (
+            getattr(
+                getattr(getattr(core, "api_client", None), "configuration", None), "retries", None
+            )
+            != 0
+        ):
+            raise ValueError("root T21 guard requires its own API client with retries=0")
         self.core, self.control = core, control
         self.pod_uid, self.worker_uid = pod_uid, worker_uid
         self.session = control.config["sessions"]["blocked_deletion"]
@@ -46,11 +53,14 @@ class FinalizerGuard:
             "target_uid": pod_uid,
             "finalizer_added": False,
             "finalizer_removed": False,
+            "hold_expired": False,
+            "operator_errors": [],
         }
         self.lock = threading.Lock()
         self.timer = timer_factory(hold_seconds, self._expire)
         self.timer.daemon = True
         self.error_type = None
+        self.add_resource_version = None
 
     def pod(self):
         pod = self.core.read_namespaced_pod(self.name, "tenant-test", _request_timeout=5)
@@ -126,6 +136,7 @@ class FinalizerGuard:
                 or self.control.get("receipt-blocked_deletion") is not None
             ):
                 raise ValueError("root T21 requires fresh exact control fields")
+            self.add_resource_version = pod.metadata.resource_version
             self.patch_finalizers(pod, [FINALIZER])
             if self.pod().metadata.finalizers != [FINALIZER]:
                 raise ValueError("root T21 exact finalizer addition not verified")
@@ -142,7 +153,8 @@ class FinalizerGuard:
                 },
             )
             return self
-        except BaseException:
+        except BaseException as exc:
+            self.receipt["operator_errors"].append(type(exc).__name__)
             self.release()
             raise
 
@@ -156,7 +168,20 @@ class FinalizerGuard:
                 if FINALIZER not in finalizers:
                     if self.receipt["finalizer_added"]:
                         raise ValueError("T21 finalizer disappeared before guarded removal")
-                    return
+                    if self.add_resource_version is None:
+                        return
+                    if pod.metadata.resource_version != self.add_resource_version:
+                        # Original JSON Patch tested its old RV, so it cannot
+                        # commit after this newer version was observed.
+                        return
+                    # An add response may have been lost before application.
+                    # Commit our own exact finalizer CAS first, advancing RV so
+                    # the earlier unknown request cannot apply after cleanup.
+                    self.patch_finalizers(pod, finalizers + [FINALIZER])
+                    pod = self.pod()
+                    finalizers = list(pod.metadata.finalizers or [])
+                    if FINALIZER not in finalizers:
+                        raise ValueError("unknown T21 finalizer add did not settle")
                 # A lost add response can still have applied this run's finalizer.
                 self.receipt["finalizer_added"] = True
                 started = self.now_ns()
@@ -187,11 +212,16 @@ class FinalizerGuard:
                 self.error_type = None
             except Exception as exc:
                 self.error_type = type(exc).__name__
+                self.receipt["operator_errors"].append(type(exc).__name__)
                 raise
             finally:
                 self.timer.cancel()
 
     def _expire(self):
+        with self.lock:
+            if self.receipt["finalizer_removed"]:
+                return
+            self.receipt["hold_expired"] = True
         try:
             self.release()
         except Exception:
@@ -204,3 +234,5 @@ class FinalizerGuard:
             self.timer.join()
         if self.error_type is not None:
             raise RuntimeError("root T21 guard failed: " + self.error_type)
+        if self.receipt["hold_expired"]:
+            raise TimeoutError("root T21 finalizer hold expired")

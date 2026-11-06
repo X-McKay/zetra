@@ -127,7 +127,9 @@ def evaluate_case(case, data):
                 )
                 and removal.get("target_uid") == initial.get("uid")
                 and removal.get("finalizer_added") is True
-                and removal.get("finalizer_removed") is True,
+                and removal.get("finalizer_removed") is True
+                and removal.get("hold_expired") is False
+                and removal.get("operator_errors") == [],
                 "ordinary_recovery_stopped_not_confirmed": data.get("outcome") == "NOT_CONFIRMED"
                 and any(
                     h.get("activity") == "delete_sandbox"

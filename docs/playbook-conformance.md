@@ -1194,13 +1194,17 @@ receipt or late confirmation fails.
 
 Use root-only `FinalizerGuard` from `conformance_generation_operator.py` in the
 root coordinator after validating the exact active harness Job/Pod/run and its
-fresh ready-delete signal. Its context arms an independent maximum 720-second
+fresh ready-delete signal. Supply a dedicated root API client configured with
+`retries=0` before construction; each guard API request has a five-second timeout. Its context arms an independent maximum 720-second
 hold before the first mutation, performs exact UID/RV patches, writes only the
 blocked command/receipt, and removes its own finalizer in `finally` or on hold
 expiry even if no scheduled-removal gate arrives. It preserves other finalizers
-and refuses replacement UIDs. The root coordinator must keep the guard process
+and refuses replacement UIDs. An ambiguous, not-yet-applied add is fenced by
+a verified resourceVersion-changing own-finalizer CAS before removal, preventing
+its older CAS from applying after cleanup. The root coordinator must keep the guard process
 alive, inspect/record `error_type`, and treat expired holds or cleanup/API errors
-as failed attempts. It must finish root cleanup on interruption; the read-only
+as failed attempts. Receipts explicitly retain `hold_expired` and bounded
+`operator_errors`; either prevents qualification. It must finish root cleanup on interruption; the read-only
 harness only emits `restore_exact_finalizer_now` and cannot remove finalizers.
 Never launch a blocked case without this bounded root owner. Utility tests are
 not proof that a disconnected or killed root process can perform cleanup.

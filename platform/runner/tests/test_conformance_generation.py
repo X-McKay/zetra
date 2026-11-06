@@ -83,6 +83,8 @@ def data(case):
                 "target_uid": "uid1",
                 "finalizer_added": True,
                 "finalizer_removed": True,
+                "hold_expired": False,
+                "operator_errors": [],
             },
             reconciler_after_removal_seconds=2,
             harness_monotonic_bound=True,
@@ -162,6 +164,8 @@ def test_three_separate_complete_cases_pass(case):
         ("blocked_deletion", "late_reconciler"),
         ("blocked_deletion", "wrong_clock"),
         ("blocked_deletion", "manual_reconciler"),
+        ("blocked_deletion", "expired_root_hold"),
+        ("blocked_deletion", "root_operator_error"),
         ("recovery_control", "create_before_delete"),
         ("recovery_control", "no_404"),
         ("recovery_control", "no_completion"),
@@ -187,6 +191,10 @@ def test_unsafe_or_incomplete_cases_never_pass(case, fault):
         d["harness_monotonic_bound"] = False
     elif fault == "manual_reconciler":
         d["reconciler"][0]["scheduled_action"] = False
+    elif fault == "expired_root_hold":
+        d["finalizer_receipt"]["hold_expired"] = True
+    elif fault == "root_operator_error":
+        d["finalizer_receipt"]["operator_errors"] = ["TimeoutError"]
     elif fault == "create_before_delete":
         next(h for h in d["history"] if h.get("activity") == "create_sandbox")["scheduled_id"] = 9
     elif fault == "no_404":
