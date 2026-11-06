@@ -1089,3 +1089,16 @@ current-worker discovery, operational CLI, replay/drain/rollback evidence,
 inactive disjoint manifests and seven-day retention/query qualification remain.
 Legacy workers, old queues and histories must stay until their callers and
 histories are separately drained. Empty visibility is not submission closure.
+
+### Worker Versioning operational milestone
+
+The [operator CLI and local qualification](worker-versioning-operations.md) add
+current-worker discovery bound to routing CAS and Pod ownership, immutable
+private plans, durable pending journals, read-only drain inspection and exact
+closed-history replay. Real local Temporal1.29.1 evidence records DRAINED after
+its default grace, compatible replay, incompatible replay rejection and guarded
+future-routing rollback while existing histories stay pinned. The test namespace
+has only one-day retention; seven-day configuration/observation and production
+qualification remain open. No retirement API or assertion-only drain bypass is
+provided. Existing legacy conformance observers do not prove governed-pool
+behavior; governed observers must consume exact current-version discovery.

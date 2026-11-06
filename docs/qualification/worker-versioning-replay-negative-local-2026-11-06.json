@@ -1,0 +1,6 @@
+{
+  "scope": "owned local Temporal history; intentionally incompatible fixture implementation",
+  "replay_rejected": true,
+  "error_type": "NondeterminismError",
+  "history_sha256": "58937e0b22aef685f79ac76165d23cf07c970ada0c2b61a06a47d409d37ea2ad"
+}

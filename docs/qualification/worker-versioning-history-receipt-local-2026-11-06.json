@@ -1,0 +1,65 @@
+{
+  "schema": "worker-history-receipt-v1",
+  "result": "pass",
+  "deployment": "session-runner-tenant-test-governed-v1",
+  "build_id": "a-1196c386",
+  "workflow_id": "retained-a-1196c386",
+  "run_id": "01a1b29b-8015-7aa5-9340-d989337fc008",
+  "workflow_status": 2,
+  "history_sha256": "58937e0b22aef685f79ac76165d23cf07c970ada0c2b61a06a47d409d37ea2ad",
+  "events": 21,
+  "workers": {
+    "pods": [
+      {
+        "name": "worker-a-1196c386",
+        "uid": "synthetic-a-1196c386",
+        "image": "registry.almckay.io/platform/session-runner:test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "scope": "synthetic local inventory"
+  },
+  "workflow_tasks": [
+    {
+      "event_id": 4,
+      "identity": "1@worker-a-1196c386",
+      "deployment": "session-runner-tenant-test-governed-v1",
+      "build_id": "a-1196c386"
+    },
+    {
+      "event_id": 10,
+      "identity": "1@worker-a-1196c386",
+      "deployment": "session-runner-tenant-test-governed-v1",
+      "build_id": "a-1196c386"
+    },
+    {
+      "event_id": 14,
+      "identity": "1@worker-a-1196c386",
+      "deployment": "session-runner-tenant-test-governed-v1",
+      "build_id": "a-1196c386"
+    },
+    {
+      "event_id": 20,
+      "identity": "1@worker-a-1196c386",
+      "deployment": "session-runner-tenant-test-governed-v1",
+      "build_id": "a-1196c386"
+    }
+  ],
+  "activity_starts": [
+    {
+      "event_id": 6,
+      "identity": "1@worker-a-1196c386",
+      "build_id": "a-1196c386"
+    },
+    {
+      "event_id": 16,
+      "identity": "1@worker-a-1196c386",
+      "build_id": "a-1196c386"
+    }
+  ],
+  "checks": {
+    "workflow_tasks_bound": true,
+    "activity_starts_bound": true,
+    "same_worker_uids_and_images": true
+  },
+  "scope": "owned local Temporal; synthetic Kubernetes inventory, real history event versions/identities"
+}
