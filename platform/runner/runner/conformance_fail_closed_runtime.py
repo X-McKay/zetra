@@ -12,7 +12,15 @@ import uuid
 from dataclasses import asdict
 
 from runner.conformance_admission import AdmissionSessions, KubernetesAdmission, ready, settled
-from runner.conformance_fail_closed import empty, evaluate, read_evidence, restored
+from runner.conformance_fail_closed import (
+    PHASES,
+    RECEIPT_FIELDS,
+    annotation_hash,
+    empty,
+    evaluate,
+    read_evidence,
+    restored,
+)
 from runner.submit import submit
 from runner.types import SessionInput
 
@@ -26,7 +34,7 @@ def receipt_progress(previous, current):
     for key, value in previous.items():
         if key not in current or current[key] != value:
             raise ValueError("operator receipt changed or removed prior evidence")
-    if set(current) - {"schema", "marker", "deployment_uid", "original_replicas", "down", "up"}:
+    if set(current) - (RECEIPT_FIELDS | set(PHASES)):
         raise ValueError("unexpected operator receipt field")
     return current
 
@@ -92,6 +100,9 @@ class OutageOps(KubernetesAdmission):
             "uid": deployment.metadata.uid,
             "resource_version": deployment.metadata.resource_version,
             "generation": deployment.metadata.generation,
+            "annotation_sha": annotation_hash(
+                (deployment.metadata.annotations or {}).get("kustomize.toolkit.fluxcd.io/reconcile")
+            ),
             "observed_generation": deployment.status.observed_generation,
             "replicas": deployment.spec.replicas,
             "ready_replicas": deployment.status.ready_replicas or 0,
@@ -197,10 +208,12 @@ class FailClosedHarness:
             asyncio.to_thread(self.ops.receipt),
         )
         expected = {
-            "schema": "t17-v1",
+            "schema": "t17-v2",
             "marker": self.marker,
             "deployment_uid": sample["uid"],
             "original_replicas": 2,
+            "original_generation": sample["generation"],
+            "original_annotation_sha": sample["annotation_sha"],
         }
         if not ready(release) or release.get("spec", {}).get("agent") != "conformance-b":
             raise ValueError("T17 needs the explicit signed Ready conformance-b release")
