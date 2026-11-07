@@ -1236,3 +1236,16 @@ checkpoint completion on generation 2. Reports preserve all three cases and
 stop after the first failed case. Local unit/mock checks cover protocol binding,
 real API call options, strict evidence joins, clock bounds and bounded guard
 cleanup; live qualification remains required on the deployed compatible runner.
+
+### Operator wait and report boundary
+
+The normal platform runner submission command supports exact-run receipts and
+resume, bounded wait/cancel inspection, and report-only export from explicitly
+configured operator artifact backing. Unit tests use Temporal 1.34 history
+protobufs and fake clients to exercise identity/lineage rejection, duplicate input
+binding, deadline and cancellation uncertainty, cleanup proof disagreement, and
+bounded content-hash-verified archive reading. Export exposes only the exact
+regular `workspace/report.md` member and creates private exclusive output files.
+These checks do not establish live authentication, artifact authorization,
+production cleanup enforcement, or DB-specific report correctness; existing
+operator credentials and artifact access remain deployment-owned prerequisites.
