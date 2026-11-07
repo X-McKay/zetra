@@ -180,7 +180,10 @@ async def wait_execution(
                     if result.workflow_status not in ("COMPLETED", "CANCELED"):
                         return
                     query = await handle.query(SessionWorkflow.status, rpc_timeout=rpc)
-                    if query.get("state") == "CLEANED" and query.get("cleanup") == CLEANUP:
+                    query_clean = (
+                        query.get("state") == "CLEANED" and query.get("cleanup") == CLEANUP
+                    )
+                    if result.workflow_status == "CANCELED" and query_clean:
                         result.cleanup = "DELETED"
                     if result.workflow_status == "COMPLETED":
                         value = await handle.result(follow_runs=False, rpc_timeout=rpc)
@@ -188,8 +191,9 @@ async def wait_execution(
                         if (
                             value.outcome == "COMPLETED"
                             and value.cleanup == CLEANUP
-                            and result.cleanup == "DELETED"
+                            and query_clean
                         ):
+                            result.cleanup = "DELETED"
                             result.exit_code, result.snapshot = 0, value.snapshot
                         else:
                             result.cleanup = "NOT_CONFIRMED"
@@ -237,7 +241,11 @@ def read_report(store, snapshot):
     report = None
     try:
         with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
+            end_of_members = 0
             for index, member in enumerate(archive):
+                # tarfile.offset is the next header boundary, including extended
+                # headers and padded data; never infer terminators from file bytes.
+                end_of_members = archive.offset
                 if index >= 256:
                     raise ValueError("archive member limit")
                 if member.name != "workspace/report.md":
@@ -249,6 +257,9 @@ def read_report(store, snapshot):
                 if len(content) != member.size:
                     raise ValueError("short report read")
                 report = content.decode("utf-8")
+            trailer = raw[end_of_members:]
+            if len(trailer) < 1024 or len(trailer) % 512 or any(trailer):
+                raise ValueError("missing or invalid archive termination")
     except (tarfile.TarError, UnicodeError, EOFError) as exc:
         raise ValueError("invalid report archive") from exc
     if report is None:

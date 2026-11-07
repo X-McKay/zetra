@@ -411,3 +411,64 @@ async def test_blocked_report_interrupt_discards_late_completion(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
     await asyncio.sleep(0.1)  # late completion must not set a cancelled Future
+
+
+async def test_result_timeout_does_not_promote_query_cleanup():
+    from runner.operator import wait_execution
+
+    client = Client()
+
+    async def unavailable_result(**kw):
+        await asyncio.sleep(1)
+
+    client.result = unavailable_result
+    result = await wait_execution(
+        client,
+        receipt(),
+        timeout=0.01,
+        rpc_timeout=0.01,
+        cleanup_timeout=0.01,
+        cancel_on_timeout=False,
+    )
+    assert result.exit_code == 124 and result.cleanup == "NOT_CONFIRMED"
+    assert result.snapshot is None
+
+
+@pytest.mark.parametrize("trailer", [b"", b"\0" * 512])
+def test_archive_requires_two_end_blocks_after_member_boundary(trailer):
+    from runner.operator import read_report
+
+    # A complete report ending in zero bytes must not be mistaken for end markers.
+    raw = archive([("workspace/report.md", b"x" + b"\0" * 511, tarfile.REGTYPE)])[:1024] + trailer
+    with pytest.raises(ValueError):
+        read_report(Store(raw), hashlib.sha256(raw).hexdigest())
+
+
+def test_archive_rejects_nonzero_trailing_bytes():
+    from runner.operator import read_report
+
+    raw = archive([("workspace/report.md", b"x", tarfile.REGTYPE)]) + b"extra"
+    with pytest.raises(ValueError):
+        read_report(Store(raw), hashlib.sha256(raw).hexdigest())
+
+
+def test_actual_snapshot_producer_archive_is_accepted(tmp_path):
+    import subprocess
+    from runner.activities import SNAPSHOT_CMD
+    from runner.operator import read_report
+
+    (tmp_path / "workspace").mkdir()
+    (tmp_path / "state").mkdir()
+    (tmp_path / "workspace" / "report.md").write_text("# producer report")
+    (tmp_path / "state" / "state.json").write_text("private state")
+    command = list(SNAPSHOT_CMD)
+    command[2] = str(tmp_path)
+    raw = subprocess.run(command, capture_output=True, check=True).stdout
+    assert read_report(Store(raw), hashlib.sha256(raw).hexdigest()) == "# producer report"
+
+
+def test_exact_two_end_blocks_accepted():
+    from runner.operator import read_report
+
+    raw = archive([("workspace/report.md", b"x", tarfile.REGTYPE)])[:2048]
+    assert read_report(Store(raw), hashlib.sha256(raw).hexdigest()) == "x"
