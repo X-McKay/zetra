@@ -207,3 +207,49 @@ the temporary Policy and RBAC after any run, including Job failure. The harness
 has no Pod mutation/exec, secret-read, status-write, or cluster-policy permission.
 These tests require new signed probe and runner images; unit tests are not live
 qualification results.
+
+## Operator session wait and report
+
+`agent-session-submit` uses the existing Temporal runner API. Run it only in an
+already authorized operator context with the tenant's externally provisioned
+`TEMPORAL_TLS_CERT`, `TEMPORAL_TLS_KEY`, optional CA/server-name configuration and
+`PAYLOAD_KEY_FILE`. `TEMPORAL_ADDRESS` must reach the intended frontend;
+`TEMPORAL_NAMESPACE`, if set, must equal `agents-<tenant>`. Do not copy credentials
+from running Pods. This is not a general end-user login or authorization service.
+
+Existing submit-only flags and workflow-ID stdout remain supported. The command
+also emits an exact execution receipt on stderr. Save it before waiting:
+
+```sh
+agent-session-submit --tenant tenant-test --agent db-admin \
+  --release db-admin-reviewed --task-file task.json \
+  --receipt session-receipt.json --wait --wait-timeout 600 --rpc-timeout 5
+```
+
+Wait mode prints compact JSON containing exact identity, workflow status, outcome
+and cleanup certainty. Success requires successful execution and matching confirmed
+cleanup from the exact run. Every call pins the run; resume never submits work:
+
+```sh
+agent-session-submit --resume session-receipt.json --wait \
+  --report report.md --artifact-root /operator/tenant-test-artifacts
+```
+
+Report export requires existing access to the correct tenant artifact backing and
+an explicit local root. Only verified `workspace/report.md` is returned; the archive
+and state are never extracted. Receipt and report files are created exclusively
+with mode 0600; existing destinations, including dangling links, are refused.
+Generic export does not qualify DB-specific facts or evidence links.
+
+`--wait-timeout` bounds submission plus waiting (default 600 seconds),
+`--rpc-timeout` bounds connection/submission operations and individual RPCs (5),
+and `--cleanup-timeout` bounds a cancellation cleanup wait (120). All must be
+positive and finite. A local timeout leaves the workflow running unless
+`--cancel-on-timeout` is supplied. First interrupt requests exact-run cancellation
+and waits for cleanup; a second interrupt exits with uncertainty. Cancellation
+alone does not prove deletion. Exit codes: 0 confirmed success, 1 execution/report
+failure or unconfirmed cleanup, 2 invalid input, 124 local timeout, 130 interrupt.
+An ambiguous start is never automatically retried; preserve its failed invocation
+and resolve its identity before deciding whether to submit again.
+
+These operator CLI changes require no runner image rollout or new RBAC.

@@ -242,7 +242,8 @@ async def test_submit_uses_workflow_id_and_reject_duplicate():
 
     c = FakeClient()
     assert await submit(c, valid()) == "handle"
-    assert await submit(c, valid()) == ("existing", valid().workflow_id)
+    with pytest.raises(ValueError, match="exact run"):
+        await submit(c, valid())
     kw = c.calls[0]
     assert kw["id"] == valid().workflow_id and kw["task_queue"] == "sessions-tenant-a"
     assert kw["id_reuse_policy"] == WorkflowIDReusePolicy.REJECT_DUPLICATE
