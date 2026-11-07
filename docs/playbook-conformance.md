@@ -1249,3 +1249,8 @@ regular `workspace/report.md` member and creates private exclusive output files.
 These checks do not establish live authentication, artifact authorization,
 production cleanup enforcement, or DB-specific report correctness; existing
 operator credentials and artifact access remain deployment-owned prerequisites.
+
+
+### Bounded operator resume/report integration
+
+The reviewed normal-session CLI was exercised in an existing authorized runner context against an already-completed db-admin execution. Exact-run/history binding and completed cleanup passed; exported report bytes matched the previously verified report hash, with private output permissions. Submission and cancellation were guarded off and remained zero. The test used reviewed operator source in an ephemeral interpreter; no runtime image or deployment changed. Live evidence covers resume/report only; fresh-submission, interruption, timeout and malformed-archive boundaries are covered by offline regressions. Broader platform qualifications remain paused.
