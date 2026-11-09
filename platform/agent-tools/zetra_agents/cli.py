@@ -44,9 +44,16 @@ def main(argv: list[str] | None = None) -> int:
     rnd.add_argument("--check", action="store_true", help="verify instead of writing")
     rnd.add_argument("--zetra-rev", help="40-hex zetra commit to pin (default: the pinned one)")
 
-    ini = sub.add_parser("init", help="render a new repository holding one agent")
+    ini = sub.add_parser(
+        "init",
+        help="render a new repository holding one agent, lock it and start its git history",
+    )
     ini.add_argument("directory", type=Path)
-    ini.add_argument("--agent", required=True, help="agent name, a DNS label")
+    ini.add_argument(
+        "--name", "--agent", dest="agent", required=True, help="agent name, a DNS label"
+    )
+    ini.add_argument("--no-lock", action="store_true", help="do not run `uv lock`")
+    ini.add_argument("--no-git", action="store_true", help="do not run `git init`")
     ini.add_argument("--tenant", default=DEFAULT_TENANT, help="Kubani tenant namespace")
     ini.add_argument("--owner", required=True, help="Agent spec.owner (an email address)")
     ini.add_argument("--description", default="", help="Agent spec.description")
@@ -54,6 +61,12 @@ def main(argv: list[str] | None = None) -> int:
         "--zetra-rev",
         help="40-hex zetra commit to pin (default: the one this tooling was installed from)",
     )
+
+    ren = sub.add_parser(
+        "rename", help="rename an agent: directory, package, manifest, Agent, tests"
+    )
+    ren.add_argument("old")
+    ren.add_argument("new")
 
     pre = sub.add_parser(
         "preflight", help="offline source/candidate GitOps compatibility before tagging"
@@ -115,6 +128,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "render":
         return render_command(repo, args)
+    if args.command == "rename":
+        try:
+            changed = render.rename(repo, args.old, args.new)
+        except render.RenderError as exc:
+            print(exc, file=sys.stderr)
+            return 2
+        for path in changed:
+            print(path.relative_to(repo))
+        print(f"\nrenamed {args.old} to {args.new}; run `just check`", file=sys.stderr)
+        return 0
     if args.command == "check":
         selected = [layout.find(repo, n) for n in args.agents]
         agents = selected or layout.all_agents(repo)
@@ -181,10 +204,9 @@ def init(args: argparse.Namespace) -> int:
         return 2
     for path in written:
         print(path)
-    print(
-        f"\nnext: cd {args.directory} && uv lock && just setup && just check",
-        file=sys.stderr,
-    )
+    bootstrapped = render.bootstrap(args.directory, lock=not args.no_lock, git=not args.no_git)
+    print(f"\nlock: {bootstrapped['lock']}\ngit: {bootstrapped['git']}", file=sys.stderr)
+    print(render.next_steps(args.directory, args.agent, args.tenant, bootstrapped), file=sys.stderr)
     return 0
 
 

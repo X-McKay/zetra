@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 import keyword
 import re
+import shutil
+import subprocess
 import tomllib
 from dataclasses import dataclass
 from importlib import metadata, resources
@@ -313,3 +315,125 @@ def _walk(root, prefix: Path = Path()) -> list[Path]:
         else:
             found.append(prefix / child.name)
     return found
+
+
+def bootstrap(target: Path, *, lock: bool = True, git: bool = True) -> dict[str, str]:
+    """After rendering: lock the workspace and start a git history, when the tools exist.
+
+    Neither step is required for the repository to be valid; both are what a person would
+    do next by hand. Failures are reported, not raised.
+    """
+    result = {"lock": "skipped", "git": "skipped"}
+    if lock:
+        uv = shutil.which("uv")
+        if uv is None:
+            result["lock"] = "uv not found; run `uv lock`"
+        else:
+            try:
+                proc = subprocess.run(
+                    [uv, "lock"],
+                    cwd=target,
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+                tail = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or [""]
+                result["lock"] = (
+                    "locked" if proc.returncode == 0 else f"failed: {tail[0][:200]}; run `uv lock`"
+                )
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                result["lock"] = f"failed: {exc}; run `uv lock`"
+    if git:
+        g = shutil.which("git")
+        if g is None:
+            result["git"] = "git not found"
+        else:
+            inside = subprocess.run(
+                [g, "-C", str(target), "rev-parse", "--is-inside-work-tree"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if inside.returncode == 0:
+                result["git"] = "already inside a repository"
+            else:
+                try:
+                    subprocess.run(
+                        [g, "init", "-q", "-b", "main", str(target)],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                        check=True,
+                    )
+                    result["git"] = "initialised on main; nothing committed yet"
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+                    result["git"] = f"failed: {exc}"
+    return result
+
+
+def next_steps(target: Path, agent: str, tenant: str, bootstrapped: dict[str, str]) -> str:
+    """The checklist from a rendered repository to a deployed agent."""
+    steps = [f"cd {target}"]
+    if bootstrapped.get("lock") != "locked":
+        steps.append("uv lock")
+    steps += ["just setup && just check", "git add -A && git commit -m 'new agent'"]
+    steps += [
+        "create the GitHub repository and push main",
+        "repository settings: secrets REGISTRY_USERNAME and REGISTRY_PASSWORD (from the Kubani operator),",
+        "  variable RELEASE_RUNNER (the self-hosted runner that reaches the registry)",
+        f"Kubani operator: just agent register {tenant} <owner>/<repo> {agent} --source <this checkout>",
+        f"release: git tag {agent}/v0.1.0 && git push --tags   (from merged main, one tag at a time)",
+        f"Kubani operator: just agent stage {agent} {agent}/v0.1.0, then just agent approve <release>",
+    ]
+    return "next:\n" + "\n".join(f"  {step}" for step in steps)
+
+
+def rename(repo: Path, old: str, new: str) -> list[Path]:
+    """Rename an agent (directory, package, manifest, Agent, project, tests, instructions).
+
+    For repositories created from the GitHub template, whose agent carries a placeholder
+    name. Replaces whole words only; the pyproject's `zetra-agent-<name>` first.
+    """
+    for name in (old, new):
+        if not layout.NAME.match(name):
+            raise RenderError(f"{name!r} is not a DNS label of at most 32 characters")
+    new_package = new.replace("-", "_")
+    if (
+        not new_package.isidentifier()
+        or keyword.iskeyword(new_package)
+        or new_package in RESERVED_PACKAGES
+    ):
+        raise RenderError(f"{new!r} does not give a usable Python package name ({new_package!r})")
+    source = repo / "agents" / old
+    target = repo / "agents" / new
+    if not source.is_dir():
+        raise RenderError(f"no agent directory agents/{old}")
+    if target.exists():
+        raise RenderError(f"agents/{new} already exists")
+    old_package = layout.AgentDir(source).package_dir()
+    if old_package is None:
+        raise RenderError(f"agents/{old}/src must hold exactly one package")
+    source.rename(target)
+    package_dir = target / "src" / old_package.name
+    if old_package.name != new_package:
+        package_dir.rename(target / "src" / new_package)
+    agent_word = re.compile(rf"(?<![A-Za-z0-9_-]){re.escape(old)}(?![A-Za-z0-9_-])")
+    package_word = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(old_package.name)}(?![A-Za-z0-9_])")
+    changed = []
+    files = [p for p in sorted(target.rglob("*")) if p.is_file() and "__pycache__" not in p.parts]
+    readme = repo / "README.md"
+    if readme.is_file():
+        files.append(readme)
+    for path in files:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        updated = text.replace(f'name = "zetra-agent-{old}"', f'name = "zetra-agent-{new}"')
+        updated = package_word.sub(new_package, updated)
+        updated = agent_word.sub(new, updated)
+        if updated != text:
+            path.write_text(updated, encoding="utf-8")
+            changed.append(path)
+    return [target, *changed]

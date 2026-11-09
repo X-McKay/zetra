@@ -26,6 +26,10 @@ just check      # lint, tests, layout, rendered files
 just build @@AGENT@@   # build the image locally
 ```
 
+If this repository was created from the GitHub template rather than by `zetra-agents init`,
+give the agent its name first: `uv run --locked zetra-agents rename @@AGENT@@ <name>`.
+Another agent in the same repository is another directory under `agents/`.
+
 ## Release
 
 Push a tag `<agent>/v<version>` from merged `main`. The workflow builds the image, pushes

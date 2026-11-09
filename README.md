@@ -9,11 +9,13 @@ another without client-local recovery state.
 ## Develop an agent
 
 ```bash
-uvx --from 'git+https://github.com/X-McKay/zetra@<commit>' zetra init my-agent --name my-agent --owner you@example.com
-cd my-agent && uv lock && just setup && just check
+uvx --from 'git+https://github.com/X-McKay/zetra@<commit>#subdirectory=platform/agent-tools' \
+  zetra-agents init my-agent --name my-agent --owner you@example.com
+cd my-agent && just setup && just check
 ```
 
-`zetra init` renders an agent repository for the Agent Runtime Platform: `agents/<name>/`
+`zetra-agents init` (or `zetra init` from a checkout) renders an agent repository for the
+Agent Runtime Platform, locks it and starts its git history: `agents/<name>/`
 members of one uv workspace, one `uv.lock` that is the image lock, and a Dockerfile, CI,
 justfile and release shim rendered from `platform/agent-tools` at one pinned zetra commit.
 A repository holds one agent or many with the same layout. Agents reach the outside only

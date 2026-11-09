@@ -32,6 +32,8 @@ def parser():
         "--zetra-rev",
         help="40-hex zetra commit the repository pins (default: the one this CLI came from)",
     )
+    init.add_argument("--no-lock", action="store_true", help="do not run `uv lock`")
+    init.add_argument("--no-git", action="store_true", help="do not run `git init`")
     init.add_argument(
         "--harness",
         action="store_true",
@@ -299,6 +301,7 @@ def _init_repository(args):
         owner=owner,
         description=args.description or f"{args.name} agent",
     )
+    bootstrapped = render.bootstrap(Path(args.path), lock=not args.no_lock, git=not args.no_git)
     return {
         "status": "CREATED",
         "path": str(args.path),
@@ -306,7 +309,8 @@ def _init_repository(args):
         "tenant": args.tenant,
         "zetra_revision": revision,
         "files": len(written),
-        "next": f"cd {args.path} && uv lock && just setup && just check",
+        **bootstrapped,
+        "next": render.next_steps(Path(args.path), args.name, args.tenant, bootstrapped),
     }
 
 

@@ -510,3 +510,50 @@ def test_src_may_hold_only_the_package(repo):
     agent = layout.find(repo, AGENT)
     (agent.src / "openai.py").write_text("shadow = True\n")
     assert any("holds more than the package: openai.py" in p for p in layout.check(agent))
+
+
+def test_init_bootstraps_git_and_reports_the_lock_and_rename_renames_everything(
+    tmp_path, capsys, monkeypatch
+):
+    target = tmp_path / "repo"
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
+    assert (
+        cli.main(
+            [
+                "init",
+                str(target),
+                "--name",
+                "my-agent",
+                "--owner",
+                "dev@example.com",
+                "--zetra-rev",
+                REV,
+                "--no-lock",
+            ]
+        )
+        == 0
+    )
+    err = capsys.readouterr().err
+    assert (target / ".git").is_dir()
+    assert "lock: skipped" in err and "git: initialised" in err
+    assert (
+        "uv lock" in err and "just agent register tenant-test" in err and "my-agent/v0.1.0" in err
+    )
+    (target / "uv.lock").write_text(lock_text(REV))
+    assert cli.main(["--repo", str(target), "rename", "my-agent", "db-watch"]) == 0
+    out = capsys.readouterr().out
+    assert "agents/db-watch" in out
+    agent = layout.find(target, "db-watch")
+    assert agent.package_dir().name == "db_watch"
+    assert agent.manifest()["name"] == "db-watch"
+    assert agent.manifest()["entrypoint"] == "db_watch.agent:create_agent"
+    assert agent.agent_cr()["metadata"]["name"] == "db-watch"
+    assert 'name = "zetra-agent-db-watch"' in (agent.root / "pyproject.toml").read_text()
+    assert "from db_watch.agent import" in (agent.root / "tests/test_agent.py").read_text()
+    assert "You are db-watch." in (agent.package_dir() / "instructions/base.md").read_text()
+    assert "my-agent" not in (target / "README.md").read_text()
+    assert run(target, "check") == 0
+    assert run(target, "render", "--check") == 0
+    capsys.readouterr()
+    assert cli.main(["--repo", str(target), "rename", "db-watch", "1bad"]) == 2
+    assert cli.main(["--repo", str(target), "rename", "missing", "ok"]) == 2
