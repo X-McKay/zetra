@@ -69,22 +69,30 @@ def render_text(text: str, variables: dict[str, str]) -> str:
 
 
 def installed_revision() -> str | None:
-    """The zetra commit this tooling was installed from, if it came from git."""
-    try:
-        dist = metadata.distribution("zetra-agents")
-    except metadata.PackageNotFoundError:
-        return None
-    raw = dist.read_text("direct_url.json")
-    if not raw:
-        return None
-    try:
-        info = json.loads(raw)
-    except ValueError:
-        return None
-    if ZETRA_GIT not in str(info.get("url", "")) + ".git":
-        return None
-    commit = (info.get("vcs_info") or {}).get("commit_id")
-    return commit if isinstance(commit, str) and REV.match(commit) else None
+    """The zetra commit this tooling was installed from, if it came from git.
+
+    Either this distribution was installed from the zetra repository directly, or the
+    `zetra` CLI was and brought this package along as a path dependency of that checkout;
+    the first distribution that records a zetra git commit answers.
+    """
+    for name in ("zetra-agents", "zetra"):
+        try:
+            dist = metadata.distribution(name)
+        except metadata.PackageNotFoundError:
+            continue
+        raw = dist.read_text("direct_url.json")
+        if not raw:
+            continue
+        try:
+            info = json.loads(raw)
+        except ValueError:
+            continue
+        if ZETRA_GIT not in str(info.get("url", "")) + ".git":
+            continue
+        commit = (info.get("vcs_info") or {}).get("commit_id")
+        if isinstance(commit, str) and REV.match(commit):
+            return commit
+    return None
 
 
 def repository_revision(repo: Path) -> str | None:

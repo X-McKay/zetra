@@ -1,6 +1,57 @@
 # Agent authoring and evaluation
 
-Start with `zetra init ./my-agent --name my-agent`, then `cd my-agent` and
+## Platform agents
+
+```bash
+uvx --from 'git+https://github.com/X-McKay/zetra@<commit>' zetra init ./my-agent --name my-agent --owner you@example.com
+cd my-agent && uv lock && just setup && just check
+```
+
+`zetra init` renders a repository for the Agent Runtime Platform (`platform/`, spec
+sections 6 and 11). The same layout serves a repository with one agent and one with
+many; `X-McKay/zetra-agents` is the reference repository.
+
+```text
+my-agent/
+├── pyproject.toml, uv.lock          one uv workspace; uv.lock is AgentRelease.spec.lockSha256
+├── Dockerfile, .dockerignore        one image recipe for every agent (targets runtime, fixture)
+├── justfile                         setup, check, check-agent, build, policy-digest, preflight
+├── .github/workflows/ci.yml         check, render check, per-agent tests and image build
+├── .github/workflows/release.yml    on tags <agent>/v*: calls zetra's agent-release action
+├── AGENTS.md, README.md, .gitignore seeded once, then yours
+└── agents/my-agent/
+    ├── pyproject.toml               this agent's dependencies (a workspace member)
+    ├── agent.yaml                   the image manifest (spec 11.7), /app/agent.yaml
+    ├── deploy/agent.yaml            the Agent resource (spec 6.1) the security review approves
+    ├── src/my_agent/                create_agent(ctx) and instructions/base.md
+    └── tests/                       manifest and tool agreement, bounded report
+```
+
+The files outside `agents/` that every repository shares are rendered from
+`platform/agent-tools` templates and pinned to one zetra commit, which also pins the
+sandbox SDK in the images, the tooling and the contracts the Registry Controller runs.
+`zetra-agents render --check` (part of `just check` and CI) fails on a hand edit; change
+the templates in zetra instead. `zetra-agents check` requires `agent.yaml`,
+`create_agent` and `deploy/agent.yaml` to agree, refuses network and process imports in
+agent packages, and admits the fixture image target only for the conformance fixtures it
+lists.
+
+`create_agent(ctx)` receives `ctx.workspace`, `ctx.instructions` and `ctx.mcp`, and
+returns `{"tools": [Tool(fn, effect), ...]}` with effects `workspace_read`,
+`workspace_write` and `remote_read`; every remote read goes through `ctx.mcp` to a
+backend and tool granted in `deploy/agent.yaml`. The Session Runner drives one boundary
+per `agent_runtime.step`; the report is `workspace/report.md`, at most 16000 bytes.
+
+A release is a tag `<agent>/v<version>` pushed from merged `main`, one at a time. The
+rendered `release.yml` calls `.github/actions/agent-release`, which builds the image with
+the agent's target, pushes it by digest, signs and attests it keylessly through Kubani's
+private Sigstore as the repository's own workflow identity, verifies, and publishes the
+release assets. Kubani registers the repository for a tenant once (`just agent
+register`), then stages and approves each release in separate reviewed changes.
+
+## Local harness projects (OpenShell)
+
+Start with `zetra init --harness ./my-agent --name my-agent`, then `cd my-agent` and
 `uv sync --locked`. The SDK bundles a generated copy of the canonical
 [X-McKay/zetra-template](https://github.com/X-McKay/zetra-template) tree.
 The template pins a qualified SDK Git commit, not the newest branch head. Updating

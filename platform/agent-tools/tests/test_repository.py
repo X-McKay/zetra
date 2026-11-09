@@ -139,6 +139,14 @@ def test_installed_revision_reads_the_git_origin_of_the_distribution(monkeypatch
     monkeypatch.setattr(render.metadata, "distribution", lambda name: Dist(None))
     assert render.installed_revision() is None
 
+    def only_cli(name):  # the zetra CLI came from git; the tooling rode along as a path dep
+        if name == "zetra":
+            return Dist(good.replace("platform/agent-tools", ""))
+        raise render.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(render.metadata, "distribution", only_cli)
+    assert render.installed_revision() == REV
+
 
 def test_templates_leave_no_unknown_placeholders():
     with pytest.raises(render.RenderError, match="@@NOPE@@"):

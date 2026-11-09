@@ -17,9 +17,26 @@ from pathlib import Path
 def parser():
     p = argparse.ArgumentParser(prog="zetra")
     sub = p.add_subparsers(dest="command", required=True)
-    init = sub.add_parser("init")
+    init = sub.add_parser(
+        "init",
+        help="render a new agent repository (agents/<name>/ in a uv workspace, built and "
+        "released for the Agent Runtime Platform); --harness renders an OpenShell local "
+        "harness project instead",
+    )
     init.add_argument("path")
-    init.add_argument("--name", required=True)
+    init.add_argument("--name", required=True, help="agent name, a DNS label")
+    init.add_argument("--owner", help="Agent spec.owner email (default: git user.email)")
+    init.add_argument("--tenant", default="tenant-test", help="Kubani tenant namespace")
+    init.add_argument("--description", default="", help="Agent spec.description")
+    init.add_argument(
+        "--zetra-rev",
+        help="40-hex zetra commit the repository pins (default: the one this CLI came from)",
+    )
+    init.add_argument(
+        "--harness",
+        action="store_true",
+        help="the OpenShell local-harness project (Google ADK) instead of a platform agent",
+    )
     for name in ("check", "test", "build", "release", "eval"):
         cmd = sub.add_parser(name)
         cmd.add_argument("path")
@@ -261,15 +278,50 @@ async def execute(args, load_release):
     return await client.cancel(handle)
 
 
+def _init_repository(args):
+    """A platform agent repository, rendered by zetra_agents at one pinned zetra commit."""
+    from zetra_agents import render
+
+    owner = args.owner
+    if not owner:
+        probe = subprocess.run(
+            ["git", "config", "--get", "user.email"], capture_output=True, text=True, check=False
+        )
+        owner = probe.stdout.strip()
+    if not owner:
+        raise ValueError("--owner is required when git has no user.email")
+    revision = render.resolve_revision(None, args.zetra_rev)
+    written = render.init(
+        Path(args.path),
+        agent=args.name,
+        revision=revision,
+        tenant=args.tenant,
+        owner=owner,
+        description=args.description or f"{args.name} agent",
+    )
+    return {
+        "status": "CREATED",
+        "path": str(args.path),
+        "agent": args.name,
+        "tenant": args.tenant,
+        "zetra_revision": revision,
+        "files": len(written),
+        "next": f"cd {args.path} && uv lock && just setup && just check",
+    }
+
+
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
         from .manifest import load_agent, load_release, source_digest
 
         if args.command == "init":
-            from .scaffold import scaffold
+            if args.harness:
+                from .scaffold import scaffold
 
-            result = scaffold(args.path, args.name)
+                result = scaffold(args.path, args.name)
+            else:
+                result = _init_repository(args)
         elif args.command == "check":
             spec = load_agent(args.path, args.agent)
             result = {
