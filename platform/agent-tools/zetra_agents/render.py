@@ -483,12 +483,15 @@ def rename(repo: Path, old: str, new: str) -> list[Path]:
     )
     # The package as the first element of a dotted path (never a submodule of the same name),
     # and the tests' PACKAGE constant.
-    module_ref = re.compile(rf"(?<![A-Za-z0-9_.]){module}(?=\.)")
+    module_ref = re.compile(rf"(?<![A-Za-z0-9_.\"']){module}(?=\.[A-Za-z_])")
     module_str = re.compile(rf'^PACKAGE = "{module}"$', re.MULTILINE)
     for path in sorted(source.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
-        edit(path, [(module_ref, new_package, False), (module_str, f'"{new_package}"', False)])
+        edit(
+            path,
+            [(module_ref, new_package, False), (module_str, f'PACKAGE = "{new_package}"', False)],
+        )
     edit(
         package / "instructions" / "base.md",
         [(re.compile(rf"^You are {re.escape(old)}\.", re.MULTILINE), f"You are {new}.", False)],
