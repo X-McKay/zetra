@@ -9,6 +9,7 @@ rule applies, and `agentctl validate` runs them on unsigned local attestations.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -75,6 +76,36 @@ def subject_regexp_for(
         + tag
         + "/v[0-9][A-Za-z0-9.+-]*$"
     )
+
+
+def subject_regexp_for_sources(
+    sources: Mapping[str, Iterable[str]], workflow: str = "release.yml"
+) -> str:
+    """One pin for a tenant whose agents are released from several repositories.
+
+    `sources` maps owner/name to the agent names that repository may sign for (empty
+    means any agent, as in `subject_regexp_for`). With one repository the result is
+    exactly `subject_regexp_for`, so existing single-repository pins do not change. With
+    more, the repositories alternate inside one group, each bound to its own agents, so
+    a repository can never sign another repository's agent.
+    """
+    normalized = {repository: tuple(agents) for repository, agents in sources.items()}
+    if not normalized:
+        raise ValueError("at least one repository is required")
+    if len(normalized) > 1 and any(not agents for agents in normalized.values()):
+        raise ValueError(
+            "with several repositories each must name its agents; an unqualified repository "
+            "would be allowed to sign another repository's agent"
+        )
+    branches = [
+        subject_regexp_for(repository, workflow, agents)
+        for repository, agents in sorted(normalized.items())
+    ]
+    if len(branches) == 1:
+        return branches[0]
+    prefix, suffix = "^https://github\\.com/", "/v[0-9][A-Za-z0-9.+-]*$"
+    bodies = [b[len(prefix) : -len(suffix)] for b in branches]
+    return prefix + "(?:" + "|".join(bodies) + ")" + suffix
 
 
 @dataclass(frozen=True)

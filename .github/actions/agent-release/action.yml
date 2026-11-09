@@ -1,0 +1,115 @@
+# Release one agent from an agent repository: build the image for the agent named by the
+# tag `<agent>/v<version>`, push it by digest, sign and attest it keylessly through
+# Kubani's PRIVATE Sigstore, verify, and publish the release assets Kubani consumes.
+#
+# A composite action, not a reusable workflow, on purpose: the steps run inside the
+# calling repository's workflow, so Fulcio certifies the caller's identity
+#   https://github.com/<owner>/<repo>/.github/workflows/release.yml@refs/tags/<agent>/v<version>
+# which is the shape every tenant pin, the Registry Controller and Kyverno Rule 1 match.
+# The caller pins this action to the zetra commit its images are built from.
+name: Release agent
+description: Build, push, keyless-sign, attest, verify and publish one agent image on an <agent>/v* tag.
+inputs:
+  registry-username:
+    description: registry basic-auth user with push access to the agents repository
+    required: true
+  registry-password:
+    description: its password
+    required: true
+  registry:
+    description: image repository prefix admission accepts
+    default: registry.almckay.io/agents
+  vuln-exceptions:
+    description: comma-separated High finding ids the tenant allows (Critical never)
+    default: ""
+  uv-version:
+    default: "0.13.1"
+  python-version:
+    default: "3.12.14"
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+      with:
+        version: ${{ inputs.uv-version }}
+        python-version: ${{ inputs.python-version }}
+    - name: Resolve the agent from the tag
+      id: agent
+      shell: bash
+      env:
+        REF_TYPE: ${{ github.ref_type }}
+        REF_NAME: ${{ github.ref_name }}
+      run: |
+        [[ "$REF_TYPE" == tag ]] || { echo "releases are signed only from <agent>/v* tags" >&2; exit 1; }
+        agent="${REF_NAME%%/*}"
+        [[ "$agent" =~ ^[a-z0-9-]+$ && -d "agents/$agent" ]] || { echo "unknown agent $agent" >&2; exit 1; }
+        echo "name=$agent" >> "$GITHUB_OUTPUT"
+    - name: Registry login
+      shell: bash
+      env:
+        DOCKER_CONFIG: ${{ runner.temp }}/docker   # credentials never land in the runner's home
+        REGISTRY: ${{ inputs.registry }}
+        REGISTRY_USERNAME: ${{ inputs.registry-username }}
+        REGISTRY_PASSWORD: ${{ inputs.registry-password }}
+      run: |
+        echo "$REGISTRY_PASSWORD" | docker login "${REGISTRY%%/*}" -u "$REGISTRY_USERNAME" --password-stdin
+    - name: Install cosign, syft and grype from the registry mirror
+      shell: bash
+      env:
+        DOCKER_CONFIG: ${{ runner.temp }}/docker
+        # Signing and SBOM tools, as byte-identical copies of the upstream images in the
+        # local registry (registry.almckay.io/mirror/<host>/<path>, same digest). To bump,
+        # mirror the new upstream digest first, then change the reference here.
+        COSIGN_IMAGE: registry.almckay.io/mirror/ghcr.io/sigstore/cosign/cosign:v2.4.1@sha256:b03690aa52bfe94054187142fba24dc54137650682810633901767d8a3e15b31
+        SYFT_IMAGE: registry.almckay.io/mirror/docker.io/anchore/syft:v1.54.1@sha256:3eb5379ba7b409c3f4069b686110527af0c47df993fa5c10d13e7cf34f49b1aa
+        GRYPE_IMAGE: registry.almckay.io/mirror/docker.io/anchore/grype:v0.120.1@sha256:e4a44ef45d285b829ce6efe2642980329661bd2d18eab5fc539138d4adaebbbe
+      run: |
+        bin="$RUNNER_TEMP/bin"
+        mkdir -p "$bin"
+        extract() { # <image@digest> <path in image> <name>
+          docker pull -q --platform linux/amd64 "$1" >/dev/null
+          id=$(docker create --platform linux/amd64 "$1")
+          docker cp "$id:$2" "$bin/$3"
+          docker rm "$id" >/dev/null
+        }
+        extract "$COSIGN_IMAGE" /ko-app/cosign cosign
+        extract "$SYFT_IMAGE" /syft syft
+        extract "$GRYPE_IMAGE" /grype grype
+        echo "$bin" >> "$GITHUB_PATH"
+        "$bin/cosign" version
+        "$bin/syft" version
+        "$bin/grype" version
+    - name: Build, push, sign, attest, verify
+      shell: bash
+      env:
+        DOCKER_CONFIG: ${{ runner.temp }}/docker
+        REVISION: ${{ github.sha }}
+        AGENT: ${{ steps.agent.outputs.name }}
+        AGENT_REGISTRY: ${{ inputs.registry }}
+        VULN_EXCEPTIONS: ${{ inputs.vuln-exceptions }}
+        SIGSTORE_TRUST_DIR: ${{ github.action_path }}/sigstore
+        GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
+      run: "${{ github.action_path }}/release.sh" "$AGENT"
+    # The runner image has no gh CLI, so this talks to the REST API with curl.
+    - name: Publish the release artifacts
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        AGENT: ${{ steps.agent.outputs.name }}
+        REF_NAME: ${{ github.ref_name }}
+      run: |
+        py() { uv run --locked python -c "$@"; }
+        api="${GITHUB_API_URL:-https://api.github.com}/repos/$GITHUB_REPOSITORY"
+        auth=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
+        name=$(py 'import json,sys; print(json.load(open(sys.argv[1]))["release"])' "dist/$AGENT/predicate.json")
+        notes="Image: $(cat "dist/$AGENT/image"). Signed keylessly through the private Sigstore as https://github.com/$GITHUB_WORKFLOW_REF. Unapproved AgentRelease; stage it in Kubani with \`just agent stage $AGENT $REF_NAME\`."
+        body=$(py 'import json,sys; print(json.dumps({"tag_name": sys.argv[1], "target_commitish": sys.argv[2], "name": sys.argv[3], "body": sys.argv[4]}))' \
+          "$REF_NAME" "$GITHUB_SHA" "$name" "$notes")
+        release=$(curl -fsS "${auth[@]}" -X POST "$api/releases" -d "$body")
+        upload=$(py 'import json,sys; print(json.loads(sys.argv[1])["upload_url"].split("{")[0])' "$release")
+        for f in dist/"$AGENT"/*; do
+          curl -fsS -o /dev/null "${auth[@]}" -H "Content-Type: application/octet-stream" \
+            --data-binary "@$f" "$upload?name=$(basename "$f")"
+          echo "uploaded $(basename "$f")"
+        done
+        py 'import json,sys; print(json.loads(sys.argv[1])["html_url"])' "$release"

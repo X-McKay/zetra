@@ -1,0 +1,12 @@
+# Rendered by `zetra-agents render`; do not edit. Only what an image needs enters the
+# build context: the workspace lock, each member's pyproject, and the chosen agent's
+# manifest, source and fixture verifier (selected by the Dockerfile's AGENT argument).
+*
+!pyproject.toml
+!uv.lock
+!agents/*/pyproject.toml
+!agents/*/agent.yaml
+!agents/*/verify_image.py
+!agents/*/src/**
+**/__pycache__
+**/.venv

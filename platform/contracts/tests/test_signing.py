@@ -19,6 +19,7 @@ from agent_platform.signing import (
     SignerIdentity,
     eval_problems,
     subject_regexp_for,
+    subject_regexp_for_sources,
     tag_agent,
     vuln_problems,
 )
@@ -249,3 +250,66 @@ def test_signer_annotations_with_agent(capsys):
     identity = SignerIdentity.from_annotations(doc)
     assert identity.matches(GITHUB_ACTIONS_ISSUER, TAG_SUBJECT)
     assert not identity.matches(GITHUB_ACTIONS_ISSUER, TAG_SUBJECT.replace("investigator/", "x/"))
+
+
+def test_one_source_is_exactly_the_single_repository_pin():
+    assert subject_regexp_for_sources({REPO: ("investigator",)}) == subject_regexp_for(
+        REPO, agents=("investigator",)
+    )
+    assert subject_regexp_for_sources({REPO: ()}) == subject_regexp_for(REPO)
+    with pytest.raises(ValueError):
+        subject_regexp_for_sources({})
+
+
+def test_several_sources_bind_each_repository_to_its_own_agents():
+    pattern = subject_regexp_for_sources(
+        {REPO: ("investigator", "db-admin"), "X-McKay/my-agent": ("my-agent",)}
+    )
+    identity = SignerIdentity(GITHUB_ACTIONS_ISSUER, pattern)  # grouped, so admitted
+    other = TAG_SUBJECT.replace(REPO, "X-McKay/my-agent").replace("investigator/", "my-agent/")
+    assert identity.matches(GITHUB_ACTIONS_ISSUER, TAG_SUBJECT)
+    assert identity.matches(GITHUB_ACTIONS_ISSUER, other)
+    # my-agent's repository may not sign investigator, nor the monorepo sign my-agent.
+    assert not identity.matches(
+        GITHUB_ACTIONS_ISSUER, TAG_SUBJECT.replace(REPO, "X-McKay/my-agent")
+    )
+    assert not identity.matches(
+        GITHUB_ACTIONS_ISSUER, TAG_SUBJECT.replace("investigator/", "my-agent/")
+    )
+    assert not identity.matches(GITHUB_ACTIONS_ISSUER, other.replace("refs/tags", "refs/heads"))
+    assert tag_agent(other) == "my-agent"
+
+
+def test_signer_annotations_from_sources(capsys):
+    assert (
+        agentctl(
+            [
+                "signer-annotations",
+                "--source",
+                f"{REPO}=investigator,db-admin",
+                "--source",
+                "X-McKay/my-agent=my-agent",
+            ]
+        )
+        == 0
+    )
+    doc = yaml.safe_load(capsys.readouterr().out)["annotations"]
+    identity = SignerIdentity.from_annotations(doc)
+    assert identity.matches(GITHUB_ACTIONS_ISSUER, TAG_SUBJECT)
+    assert identity.subject_regexp == subject_regexp_for_sources(
+        {REPO: ("investigator", "db-admin"), "X-McKay/my-agent": ("my-agent",)}
+    )
+    with pytest.raises(SystemExit):
+        agentctl(["signer-annotations", "--repo", REPO, "--source", "X-McKay/a=a"])
+
+
+def test_several_sources_refuse_a_wildcard_repository_and_ambiguous_flags(capsys):
+    with pytest.raises(ValueError, match="name its agents"):
+        subject_regexp_for_sources({REPO: ("investigator",), "X-McKay/my-agent": ()})
+    with pytest.raises(SystemExit):
+        agentctl(["signer-annotations", "--source", f"{REPO}=a", "--source", f"{REPO}=b"])
+    with pytest.raises(SystemExit):
+        agentctl(["signer-annotations", "--source", f"{REPO}=a", "--agent", "b"])
+    with pytest.raises(SystemExit):
+        agentctl(["signer-annotations", "--source", f"{REPO}=a", "--source", "X-McKay/other"])
+    capsys.readouterr()

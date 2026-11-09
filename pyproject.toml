@@ -11,6 +11,7 @@ dependencies = [
     "litellm==1.95.0",
     "openshell==0.1.4",
     "temporalio==1.34.0",
+    "zetra-agents",
 ]
 
 [project.scripts]
@@ -30,6 +31,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/zetra"]
+
+# `zetra init` renders agent repositories with the tooling every such repository pins;
+# both live in this repository, so the CLI and the layout it emits are one commit.
+[tool.uv.sources]
+zetra-agents = { path = "platform/agent-tools" }
+agent-platform-contracts = { path = "platform/contracts" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

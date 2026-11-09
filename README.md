@@ -9,33 +9,34 @@ another without client-local recovery state.
 ## Develop an agent
 
 ```bash
-nix develop
-just bootstrap
-uv run zetra init /tmp/my_agent --name my_agent
-uv run zetra check /tmp/my_agent
-uv run zetra test /tmp/my_agent
-uv run zetra eval /tmp/my_agent --mode fixture
+uvx --from 'git+https://github.com/X-McKay/zetra@<commit>' zetra init my-agent --name my-agent --owner you@example.com
+cd my-agent && uv lock && just setup && just check
 ```
 
-Fixture tests execute trusted developer code locally. They do not establish model
-quality or sandbox enforcement. Agent packages define factories and tools:
+`zetra init` renders an agent repository for the Agent Runtime Platform: `agents/<name>/`
+members of one uv workspace, one `uv.lock` that is the image lock, and a Dockerfile, CI,
+justfile and release shim rendered from `platform/agent-tools` at one pinned zetra commit.
+A repository holds one agent or many with the same layout. Agents reach the outside only
+through `ctx.mcp`; a release is a tag `<agent>/v<version>`, signed keylessly by the
+repository's workflow, that Kubani stages and approves. See
+[agent authoring](docs/agents.md) and [the platform](docs/platform.md).
 
 ```python
-from google.adk.agents import LlmAgent
-from zetra import AgentContext, Tool
-from .tools.document_read import read_document
+from agent_runtime.tools import Tool
 
 
-def create_agent(ctx: AgentContext) -> LlmAgent:
-    return LlmAgent(
-        name="reader", instruction=ctx.instruction,
-        model=ctx.model, tools=ctx.tools(Tool(read_document, "workspace_read")),
-    )
+def create_agent(ctx) -> dict:
+    async def write_report(content: str) -> dict:
+        """Write the report; at most 150 words of plain text."""
+        (ctx.workspace / "report.md").write_text(content.rstrip() + "\n", encoding="utf-8")
+        return {"path": "report.md"}
+
+    return {"tools": [Tool(write_report, "workspace_write")]}
 ```
 
-The same registration produces capture wrappers and effect executors. The admitted
-profile is static, serial and nonstreaming, with at most 64 model/tool boundaries.
-Each effect has one Temporal Activity attempt. Lost completion remains unknown.
+`zetra init --harness` renders the OpenShell local-harness project (a Google ADK
+`LlmAgent`, fixture evaluation, `zetra build`); that path is described below and in
+[agent authoring](docs/agents.md).
 
 ## Embed the SDK
 

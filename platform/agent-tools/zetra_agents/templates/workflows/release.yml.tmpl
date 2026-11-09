@@ -1,0 +1,46 @@
+# Rendered by `zetra-agents render`; do not edit.
+#
+# Release one agent: a tag `<agent>/v<version>` builds the image, pushes it by digest,
+# signs and attests it keylessly through Kubani's PRIVATE Sigstore, and publishes the
+# artifacts Kubani consumes as a GitHub release. The release is never approved here;
+# approval is a Kubani PR. The steps live in zetra's composite action, pinned below to
+# the same commit as the SDK in the images.
+#
+# The signing identity is this workflow on the tag:
+#   https://github.com/<owner>/<repo>/.github/workflows/release.yml@refs/tags/<agent>/v<version>
+# which is what Kubani pins per tenant in kyverno/tenant-signers.yaml. A run from a branch
+# would be certified as another identity that admission rejects, so there is no manual
+# trigger.
+#
+# Repository settings this needs:
+#   secrets  REGISTRY_USERNAME, REGISTRY_PASSWORD   registry.almckay.io basic auth
+#   vars     RELEASE_RUNNER                         the self-hosted scale set that reaches
+#                                                   registry.almckay.io and the private Sigstore
+#            AGENT_REGISTRY (optional)              override of the registry default
+#            VULN_EXCEPTIONS (optional)             High finding ids the tenant allows
+# There is no signing key: do not add one.
+name: Release agent
+on:
+  push:
+    tags: ["*/v*"]
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ${{ vars.RELEASE_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: write
+      id-token: write   # the GitHub OIDC token Fulcio certifies (audience sigstore)
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: X-McKay/zetra/.github/actions/agent-release@@@ZETRA_REV@@
+        with:
+          registry-username: ${{ secrets.REGISTRY_USERNAME }}
+          registry-password: ${{ secrets.REGISTRY_PASSWORD }}
+          registry: ${{ vars.AGENT_REGISTRY || 'registry.almckay.io/agents' }}
+          vuln-exceptions: ${{ vars.VULN_EXCEPTIONS }}
