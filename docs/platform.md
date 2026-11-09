@@ -15,6 +15,7 @@ supported until the platform's Phase B conformance tests pass on a cluster.
 | `platform/netpol-attestor` | 5.5 | node DaemonSet recording host-side kube-router chains on sandbox pods |
 | `platform/egress-guard` | 5.5 | sandbox init container; `--attack` mode for T2b |
 | `platform/agent-runtime` | 11 | `agent_runtime` sandbox SDK baked into agent images |
+| `platform/agent-tools` | 14.1 | `zetra-agents`: the layout every agent repository shares (`agents/<name>/` members of one uv workspace, one lock, one rendered Dockerfile), `check`, `render`, `init`, offline `preflight`, release artifacts and attestation predicates; `.github/actions/agent-release` holds the keyless release steps repositories call |
 | `platform/aps` | 9 | Agent Policy Service (Go): ext_authz, token and grants API, Redis ledger and vault, settlement |
 | `platform/runner` | 10 | Session Runner, cleanup reconciler, AES-GCM payload codec |
 | `platform/capture` | 15.2, 15.4 | Conformance capture proxy: records method, path, status, `x-agent-*` headers and identifying JWT claims, never the token or a body. An optional mounted static key adds only a `backend_key_match` boolean for T7. |

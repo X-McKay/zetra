@@ -23,7 +23,7 @@ qualify:
 latency:
     uv run --frozen zetra qualify --suite latency
 platform-check:
-    for p in contracts controller netpol-attestor agent-runtime egress-guard runner; do \
+    for p in contracts controller netpol-attestor agent-runtime agent-tools egress-guard runner; do \
         (cd platform/$p && uv sync --frozen && uv run ruff check . && uv run ruff format --check . \
             && uv run pytest -m 'not cluster' -q); \
     done

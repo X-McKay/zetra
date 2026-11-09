@@ -1,0 +1,23 @@
+"""@@DESCRIPTION@@
+
+One workspace tool. Remote reads, when this agent needs them, go through `ctx.mcp` only
+and must be granted in deploy/agent.yaml under capabilities.mcp.
+"""
+
+from agent_runtime.tools import Tool
+
+MAX_REPORT = 8_000
+
+
+def create_agent(ctx) -> dict:
+    async def write_report(content: str) -> dict:
+        """Write the report; at most 150 words of plain text."""
+        if not content.strip() or len(content.split()) > 150:
+            return {"error": "Write a nonempty report of at most 150 words."}
+        report = content.rstrip() + "\n"
+        if len(report.encode()) > MAX_REPORT:
+            return {"error": f"Keep the report below {MAX_REPORT} UTF-8 bytes."}
+        (ctx.workspace / "report.md").write_text(report, encoding="utf-8")
+        return {"path": "report.md"}
+
+    return {"tools": [Tool(write_report, "workspace_write")]}

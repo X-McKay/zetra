@@ -1,0 +1,35 @@
+# Rendered by `zetra-agents render`; do not edit. Agents are workspace members under
+# agents/<name>/ and declare their own dependencies; this root is virtual.
+[project]
+name = "agents-workspace"
+version = "0"
+description = "Agents built with Zetra for the Kubani Agent Runtime Platform"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "zetra-agents",
+    "agent-platform-contracts",
+    "pytest==9.2.0",
+    "pytest-asyncio==1.4.1",
+    "ruff==0.17.3",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["agents/*"]
+
+# One zetra commit provides the sandbox SDK baked into every image, this repository's
+# tooling and the contracts the Registry Controller runs. uv.lock is the image lock:
+# its SHA-256 is AgentRelease.spec.lockSha256 for every agent released from here.
+[tool.uv.sources]
+agent-runtime = { git = "https://github.com/X-McKay/zetra.git", rev = "@@ZETRA_REV@@", subdirectory = "platform/agent-runtime" }
+zetra-agents = { git = "https://github.com/X-McKay/zetra.git", rev = "@@ZETRA_REV@@", subdirectory = "platform/agent-tools" }
+agent-platform-contracts = { git = "https://github.com/X-McKay/zetra.git", rev = "@@ZETRA_REV@@", subdirectory = "platform/contracts" }
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100

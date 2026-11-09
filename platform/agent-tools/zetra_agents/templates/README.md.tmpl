@@ -1,0 +1,41 @@
+# @@AGENT@@
+
+Agents built with [Zetra](https://github.com/X-McKay/zetra) and deployed by
+[Kubani](https://github.com/X-McKay/kubani) on the Agent Runtime Platform. Zetra owns
+the platform, the sandbox SDK and the release tooling; Kubani owns the cluster and every
+object applied to it; this repository owns its agents: code, manifests, capabilities and
+the signed releases Kubani consumes.
+
+```
+agents/<name>/
+  agent.yaml            manifest (spec 11.7), baked in as /app/agent.yaml
+  deploy/agent.yaml     the Agent resource (spec 6.1): identity, models, MCP tools, budget
+  pyproject.toml        this agent's dependencies; a member of the root workspace
+  src/<package>/        create_agent(ctx) and the agent's instructions
+  tests/                unit tests, including manifest/tool agreement
+pyproject.toml, uv.lock one workspace, one lock: its SHA-256 is AgentRelease.spec.lockSha256
+Dockerfile              one image recipe for every agent (rendered from zetra)
+.github/workflows/      CI, and the release shim that calls zetra's release action
+```
+
+## Develop
+
+```
+just setup      # install the locked workspace
+just check      # lint, tests, layout, rendered files
+just build @@AGENT@@   # build the image locally
+```
+
+## Release
+
+Push a tag `<agent>/v<version>` from merged `main`. The workflow builds the image, pushes
+it by digest, signs and attests it keylessly through Kubani's private Sigstore and
+publishes the release assets. Kubani then stages and approves the release:
+
+```
+just agent stage @@AGENT@@ @@AGENT@@/v0.1.0     # in Kubani; a PR
+just agent approve <release>                     # in Kubani; a separate PR
+```
+
+Before the first release, the Kubani operator registers this repository for the tenant:
+`just agent register @@TENANT@@ <owner>/<repo> @@AGENT@@`.

@@ -1,0 +1,39 @@
+[project]
+name = "zetra-agents"
+version = "0.1.0"
+description = "Checks, rendered repository files, scaffolding and release artifacts for agent repositories"
+requires-python = ">=3.12,<3.13"
+# The contracts compute the policy digest; a consuming repository pins this package and the
+# contracts at the same zetra commit the Registry Controller runs (see templates/pyproject).
+dependencies = [
+    "PyYAML==6.0.3",
+    "agent-platform-contracts",
+]
+
+[project.scripts]
+zetra-agents = "zetra_agents.cli:main"
+
+[dependency-groups]
+dev = [
+    "agent-runtime",  # the SDK the rendered agent targets; its tests run against the scaffold
+    "pytest==9.2.0",
+    "ruff==0.17.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["zetra_agents"]
+
+[tool.uv.sources]
+agent-platform-contracts = { path = "../contracts" }
+agent-runtime = { path = "../agent-runtime" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100

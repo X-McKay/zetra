@@ -1,0 +1,19 @@
+[project]
+name = "zetra-agent-@@AGENT@@"
+version = "0.1.0"
+description = "@@DESCRIPTION@@"
+requires-python = ">=3.12,<3.13"
+# The sandbox SDK; its zetra commit is pinned once in the root pyproject.
+dependencies = [
+    "agent-runtime",
+]
+
+# The agent package is copied to /app/@@PACKAGE@@, not installed (spec 11.7).
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["src"]

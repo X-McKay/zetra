@@ -1,0 +1,48 @@
+import shutil
+import types
+from pathlib import Path
+
+import pytest
+import yaml
+from agent_runtime import step
+
+ROOT = Path(__file__).resolve().parents[1]
+PACKAGE = "@@PACKAGE@@"
+
+
+@pytest.fixture
+def app(tmp_path, monkeypatch):
+    """The image's /app as the Dockerfile lays it out."""
+    app = tmp_path / "app"
+    app.mkdir()
+    shutil.copy(ROOT / "agent.yaml", app / "agent.yaml")
+    shutil.copytree(ROOT / "src" / PACKAGE, app / PACKAGE)
+    monkeypatch.setenv("AGENT_APP_DIR", str(app))
+    monkeypatch.setenv("AGENT_SANDBOX_DIR", str(tmp_path / "sandbox"))
+    return app
+
+
+def test_image_tools_match_the_manifest(app):
+    instructions, built = step.build_agent(step.load_manifest())
+    assert "Report ready" in instructions
+    assert set(built) == {"write_report"}
+    assert step.schema(built["write_report"])["function"]["parameters"]["required"] == ["content"]
+
+
+def test_manifest_model_and_tools_are_within_the_agent_capabilities():
+    manifest = yaml.safe_load((ROOT / "agent.yaml").read_text())
+    agent = yaml.safe_load((ROOT / "deploy" / "agent.yaml").read_text())
+    models = {m["backend"]: m["models"] for m in agent["spec"]["capabilities"]["models"]}
+    assert manifest["model"]["name"] in models[manifest["model"]["backend"]]
+    assert manifest["name"] == agent["metadata"]["name"]
+
+
+async def test_report_is_bounded(tmp_path):
+    from @@PACKAGE@@.agent import create_agent
+
+    ctx = types.SimpleNamespace(workspace=tmp_path, instructions="", mcp=None)
+    tools = {t.fn.__name__: t.fn for t in create_agent(ctx)["tools"]}
+    assert "error" in await tools["write_report"]("")
+    assert "error" in await tools["write_report"]("word " * 151)
+    assert await tools["write_report"]("All good.") == {"path": "report.md"}
+    assert (tmp_path / "report.md").read_text() == "All good.\n"

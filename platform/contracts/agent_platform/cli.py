@@ -26,6 +26,7 @@ from agent_platform.signing import (
     SignerIdentity,
     eval_problems,
     subject_regexp_for,
+    subject_regexp_for_sources,
     vuln_problems,
 )
 
@@ -95,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     signer = sub.add_parser(
         "signer-annotations", help="print the tenant namespace's signer annotations"
     )
-    signer.add_argument("--repo", required=True, help="owner/name of the agent repo")
+    signer.add_argument("--repo", help="owner/name of the agent repo")
     signer.add_argument("--workflow", default="release.yml")
     signer.add_argument(
         "--agent",
@@ -103,6 +104,14 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="pin to this agent's release tags (repeatable); needed when a repo serves "
         "more than one tenant",
+    )
+    signer.add_argument(
+        "--source",
+        action="append",
+        default=[],
+        metavar="OWNER/NAME[=AGENT,...]",
+        help="a repository and the agents it may sign for (repeatable); the tenant's pin "
+        "accepts each repository only for its own agents. Replaces --repo/--agent.",
     )
     signer.add_argument("--issuer", default=GITHUB_ACTIONS_ISSUER)
 
@@ -117,9 +126,17 @@ def main(argv: list[str] | None = None) -> int:
             print("OK")
         return 1 if problems else 0
     if args.command == "signer-annotations":
-        identity = SignerIdentity(
-            args.issuer, subject_regexp_for(args.repo, args.workflow, tuple(args.agent))
-        )
+        if bool(args.source) == bool(args.repo):
+            parser.error("pass either --repo (with --agent) or one or more --source")
+        if args.source:
+            sources = {}
+            for item in args.source:
+                repository, _, agents = item.partition("=")
+                sources[repository] = tuple(a for a in agents.split(",") if a)
+            pattern = subject_regexp_for_sources(sources, args.workflow)
+        else:
+            pattern = subject_regexp_for(args.repo, args.workflow, tuple(args.agent))
+        identity = SignerIdentity(args.issuer, pattern)
         print(yaml.safe_dump({"annotations": identity.annotations()}, sort_keys=False), end="")
         return 0
     if args.command == "policy-digest":
