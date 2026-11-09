@@ -128,12 +128,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "signer-annotations":
         if bool(args.source) == bool(args.repo):
             parser.error("pass either --repo (with --agent) or one or more --source")
+        if args.source and args.agent:
+            parser.error("--agent belongs with --repo; name agents inside each --source")
         if args.source:
             sources = {}
             for item in args.source:
                 repository, _, agents = item.partition("=")
+                if repository in sources:
+                    parser.error(f"--source {repository} given twice; list its agents once")
                 sources[repository] = tuple(a for a in agents.split(",") if a)
-            pattern = subject_regexp_for_sources(sources, args.workflow)
+            try:
+                pattern = subject_regexp_for_sources(sources, args.workflow)
+            except ValueError as exc:
+                parser.error(str(exc))
         else:
             pattern = subject_regexp_for(args.repo, args.workflow, tuple(args.agent))
         identity = SignerIdentity(args.issuer, pattern)

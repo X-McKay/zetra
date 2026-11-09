@@ -18,6 +18,17 @@ IMAGE = f"registry.almckay.io/agents/{AGENT}@sha256:" + "a9" * 32
 BASE = "https://mcp.almckay.io"
 
 
+def lock_text(revision, overrides=None):
+    entries = []
+    for name, sub in render.PINNED.items():
+        git = f"{render.ZETRA_GIT}?subdirectory={sub.replace('/', '%2F')}&rev={revision}#{revision}"
+        git = (overrides or {}).get(name, git)
+        entries.append(
+            f'[[package]]\nname = "{name}"\nversion = "0.1.0"\nsource = {{ git = "{git}" }}\n'
+        )
+    return "version = 1\n\n" + "\n".join(entries)
+
+
 @pytest.fixture
 def repo(tmp_path, capsys):
     target = tmp_path / "repo"
@@ -39,7 +50,7 @@ def repo(tmp_path, capsys):
         == 0
     )
     capsys.readouterr()
-    (target / "uv.lock").write_text("# locked by uv in a real repository\n")
+    (target / "uv.lock").write_text(lock_text(REV))  # what `uv lock` would record
     return target
 
 
@@ -378,3 +389,124 @@ def test_network_and_fixture_allowlists_are_exact():
         "conformance-transport",
     }
     assert "investigator" not in layout.FIXTURES and "db-admin" not in layout.FIXTURES
+
+
+def test_check_compiles_every_release_policy_and_refuses_a_write_grant(repo, capsys):
+    agent = layout.find(repo, AGENT)
+    cr = agent.agent_cr()
+    cr["spec"]["capabilities"]["mcp"] = [
+        {
+            "backend": "kubernetes",
+            "effect": "remote_write",
+            "tools": ["pods_delete"],
+            "delegation": "inherit",
+        }
+    ]
+    agent.agent_cr_path.write_text(yaml.safe_dump(cr, sort_keys=False))
+    assert layout.check(agent) == []  # the layout check alone does not see the grant
+    assert run(repo, "check") == 1
+    err = capsys.readouterr().err
+    assert "release policy does not compile" in err or "only remote_read" in err
+
+
+def test_approval_does_not_change_the_policy_digest(repo):
+    import datetime as dt
+
+    from agent_platform.bundle import compile_bundle, digest_hex
+
+    agent = layout.find(repo, AGENT)
+    a = release.build(
+        agent,
+        image=IMAGE,
+        revision="abc",
+        mcp_resource_base=BASE,
+        trust_domain="cluster.local",
+        date=dt.date(2026, 10, 30),
+    )
+    approved = {**a["release"], "spec": {**a["release"]["spec"], "approval": {"approved": True}}}
+    bundle = compile_bundle(
+        a["agent"], approved, mcp_resource_base=BASE, trust_domain="cluster.local"
+    )
+    assert digest_hex(bundle) == a["release"]["spec"]["policySha256"]
+    assert a["predicate"]["policySha256"] == a["release"]["spec"]["policySha256"]
+    assert a["name"] == f"{AGENT}-2026-10-30-a9a9a9a9"
+
+
+@pytest.mark.parametrize("image", [f"registry.almckay.io/agents/{AGENT}:latest", "x@sha256:ab"])
+def test_release_requires_a_digest_pinned_image(image):
+    import datetime as dt
+
+    with pytest.raises(ValueError):
+        release.release_name(AGENT, image, dt.date(2026, 10, 30))
+
+
+@pytest.mark.parametrize(
+    ("agent", "owner", "description"),
+    [
+        ("1x", "dev@example.com", "Demo"),
+        ("class", "dev@example.com", "Demo"),
+        ("mcp", "dev@example.com", "Demo"),
+        ("ok-agent", "not an email", "Demo"),
+        ("ok-agent", "dev@example.com", 'Reads "logs": summarises'),
+        ("ok-agent", "dev@example.com", "a: b"),
+    ],
+)
+def test_init_refuses_values_that_would_not_render_safely(tmp_path, agent, owner, description):
+    with pytest.raises(render.RenderError):
+        render.init(
+            tmp_path / "x",
+            agent=agent,
+            revision=REV,
+            tenant="tenant-test",
+            owner=owner,
+            description=description,
+        )
+    assert not (tmp_path / "x").exists()
+
+
+def test_render_check_verifies_the_lock_and_member_sources(repo, capsys):
+    (repo / "uv.lock").write_text(lock_text(REV))
+    assert run(repo, "render", "--check") == 0
+    capsys.readouterr()
+    fork = (
+        "https://github.com/someone/zetra.git?subdirectory=platform%2Fagent-runtime&rev="
+        + "f" * 40
+        + "#"
+        + "f" * 40
+    )
+    (repo / "uv.lock").write_text(lock_text(REV, {"agent-runtime": fork}))
+    assert run(repo, "render", "--check") == 1
+    assert "agent-runtime is locked from" in capsys.readouterr().err
+    (repo / "uv.lock").write_text(lock_text(REV))
+    member = repo / "agents" / AGENT / "pyproject.toml"
+    member.write_text(
+        member.read_text()
+        + '\n[tool.uv.sources]\nagent-runtime = { git = "https://example.invalid/x" }\n'
+    )
+    assert run(repo, "render", "--check") == 1
+    assert "[tool.uv.sources] in a member" in capsys.readouterr().err
+
+
+def test_installed_revision_requires_the_zetra_origin_exactly(monkeypatch):
+    class Dist:
+        def __init__(self, url):
+            self.url = url
+
+        def read_text(self, name):
+            return json.dumps({"url": self.url, "vcs_info": {"vcs": "git", "commit_id": REV}})
+
+    for url, ok in (
+        ("https://github.com/X-McKay/zetra.git", True),
+        ("https://github.com/X-McKay/zetra", True),
+        ("git+https://github.com/X-McKay/zetra.git", True),
+        ("https://github.com/X-McKay/zetra.github.io", False),
+        ("https://github.com/X-McKay/zetra.git.evil.example/", False),
+    ):
+        monkeypatch.setattr(render.metadata, "distribution", lambda name, url=url: Dist(url))
+        assert (render.installed_revision() == REV) is ok, url
+
+
+def test_src_may_hold_only_the_package(repo):
+    agent = layout.find(repo, AGENT)
+    (agent.src / "openai.py").write_text("shadow = True\n")
+    assert any("holds more than the package: openai.py" in p for p in layout.check(agent))

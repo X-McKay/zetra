@@ -174,6 +174,15 @@ def check(agent: AgentDir) -> list[str]:
         problems.append(f"{agent.name}: remote_write tools are not admitted")
     if agent.src.is_dir() and agent.package_dir() is None:
         problems.append(f"{agent.name}: src/ must hold exactly one package directory")
+    elif agent.src.is_dir():
+        # The whole of src/ is copied to /app, which precedes site-packages on sys.path.
+        strays = [
+            p.name
+            for p in sorted(agent.src.iterdir())
+            if p != agent.package_dir() and p.name != "__pycache__"
+        ]
+        if strays:
+            problems.append(f"{agent.name}: src/ holds more than the package: {', '.join(strays)}")
     if agent.src.is_dir() and agent.name not in NETWORK_ALLOWED:
         problems += [f"{agent.name}: {p}" for p in forbidden_imports(agent.src)]
     problems += _fixture_problems(agent)
@@ -207,12 +216,4 @@ def check_repository(repo: Path) -> list[str]:
     problems = [f"repository: missing {f}" for f in REPOSITORY_REQUIRED if not (repo / f).is_file()]
     if not (repo / "agents").is_dir():
         problems.append("repository: missing agents/")
-    seen: dict[str, str] = {}
-    for agent in all_agents(repo):
-        package = agent.package_dir()
-        if package is None:
-            continue
-        # Two agents may share a package name (conformance and conformance-b do); each image
-        # holds one package, so this is informational only when names are distinct agents.
-        seen.setdefault(package.name, agent.name)
     return problems

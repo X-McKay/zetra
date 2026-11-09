@@ -1,6 +1,6 @@
 # Agents built with Zetra for the Kubani Agent Runtime Platform.
-# Rendered by `zetra-agents render`; do not edit. Repository-specific recipes go in a
-# separate file imported from here is not supported yet; ask for a template change.
+# Rendered by `zetra-agents render`; do not edit. Repository-specific recipes are not
+# supported in this file; ask for a template change in zetra platform/agent-tools.
 
 set positional-arguments
 

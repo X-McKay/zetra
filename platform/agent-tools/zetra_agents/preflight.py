@@ -16,7 +16,9 @@ from zetra_agents import layout
 ISSUER = "https://token.actions.githubusercontent.com"
 GITOPS = Path("infrastructure/gitops")
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-GITHUB_REMOTE = re.compile(r"github\.com[:/]([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$")
+GITHUB_REMOTE = re.compile(
+    r"(?:^|[/@])github\.com[:/]([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$"
+)
 
 
 def subject(repository: str, tag: str) -> str:

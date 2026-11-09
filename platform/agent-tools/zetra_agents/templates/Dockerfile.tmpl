@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7-labs
+# syntax=docker/dockerfile:1.7-labs@sha256:b99fecfe00268a8b556fad7d9c37ee25d716ae08a5d7320e6d51c4dd83246894
 # Agent image (spec 11.1, 14.1). Rendered by `zetra-agents render` from zetra
 # platform/agent-tools; do not edit. Build from the repository root:
 #   docker build --build-arg AGENT=<name> --target "$(zetra-agents image-target <name>)" .

@@ -30,11 +30,14 @@ my-agent/
 The files outside `agents/` that every repository shares are rendered from
 `platform/agent-tools` templates and pinned to one zetra commit, which also pins the
 sandbox SDK in the images, the tooling and the contracts the Registry Controller runs.
-`zetra-agents render --check` (part of `just check` and CI) fails on a hand edit; change
-the templates in zetra instead. `zetra-agents check` requires `agent.yaml`,
-`create_agent` and `deploy/agent.yaml` to agree, refuses network and process imports in
-agent packages, and admits the fixture image target only for the conformance fixtures it
-lists.
+`zetra-agents render --check` (part of `just check` and CI) fails on a hand edit, on a
+lock whose zetra entries are not the pinned commit, and on a member that overrides a
+source; change the templates in zetra instead. `zetra-agents check` requires
+`agent.yaml` and `deploy/agent.yaml` to agree (the model is granted, names match),
+compiles each release policy (only `remote_read` grants), refuses network and process
+imports and stray files in agent packages, and admits the fixture image target only for
+the conformance fixtures it lists. The scaffolded tests check `create_agent` against the
+manifest through the SDK's own loader, as CI does inside the built image.
 
 `create_agent(ctx)` receives `ctx.workspace`, `ctx.instructions` and `ctx.mcp`, and
 returns `{"tools": [Tool(fn, effect), ...]}` with effects `workspace_read`,

@@ -103,3 +103,37 @@ def write(artifacts: dict[str, Any], out: Path) -> list[Path]:
     sums = "".join(f"{file_sha256(p)}  {p.name}\n" for p in written)
     (out / "SHA256SUMS").write_text(sums, encoding="utf-8")
     return [*written, out / "SHA256SUMS"]
+
+
+PLACEHOLDER_DIGEST = "0" * 64
+
+
+def compile_problems(agent: AgentDir, mcp_resource_base: str) -> list[str]:
+    """Compile the agent's release policy against a placeholder image, as a release would.
+
+    Catches what the layout checks cannot: a grant the bundle refuses (anything but
+    remote_read), or an Agent the contracts cannot compile, before a tag is pushed.
+    """
+    try:
+        artifacts = build(
+            agent,
+            image=f"registry.almckay.io/agents/{agent.name}@sha256:{PLACEHOLDER_DIGEST}",
+            revision=PLACEHOLDER_DIGEST[:40],
+            mcp_resource_base=mcp_resource_base,
+            trust_domain="cluster.local",
+            date=dt.date(2000, 1, 1),
+        )
+    except (ValueError, KeyError, TypeError) as exc:
+        return [f"{agent.name}: release policy does not compile: {exc}"]
+    spec = artifacts["release"]["spec"]
+    problems = []
+    if spec["approval"] != {"approved": False}:
+        problems.append(f"{agent.name}: a published release must be unapproved")
+    if not re.fullmatch(r"[0-9a-f]{64}", spec["policySha256"]):
+        problems.append(f"{agent.name}: policySha256 is not a sha256 hex digest")
+    for backend, entry in artifacts["bundle"].get("mcp", {}).items():
+        if entry.get("effect") != "remote_read":
+            problems.append(
+                f"{agent.name}: MCP grant {backend} has effect {entry.get('effect')!r}; only remote_read is admitted"
+            )
+    return problems

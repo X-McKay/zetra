@@ -56,9 +56,12 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
+# A plain `uv run` at the virtual workspace root installs only the root's dev group;
+# the agent's own dependencies (the SDK its tests import) come with its package.
+uv sync --locked --all-packages
 tools() { uv run --locked zetra-agents "$@"; }
 py() { uv run --locked python -c "$@"; }
-tools check "$agent"
+tools check
 tools render --check
 
 # The identity Kubani pins for this agent's tenant (agentctl signer-annotations).

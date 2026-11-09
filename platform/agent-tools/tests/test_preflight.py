@@ -391,6 +391,8 @@ def test_repository_defaults_to_the_github_origin(inputs, capsys):
     assert result["receipt"]["subject"].startswith("https://github.com/X-McKay/my-agent/")
     # The tenant pin names zetra-agents, so a release from another repository is refused.
     assert "signer" in codes(result)
+    git(source, "remote", "set-url", "origin", "https://notgithub.com/X-McKay/zetra-agents")
+    assert "repository" in codes(run(inputs, capsys, repository=None))
     git(source, "remote", "set-url", "origin", "https://github.com/X-McKay/zetra-agents")
     assert run(inputs, capsys, repository=None)["ok"]
     assert "repository" in codes(run(inputs, capsys, repository="not a repo"))

@@ -27,8 +27,15 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("list", help="print the agent names as a JSON array")
 
-    chk = sub.add_parser("check", help="repository layout, agent layout and static import checks")
+    chk = sub.add_parser(
+        "check",
+        help="repository layout, agent layout, static imports, and each release policy compiles",
+    )
     chk.add_argument("agents", nargs="*", help="default: every agent")
+    chk.add_argument(
+        "--mcp-resource-base",
+        default=os.environ.get("AGENT_PLATFORM_MCP_RESOURCE_BASE", MCP_RESOURCE_BASE),
+    )
 
     tgt = sub.add_parser("image-target", help="print the Dockerfile target an agent builds with")
     tgt.add_argument("agent")
@@ -113,6 +120,10 @@ def main(argv: list[str] | None = None) -> int:
         agents = selected or layout.all_agents(repo)
         problems = [] if selected else layout.check_repository(repo)
         problems += [p for a in agents for p in layout.check(a)]
+        if not problems:
+            problems += [
+                p for a in agents for p in release.compile_problems(a, args.mcp_resource_base)
+            ]
         for p in problems:
             print(p, file=sys.stderr)
         if not problems:

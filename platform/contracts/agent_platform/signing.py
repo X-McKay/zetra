@@ -89,11 +89,17 @@ def subject_regexp_for_sources(
     more, the repositories alternate inside one group, each bound to its own agents, so
     a repository can never sign another repository's agent.
     """
-    if not sources:
+    normalized = {repository: tuple(agents) for repository, agents in sources.items()}
+    if not normalized:
         raise ValueError("at least one repository is required")
+    if len(normalized) > 1 and any(not agents for agents in normalized.values()):
+        raise ValueError(
+            "with several repositories each must name its agents; an unqualified repository "
+            "would be allowed to sign another repository's agent"
+        )
     branches = [
-        subject_regexp_for(repository, workflow, tuple(agents))
-        for repository, agents in sorted(sources.items())
+        subject_regexp_for(repository, workflow, agents)
+        for repository, agents in sorted(normalized.items())
     ]
     if len(branches) == 1:
         return branches[0]

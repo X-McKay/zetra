@@ -15,6 +15,7 @@ installed from, when that is known.
 from __future__ import annotations
 
 import json
+import keyword
 import re
 import tomllib
 from dataclasses import dataclass
@@ -24,7 +25,34 @@ from pathlib import Path
 from zetra_agents import layout
 
 ZETRA_GIT = "https://github.com/X-McKay/zetra.git"
-REV = re.compile(r"^[0-9a-f]{40}$")
+ZETRA_ORIGIN = re.compile(
+    r"^(?:git\+)?(?:https://|ssh://git@|git@)github\.com[:/]X-McKay/zetra(?:\.git)?/?$"
+)
+REV = re.compile(r"^[0-9a-f]{40}\Z")
+# What a repository pins from zetra and the lock entry each must have at the pinned commit.
+PINNED = {
+    "agent-runtime": "platform/agent-runtime",
+    "zetra-agents": "platform/agent-tools",
+    "agent-platform-contracts": "platform/contracts",
+}
+OWNER = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\Z")
+# Rendered into TOML and YAML strings and a Python docstring unescaped, so only plain text.
+DESCRIPTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ,.;()/_+-]{0,199}\Z")
+RESERVED_PACKAGES = {
+    "agent_runtime",
+    "agent_platform",
+    "zetra",
+    "zetra_agents",
+    "agents",
+    "tests",
+    "src",
+    "mcp",
+    "openai",
+    "httpx",
+    "yaml",
+    "pydantic",
+    "pytest",
+}
 PLACEHOLDER = re.compile(r"@@([A-Z_]+)@@")
 # published path -> template name (templates carry a .tmpl suffix so no tool mistakes them
 # for real project files)
@@ -49,7 +77,8 @@ class RenderError(ValueError):
 @dataclass(frozen=True)
 class Difference:
     path: str
-    state: str  # "missing" | "differs" | "revision"
+    state: str  # "missing" | "differs" | "revision" | "lock" | "sources"
+    detail: str = ""
 
 
 def template(name: str) -> str:
@@ -87,7 +116,7 @@ def installed_revision() -> str | None:
             info = json.loads(raw)
         except ValueError:
             continue
-        if ZETRA_GIT not in str(info.get("url", "")) + ".git":
+        if not ZETRA_ORIGIN.match(str(info.get("url", ""))):
             continue
         commit = (info.get("vcs_info") or {}).get("commit_id")
         if isinstance(commit, str) and REV.match(commit):
@@ -137,7 +166,8 @@ def write(repo: Path, revision: str) -> list[Path]:
 
 
 def check(repo: Path) -> list[Difference]:
-    """Every rendered file that is missing or differs from its template at the pinned commit."""
+    """Every rendered file that is missing or differs from its template at the pinned commit,
+    plus a lock whose zetra entries are not that commit and members that override sources."""
     revision = repository_revision(repo)
     if revision is None:
         return [Difference("pyproject.toml", "revision")]
@@ -151,10 +181,65 @@ def check(repo: Path) -> list[Difference]:
             differences.append(Difference(relative, "missing"))
         elif path.read_text(encoding="utf-8") != text:
             differences.append(Difference(relative, "differs"))
+    differences += lock_problems(repo, revision)
+    differences += member_source_problems(repo)
     return differences
 
 
+def lock_problems(repo: Path, revision: str) -> list[Difference]:
+    """The lock must take every pinned zetra package from X-McKay/zetra at the pinned commit."""
+    path = repo / "uv.lock"
+    if not path.is_file():
+        return [Difference("uv.lock", "lock", "missing; run `uv lock`")]
+    try:
+        lock = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+        return [Difference("uv.lock", "lock", f"not valid TOML: {exc}")]
+    found = {p.get("name"): p for p in lock.get("package", []) if isinstance(p, dict)}
+    problems = []
+    for name, subdirectory in PINNED.items():
+        want = (
+            f"{ZETRA_GIT}?subdirectory={subdirectory.replace('/', '%2F')}&rev={revision}#{revision}"
+        )
+        entry = found.get(name)
+        if entry is None:
+            problems.append(Difference("uv.lock", "lock", f"{name} is not locked; run `uv lock`"))
+            continue
+        got = (entry.get("source") or {}).get("git")
+        if got != want:
+            problems.append(
+                Difference(
+                    "uv.lock", "lock", f"{name} is locked from {got!r}, not zetra {revision[:12]}"
+                )
+            )
+    return problems
+
+
+def member_source_problems(repo: Path) -> list[Difference]:
+    """Members may not redirect any dependency; the root pyproject owns every source."""
+    problems = []
+    for agent in layout.all_agents(repo):
+        pyproject = agent.root / "pyproject.toml"
+        if not pyproject.is_file():
+            continue
+        try:
+            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        except (tomllib.TOMLDecodeError, UnicodeDecodeError):
+            continue  # layout.check reports the file itself
+        if ((data.get("tool") or {}).get("uv") or {}).get("sources"):
+            problems.append(
+                Difference(
+                    f"agents/{agent.name}/pyproject.toml",
+                    "sources",
+                    "[tool.uv.sources] in a member overrides the pinned zetra commit",
+                )
+            )
+    return problems
+
+
 def describe(difference: Difference, repo: Path) -> str:
+    if difference.state in ("lock", "sources"):
+        return f"{difference.path}: {difference.detail}"
     if difference.state == "revision":
         installed = installed_revision()
         pinned = repository_revision(repo)
@@ -181,9 +266,18 @@ def init(
     """Render a new repository holding one agent. The target must not exist or be empty."""
     if not layout.NAME.match(agent):
         raise RenderError("agent name must be a DNS label of at most 32 characters")
+    package = agent.replace("-", "_")
+    if not package.isidentifier() or keyword.iskeyword(package) or package in RESERVED_PACKAGES:
+        raise RenderError(f"{agent!r} does not give a usable Python package name ({package!r})")
+    if not OWNER.match(owner):
+        raise RenderError("owner must be an email address")
+    if not DESCRIPTION.match(description):
+        raise RenderError(
+            "description must be plain text (letters, digits, spaces and , . ; ( ) / _ + -), "
+            "at most 200 characters"
+        )
     if target.exists() and any(target.iterdir()):
         raise RenderError(f"{target} is not empty")
-    package = agent.replace("-", "_")
     variables = {
         "ZETRA_REV": revision,
         "AGENT": agent,

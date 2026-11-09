@@ -301,3 +301,15 @@ def test_signer_annotations_from_sources(capsys):
     )
     with pytest.raises(SystemExit):
         agentctl(["signer-annotations", "--repo", REPO, "--source", "X-McKay/a=a"])
+
+
+def test_several_sources_refuse_a_wildcard_repository_and_ambiguous_flags(capsys):
+    with pytest.raises(ValueError, match="name its agents"):
+        subject_regexp_for_sources({REPO: ("investigator",), "X-McKay/my-agent": ()})
+    with pytest.raises(SystemExit):
+        agentctl(["signer-annotations", "--source", f"{REPO}=a", "--source", f"{REPO}=b"])
+    with pytest.raises(SystemExit):
+        agentctl(["signer-annotations", "--source", f"{REPO}=a", "--agent", "b"])
+    with pytest.raises(SystemExit):
+        agentctl(["signer-annotations", "--source", f"{REPO}=a", "--source", "X-McKay/other"])
+    capsys.readouterr()

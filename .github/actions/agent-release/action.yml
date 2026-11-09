@@ -47,6 +47,7 @@ runs:
     - name: Registry login
       shell: bash
       env:
+        DOCKER_CONFIG: ${{ runner.temp }}/docker   # credentials never land in the runner's home
         REGISTRY: ${{ inputs.registry }}
         REGISTRY_USERNAME: ${{ inputs.registry-username }}
         REGISTRY_PASSWORD: ${{ inputs.registry-password }}
@@ -55,6 +56,7 @@ runs:
     - name: Install cosign, syft and grype from the registry mirror
       shell: bash
       env:
+        DOCKER_CONFIG: ${{ runner.temp }}/docker
         # Signing and SBOM tools, as byte-identical copies of the upstream images in the
         # local registry (registry.almckay.io/mirror/<host>/<path>, same digest). To bump,
         # mirror the new upstream digest first, then change the reference here.
@@ -80,6 +82,7 @@ runs:
     - name: Build, push, sign, attest, verify
       shell: bash
       env:
+        DOCKER_CONFIG: ${{ runner.temp }}/docker
         REVISION: ${{ github.sha }}
         AGENT: ${{ steps.agent.outputs.name }}
         AGENT_REGISTRY: ${{ inputs.registry }}
