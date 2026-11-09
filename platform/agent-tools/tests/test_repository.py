@@ -354,3 +354,27 @@ def test_dockerfile_targets_match_the_layout():
     assert "COPY agents/${AGENT}/src/ /app/" in text
     assert 'uv sync --locked --no-dev --package "zetra-agent-${AGENT}"' in text
     assert textwrap.dedent("agent_runtime\\._([a-z]+)_sdk_step") in text
+
+
+def test_network_and_fixture_allowlists_are_exact():
+    assert layout.NETWORK_ALLOWED == {
+        "conformance",
+        "conformance-b",
+        "conformance-budget-day",
+        "conformance-budget-day-retry",
+        "conformance-budget-day-retry2",
+        "conformance-budget-session",
+        "conformance-transport",
+    }
+    assert layout.FIXTURES == {
+        "conformance-budget-day",
+        "conformance-budget-day-retry",
+        "conformance-budget-day-retry2",
+        "conformance-budget-session",
+        "conformance-checkpoint",
+        "conformance-lifecycle",
+        "conformance-performance",
+        "conformance-protocol",
+        "conformance-transport",
+    }
+    assert "investigator" not in layout.FIXTURES and "db-admin" not in layout.FIXTURES

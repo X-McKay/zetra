@@ -33,3 +33,5 @@ agent-platform-contracts = { git = "https://github.com/X-McKay/zetra.git", rev =
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+# Each agent package is first-party within its own directory.
+src = [".", "agents/*/src", "agents/*/tests"]
