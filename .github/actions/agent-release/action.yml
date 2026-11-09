@@ -89,7 +89,8 @@ runs:
         VULN_EXCEPTIONS: ${{ inputs.vuln-exceptions }}
         SIGSTORE_TRUST_DIR: ${{ github.action_path }}/sigstore
         GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
-      run: "${{ github.action_path }}/release.sh" "$AGENT"
+      run: |
+        "${{ github.action_path }}/release.sh" "$AGENT"
     # The runner image has no gh CLI, so this talks to the REST API with curl.
     - name: Publish the release artifacts
       shell: bash

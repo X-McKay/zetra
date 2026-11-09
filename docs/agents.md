@@ -13,8 +13,8 @@ spec sections 6 and 11), locks it and starts its git history, then prints the st
 deployed agent. The tooling alone installs in seconds; `zetra init` from a zetra checkout
 does the same and additionally carries the local harness. The same layout serves a
 repository with one agent and one with many; `X-McKay/zetra-agents` is the reference
-repository, and `X-McKay/zetra-template` is the same rendering as a GitHub template
-(then `zetra-agents rename my-agent <name>`).
+repository. `zetra-agents rename OLD NEW` renames an agent across its directory,
+package, manifest, Agent, project name, tests and instructions, and re-locks.
 
 ```text
 my-agent/

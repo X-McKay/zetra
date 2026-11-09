@@ -26,9 +26,8 @@ just check      # lint, tests, layout, rendered files
 just build @@AGENT@@   # build the image locally
 ```
 
-If this repository was created from the GitHub template rather than by `zetra-agents init`,
-give the agent its name first: `uv run --locked zetra-agents rename @@AGENT@@ <name>`.
-Another agent in the same repository is another directory under `agents/`.
+Another agent in the same repository is another directory under `agents/`; to rename one,
+`uv run --locked zetra-agents rename <old> <new>` (it re-locks the workspace).
 
 ## Release
 

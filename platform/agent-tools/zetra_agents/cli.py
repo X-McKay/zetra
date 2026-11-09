@@ -136,7 +136,11 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         for path in changed:
             print(path.relative_to(repo))
-        print(f"\nrenamed {args.old} to {args.new}; run `just check`", file=sys.stderr)
+        relocked = render.bootstrap(repo, lock=True, git=False)
+        print(
+            f"\nrenamed {args.old} to {args.new}; lock: {relocked['lock']}; run `just check`",
+            file=sys.stderr,
+        )
         return 0
     if args.command == "check":
         selected = [layout.find(repo, n) for n in args.agents]
