@@ -28,10 +28,13 @@ def test_init_renders_a_platform_agent_repository(tmp_path):
         "tenant-test",
         "--zetra-rev",
         REV,
+        "--no-lock",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     summary = json.loads(result.stdout)
     assert summary["status"] == "CREATED" and summary["zetra_revision"] == REV
+    assert summary["lock"] == "skipped" and summary["git"].startswith("initialised")
+    assert (root / ".git").is_dir() and "just agent register" in summary["next"]
     assert (root / "Dockerfile").is_file() and (root / "justfile").is_file()
     assert (root / ".github/workflows/release.yml").is_file()
     assert REV in (root / "pyproject.toml").read_text()
@@ -42,7 +45,15 @@ def test_init_renders_a_platform_agent_repository(tmp_path):
     assert cr["metadata"]["namespace"] == "tenant-test"
     assert not (root / "src").exists()  # the harness layout is not mixed in
     again = zetra(
-        "init", str(root), "--name", "my-agent", "--owner", "dev@example.com", "--zetra-rev", REV
+        "init",
+        str(root),
+        "--name",
+        "my-agent",
+        "--owner",
+        "dev@example.com",
+        "--zetra-rev",
+        REV,
+        "--no-lock",
     )
     assert again.returncode != 0 and "not empty" in again.stdout + again.stderr
 

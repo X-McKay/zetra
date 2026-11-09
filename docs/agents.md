@@ -3,13 +3,18 @@
 ## Platform agents
 
 ```bash
-uvx --from 'git+https://github.com/X-McKay/zetra@<commit>' zetra init ./my-agent --name my-agent --owner you@example.com
-cd my-agent && uv lock && just setup && just check
+uvx --from 'git+https://github.com/X-McKay/zetra@<commit>#subdirectory=platform/agent-tools' \
+  zetra-agents init my-agent --name my-agent --owner you@example.com
+cd my-agent && just setup && just check
 ```
 
-`zetra init` renders a repository for the Agent Runtime Platform (`platform/`, spec
-sections 6 and 11). The same layout serves a repository with one agent and one with
-many; `X-McKay/zetra-agents` is the reference repository.
+`zetra-agents init` renders a repository for the Agent Runtime Platform (`platform/`,
+spec sections 6 and 11), locks it and starts its git history, then prints the steps to a
+deployed agent. The tooling alone installs in seconds; `zetra init` from a zetra checkout
+does the same and additionally carries the local harness. The same layout serves a
+repository with one agent and one with many; `X-McKay/zetra-agents` is the reference
+repository. `zetra-agents rename OLD NEW` renames an agent across its directory,
+package, manifest, Agent, project name, tests and instructions, and re-locks.
 
 ```text
 my-agent/

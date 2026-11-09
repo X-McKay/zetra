@@ -45,6 +45,8 @@ def repo(tmp_path, capsys):
                 "Demo agent",
                 "--zetra-rev",
                 REV,
+                "--no-lock",
+                "--no-git",
             ]
         )
         == 0
@@ -510,3 +512,96 @@ def test_src_may_hold_only_the_package(repo):
     agent = layout.find(repo, AGENT)
     (agent.src / "openai.py").write_text("shadow = True\n")
     assert any("holds more than the package: openai.py" in p for p in layout.check(agent))
+
+
+def test_init_bootstraps_git_and_reports_the_lock(tmp_path, capsys, monkeypatch):
+    target = tmp_path / "repo"
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
+    assert (
+        cli.main(
+            [
+                "init",
+                str(target),
+                "--name",
+                "my-agent",
+                "--owner",
+                "dev@example.com",
+                "--zetra-rev",
+                REV,
+                "--no-lock",
+            ]
+        )
+        == 0
+    )
+    err = capsys.readouterr().err
+    assert (target / ".git").is_dir()
+    assert "lock: skipped" in err and "git: initialised" in err
+    assert (
+        "uv lock" in err and "just agent register tenant-test" in err and "my-agent/v0.1.0" in err
+    )
+    assert "git add -A" in err
+
+
+def test_next_steps_do_not_tell_a_nested_checkout_to_commit(tmp_path):
+    text = render.next_steps(
+        tmp_path / "a b",
+        "x",
+        "tenant-test",
+        {"lock": "locked", "git": "already inside a repository"},
+    )
+    assert "git add -A" not in text and "git was not initialised" in text
+    assert "cd '" in text and "a b'" in text  # shell-quoted path
+    assert "uv lock" not in text
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("my-agent", "db-watch"),
+        ("watcher", "db-watch"),
+        ("agent", "db-watch"),
+        ("a", "ab"),
+        ("my-agent", "agent"),
+    ],
+)
+def test_rename_edits_only_the_known_fields(tmp_path, capsys, monkeypatch, old, new):
+    monkeypatch.setattr(render, "bootstrap", lambda *a, **k: {"lock": "skipped", "git": "skipped"})
+    target = tmp_path / "repo"
+    argv = ["init", str(target), "--name", old, "--owner", "dev@example.com", "--zetra-rev", REV]
+    assert cli.main([*argv, "--no-lock", "--no-git"]) == 0
+    (target / "uv.lock").write_text(lock_text(REV))
+    readme_before = (target / "README.md").read_text()
+    capsys.readouterr()
+    assert cli.main(["--repo", str(target), "rename", old, new]) == 0
+    assert f"agents/{new}" in capsys.readouterr().out
+    agent = layout.find(target, new)
+    new_package = new.replace("-", "_")
+    assert agent.package_dir().name == new_package
+    manifest = agent.manifest()
+    assert manifest["name"] == new
+    assert manifest["entrypoint"] == f"{new_package}.agent:create_agent"
+    assert manifest["instructions"] == f"{new_package}/instructions/base.md"
+    cr = agent.agent_cr()
+    assert cr["metadata"]["name"] == new and cr["spec"]["identity"] == {"mode": "agent"}
+    pyproject = (agent.root / "pyproject.toml").read_text()
+    assert f'name = "zetra-agent-{new}"' in pyproject and '"agent-runtime"' in pyproject
+    tests = (agent.root / "tests/test_agent.py").read_text()
+    assert f'PACKAGE = "{new_package}"' in tests and f"from {new_package}.agent import" in tests
+    assert 'ROOT / "agent.yaml"' in tests
+    assert (agent.package_dir() / "instructions/base.md").read_text().startswith(f"You are {new}.")
+    assert (target / "README.md").read_text() == readme_before  # prose is left to the user
+    assert layout.check(agent) == []
+    assert run(target, "render", "--check") == 0
+    capsys.readouterr()
+
+
+def test_rename_refusals_leave_the_agent_untouched(repo, capsys, monkeypatch):
+    monkeypatch.setattr(render, "bootstrap", lambda *a, **k: {"lock": "skipped", "git": "skipped"})
+    before = sorted(str(p.relative_to(repo)) for p in (repo / "agents").rglob("*"))
+    for old, new in ((AGENT, "1bad"), ("missing", "ok"), (AGENT, AGENT), (AGENT, "mcp")):
+        assert cli.main(["--repo", str(repo), "rename", old, new]) == 2
+    (repo / "agents" / "taken").mkdir()
+    assert cli.main(["--repo", str(repo), "rename", AGENT, "taken"]) == 2
+    (repo / "agents" / "taken").rmdir()
+    assert sorted(str(p.relative_to(repo)) for p in (repo / "agents").rglob("*")) == before
+    capsys.readouterr()

@@ -17,6 +17,9 @@ from __future__ import annotations
 import json
 import keyword
 import re
+import shlex
+import shutil
+import subprocess
 import tomllib
 from dataclasses import dataclass
 from importlib import metadata, resources
@@ -313,3 +316,198 @@ def _walk(root, prefix: Path = Path()) -> list[Path]:
         else:
             found.append(prefix / child.name)
     return found
+
+
+def bootstrap(target: Path, *, lock: bool = True, git: bool = True) -> dict[str, str]:
+    """After rendering: lock the workspace and start a git history, when the tools exist.
+
+    Neither step is required for the repository to be valid; both are what a person would
+    do next by hand. Failures are reported, not raised.
+    """
+    result = {"lock": "skipped", "git": "skipped"}
+    if lock:
+        uv = shutil.which("uv")
+        if uv is None:
+            result["lock"] = "uv not found; run `uv lock`"
+        else:
+            try:
+                proc = subprocess.run(
+                    [uv, "lock", "--project", str(target)],
+                    cwd=target,
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+                lines = [
+                    ln for ln in (proc.stderr or proc.stdout).strip().splitlines() if ln.strip()
+                ]
+                reason = next(
+                    (ln for ln in lines if ln.lstrip().startswith("error")),
+                    lines[-1] if lines else "",
+                )
+                result["lock"] = (
+                    "locked"
+                    if proc.returncode == 0
+                    else f"failed: {reason.strip()[:300]}; run `uv lock`"
+                )
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                result["lock"] = f"failed: {exc}; run `uv lock`"
+    if git:
+        g = shutil.which("git")
+        if g is None:
+            result["git"] = "git not found"
+        else:
+            inside = subprocess.run(
+                [g, "-C", str(target), "rev-parse", "--is-inside-work-tree"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if inside.returncode == 0:
+                result["git"] = "already inside a repository"
+            else:
+                try:
+                    subprocess.run(
+                        [g, "init", "-q", "-b", "main", str(target)],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                        check=True,
+                    )
+                    result["git"] = "initialised on main; nothing committed yet"
+                except subprocess.CalledProcessError as exc:
+                    result["git"] = f"failed: {(exc.stderr or str(exc)).strip()[:300]}"
+                except (subprocess.TimeoutExpired, OSError) as exc:
+                    result["git"] = f"failed: {exc}"
+    return result
+
+
+def next_steps(target: Path, agent: str, tenant: str, bootstrapped: dict[str, str]) -> str:
+    """The checklist from a rendered repository to a deployed agent."""
+    steps = [f"cd {shlex.quote(str(target))}"]
+    if bootstrapped.get("lock") != "locked":
+        steps.append("uv lock")
+    steps.append("just setup && just check")
+    if bootstrapped.get("git", "").startswith("initialised"):
+        steps += [
+            "git add -A && git commit -m 'new agent'",
+            "create the GitHub repository and push main",
+        ]
+    else:
+        steps.append("commit in your repository and push main (git was not initialised here)")
+    steps += [
+        "repository settings: secrets REGISTRY_USERNAME and REGISTRY_PASSWORD (from the Kubani operator),",
+        "  variable RELEASE_RUNNER (the self-hosted runner that reaches the registry)",
+        f"Kubani operator: just agent register {tenant} <owner>/<repo> {agent} --source <this checkout>",
+        f"release: git tag {agent}/v0.1.0 && git push --tags   (from merged main, one tag at a time)",
+        f"Kubani operator: just agent stage {agent} {agent}/v0.1.0, then just agent approve <release>",
+    ]
+    return "next:\n" + "\n".join(f"  {step}" for step in steps)
+
+
+def rename(repo: Path, old: str, new: str) -> list[Path]:
+    """Rename an agent: directory, package, manifest, Agent, project name, tests, instructions.
+
+    For repositories created from the GitHub template, whose agent carries a placeholder
+    name. Only the known fields are edited (never prose), every new file content is
+    computed first, files are written, and the directories move last; a failure before
+    the moves leaves the original agent untouched.
+    """
+    for name in (old, new):
+        if not layout.NAME.match(name):
+            raise RenderError(f"{name!r} is not a DNS label of at most 32 characters")
+    if old == new:
+        raise RenderError("old and new names are the same")
+    new_package = new.replace("-", "_")
+    if (
+        not new_package.isidentifier()
+        or keyword.iskeyword(new_package)
+        or new_package in RESERVED_PACKAGES
+    ):
+        raise RenderError(f"{new!r} does not give a usable Python package name ({new_package!r})")
+    source = repo / "agents" / old
+    target = repo / "agents" / new
+    if not source.is_dir():
+        raise RenderError(f"no agent directory agents/{old}")
+    if target.exists():
+        raise RenderError(f"agents/{new} already exists")
+    package = layout.AgentDir(source).package_dir()
+    if package is None:
+        raise RenderError(f"agents/{old}/src must hold exactly one package")
+    old_package = package.name
+
+    edits: dict[Path, str] = {}
+
+    def edit(path: Path, replacements: list[tuple[re.Pattern[str], str, bool]]) -> None:
+        if not path.is_file():
+            return
+        text = path.read_text(encoding="utf-8")
+        for pattern, replacement, required in replacements:
+            text, count = pattern.subn(replacement, text)
+            if required and count == 0:
+                raise RenderError(f"{path.relative_to(repo)}: expected {pattern.pattern!r}")
+        edits[path] = text
+
+    module = re.escape(old_package)
+    edit(
+        source / "agent.yaml",
+        [
+            (re.compile(rf"^name: {re.escape(old)}$", re.MULTILINE), f"name: {new}", True),
+            (
+                re.compile(rf"^entrypoint: {module}\.", re.MULTILINE),
+                f"entrypoint: {new_package}.",
+                True,
+            ),
+            (
+                re.compile(rf"^instructions: {module}/", re.MULTILINE),
+                f"instructions: {new_package}/",
+                True,
+            ),
+        ],
+    )
+    edit(
+        source / "deploy" / "agent.yaml",
+        [(re.compile(rf"^  name: {re.escape(old)}$", re.MULTILINE), f"  name: {new}", True)],
+    )
+    edit(
+        source / "pyproject.toml",
+        [
+            (
+                re.compile(rf'^name = "zetra-agent-{re.escape(old)}"$', re.MULTILINE),
+                f'name = "zetra-agent-{new}"',
+                True,
+            ),
+            (re.compile(rf"/app/{module}\b"), f"/app/{new_package}", False),
+        ],
+    )
+    # The package as the first element of a dotted path (never a submodule of the same name),
+    # and the tests' PACKAGE constant.
+    module_ref = re.compile(rf"(?<![A-Za-z0-9_.\"']){module}(?=\.[A-Za-z_])")
+    module_str = re.compile(rf'^PACKAGE = "{module}"$', re.MULTILINE)
+    for path in sorted(source.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        edit(
+            path,
+            [(module_ref, new_package, False), (module_str, f'PACKAGE = "{new_package}"', False)],
+        )
+    edit(
+        package / "instructions" / "base.md",
+        [(re.compile(rf"^You are {re.escape(old)}\.", re.MULTILINE), f"You are {new}.", False)],
+    )
+
+    changed = []
+    try:
+        for path, text in edits.items():
+            if path.read_text(encoding="utf-8") != text:
+                path.write_text(text, encoding="utf-8")
+                changed.append(path)
+        if old_package != new_package:
+            package.rename(source / "src" / new_package)
+        source.rename(target)
+    except OSError as exc:
+        raise RenderError(
+            f"rename stopped: {exc}; the agent may be partly renamed under agents/{old}"
+        ) from exc
+    return [target, *(target / p.relative_to(source) for p in changed)]
