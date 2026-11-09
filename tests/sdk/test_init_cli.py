@@ -41,7 +41,9 @@ def test_init_renders_a_platform_agent_repository(tmp_path):
     assert cr["spec"]["owner"] == "dev@example.com"
     assert cr["metadata"]["namespace"] == "tenant-test"
     assert not (root / "src").exists()  # the harness layout is not mixed in
-    again = zetra("init", str(root), "--name", "my-agent", "--owner", "x", "--zetra-rev", REV)
+    again = zetra(
+        "init", str(root), "--name", "my-agent", "--owner", "dev@example.com", "--zetra-rev", REV
+    )
     assert again.returncode != 0 and "not empty" in again.stdout + again.stderr
 
 
@@ -52,7 +54,14 @@ def test_init_requires_a_revision_or_owner_it_can_determine(tmp_path, monkeypatc
     result = zetra("init", str(tmp_path / "a"), "--name", "a", "--zetra-rev", REV)
     assert result.returncode != 0 and "--owner" in result.stdout + result.stderr
     result = zetra(
-        "init", str(tmp_path / "b"), "--name", "b", "--owner", "o", "--zetra-rev", "main"
+        "init",
+        str(tmp_path / "b"),
+        "--name",
+        "b",
+        "--owner",
+        "o@example.com",
+        "--zetra-rev",
+        "main",
     )
     assert result.returncode != 0 and "40-hex" in result.stdout + result.stderr
     assert not (tmp_path / "a").exists() and not (tmp_path / "b").exists()
