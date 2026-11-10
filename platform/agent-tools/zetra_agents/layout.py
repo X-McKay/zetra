@@ -18,6 +18,8 @@ from typing import Any
 
 import yaml
 
+from zetra_agents import schema
+
 FORBIDDEN_IMPORTS = {"httpx", "requests", "urllib", "socket", "aiohttp", "subprocess"}
 NAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
 REQUIRED = ("agent.yaml", "deploy/agent.yaml", "pyproject.toml")
@@ -159,6 +161,12 @@ def check(agent: AgentDir) -> list[str]:
         problems.append(f"{agent.name}: agent.yaml name is {manifest.get('name')!r}")
     if cr.get("kind") != "Agent" or cr.get("metadata", {}).get("name") != agent.name:
         problems.append(f"{agent.name}: deploy/agent.yaml must be the Agent named {agent.name}")
+    refused = schema.problems(cr.get("spec"))
+    if refused:
+        # The checks below read the spec as the CRD shapes it, so they wait for one that is.
+        return problems + [
+            f"{agent.name}: deploy/agent.yaml is outside the Agent CRD: {p}" for p in refused
+        ]
     caps = (cr.get("spec") or {}).get("capabilities") or {}
     model = manifest.get("model")
     if "model" not in manifest:
