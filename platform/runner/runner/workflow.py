@@ -79,7 +79,6 @@ class SessionWorkflow:
             release=inp.release,
             session_id=inp.session_id,
             delegated=inp.grant_handle is not None,
-            grant_handle=inp.grant_handle,
         )
         # The business deadline races the session as a workflow timer. Cancelling the session
         # task, rather than wrapping it in asyncio.wait_for, keeps TIMED_OUT and CANCELLED

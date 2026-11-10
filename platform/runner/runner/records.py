@@ -22,7 +22,8 @@ FIELDS = {
         "limit_bytes",
         "error",
     },
-    "session_started": {"tenant", "agent", "release", "session_id", "delegated", "grant_handle"},
+    # No grant handle: with the session id beside it, the handle is what preflight accepts.
+    "session_started": {"tenant", "agent", "release", "session_id", "delegated"},
     "sandbox_created": {"session_id", "generation", "pod", "node", "boot_ms"},
     "boundary_failed": {
         "session_id",

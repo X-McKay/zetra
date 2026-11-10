@@ -6,6 +6,7 @@ import hashlib
 import json
 import time
 import uuid
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import yaml
 from kubernetes import client
@@ -209,30 +210,59 @@ class FakeCustom:
 
 
 class FakeAPS:
-    def __init__(self, grants: dict | None = None, sessions: list | None = None):
+    """The grant and session routes as APS answers them.
+
+    A grant is shown only while its session's tokens are held, which stop ends. A delete
+    removes the grant record, and is refused when it names a session other than the grant's.
+    `binds_delete=False` is an APS from before that check: it ignores the named session.
+    """
+
+    def __init__(
+        self, grants: dict | None = None, sessions: list | None = None, binds_delete: bool = True
+    ):
         self.grants = grants or {}
         self.sessions = sessions or []
+        self.binds_delete = binds_delete
+        self.stopped: set[str] = set()
         self.calls: list[tuple[str, str]] = []
 
-    def get(self, path):
+    def get(self, path, missing_ok=False):
         from temporalio.exceptions import ApplicationError
 
         self.calls.append(("GET", path))
         if path.startswith("/v1/sessions"):
             return {"sessions": self.sessions}
-        handle = path.rsplit("/", 1)[1]
-        if handle not in self.grants:
+        grant = self.grants.get(unquote(path.rsplit("/", 1)[1]))
+        if grant is None or grant.get("session_id") in self.stopped:
+            if missing_ok:
+                return None
             raise ApplicationError("APS GET refused with 404", type="Forbidden", non_retryable=True)
-        return self.grants[handle]
+        return grant
 
     def put(self, path, body):
         self.calls.append(("PUT", path))
 
     def post(self, path, body):
         self.calls.append(("POST", path))
+        if path.startswith("/v1/sessions/") and path.endswith("/stop"):
+            self.stopped.add(path.split("/")[3])
 
     def delete(self, path):
+        from temporalio.exceptions import ApplicationError
+
         self.calls.append(("DELETE", path))
+        url = urlsplit(path)
+        handle = unquote(url.path.rsplit("/", 1)[1])
+        grant = self.grants.get(handle)
+        if grant is None:
+            return None  # 404, which the client reports as success
+        named = parse_qs(url.query, keep_blank_values=True).get("session_id")
+        if self.binds_delete and named is not None and named != [grant.get("session_id")]:
+            raise ApplicationError(
+                "APS DELETE refused with 403", type="Forbidden", non_retryable=True
+            )
+        del self.grants[handle]
+        return None
 
 
 class FakeWS:

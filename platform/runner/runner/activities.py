@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Protocol
+from urllib.parse import quote
 
 import yaml
 from kubernetes import client, config
@@ -763,10 +764,29 @@ def stop_session(inp: SessionInput) -> str:
     return "OK"
 
 
+def _grant_delete_path(handle: str, session_id: str) -> str:
+    """The grant's DELETE path, naming the session that is being cleaned up.
+
+    APS removes the grant only when it is bound to that session and answers 403 otherwise.
+    An APS older than the parameter ignores it and checks the tenant alone.
+    """
+    return f"/v1/grants/{quote(str(handle), safe='')}?session_id={quote(str(session_id), safe='')}"
+
+
 @activity.defn
 def delete_grant(inp: SessionInput) -> str:
-    if inp.grant_handle:
-        deps().aps.delete(f"/v1/grants/{inp.grant_handle}")  # 404 is success
+    if not inp.grant_handle:
+        return "OK"
+    aps = deps().aps
+    # Cleanup also runs for a refused session, and preflight reads the grant only for a
+    # delegated release, so the submitted handle is not known to be this session's. A grant
+    # APS shows as bound to another session is left alone and reported as a failed step.
+    # One it does not show (already deleted, or stop removed its tokens first) goes to APS
+    # with this session named, and APS refuses it there if it is another session's.
+    grant = aps.get(f"/v1/grants/{quote(str(inp.grant_handle), safe='')}", missing_ok=True)
+    if grant is not None and grant.get("session_id") != inp.session_id:
+        raise _forbidden("grant is bound to another session")
+    aps.delete(_grant_delete_path(inp.grant_handle, inp.session_id))  # 404 is success
     return "OK"
 
 
@@ -852,7 +872,10 @@ def close_session(c: ClosedSession) -> str:
     d = deps()
     steps = {"stop": lambda: d.aps.post(f"/v1/sessions/{c.session.session_id}/stop", {})}
     if c.session.grant_handle:
-        steps["grant"] = lambda: d.aps.delete(f"/v1/grants/{c.session.grant_handle}")
+        # APS listed this handle beside this session; naming the session keeps it that way.
+        steps["grant"] = lambda: d.aps.delete(
+            _grant_delete_path(c.session.grant_handle, c.session.session_id)
+        )
     failures = {}
     # Neither a slow stop nor a failed stop prevents the independent grant delete.
     # Every step is idempotent, including retries of a partially completed activity.

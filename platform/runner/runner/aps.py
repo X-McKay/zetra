@@ -38,8 +38,8 @@ class APS:
             ca_file=os.environ.get("APS_CA_FILE") or None,
         )
 
-    def get(self, path: str) -> Any:
-        return self._call("GET", path)
+    def get(self, path: str, missing_ok: bool = False) -> Any:
+        return self._call("GET", path, missing_ok=missing_ok)
 
     def put(self, path: str, body: dict) -> Any:
         return self._call("PUT", path, body)

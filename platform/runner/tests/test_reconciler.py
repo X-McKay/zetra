@@ -171,7 +171,28 @@ def test_reconciler_grant_delete_runs_even_if_stop_fails(monkeypatch):
         ActivityEnvironment().run(
             act.close_session, ClosedSession(TENANT, ApsSession(S1, "investigator", 1, "gh_1"))
         )
-    assert ("DELETE", "/v1/grants/gh_1") in aps.calls
+    assert ("DELETE", f"/v1/grants/gh_1?session_id={S1}") in aps.calls
+
+
+@pytest.mark.parametrize("binds_delete", [False, True])
+def test_reconciler_deletes_the_grant_aps_listed_for_the_session(monkeypatch, binds_delete):
+    aps = FakeAPS(grants={"gh_1": {"session_id": S1}}, binds_delete=binds_delete)
+    monkeypatch.setattr(act, "deps", lambda: SimpleNamespace(aps=aps))
+    closed = ClosedSession(TENANT, ApsSession(S1, "investigator", 1, "gh_1"))
+    assert ActivityEnvironment().run(act.close_session, closed) == "OK"
+    assert aps.grants == {} and aps.stopped == {S1}
+    assert ActivityEnvironment().run(act.close_session, closed) == "OK"  # idempotent on retry
+
+
+def test_reconciler_cannot_delete_a_grant_under_another_sessions_name(monkeypatch):
+    aps = FakeAPS(grants={"gh_2": {"session_id": S2}})
+    monkeypatch.setattr(act, "deps", lambda: SimpleNamespace(aps=aps))
+    with pytest.raises(ApplicationError) as e:
+        ActivityEnvironment().run(
+            act.close_session, ClosedSession(TENANT, ApsSession(S1, "investigator", 1, "gh_2"))
+        )
+    assert e.value.type == "CleanupFailed" and e.value.details == ({"grant": "ApplicationError"},)
+    assert aps.grants == {"gh_2": {"session_id": S2}} and aps.stopped == {S1}
 
 
 def test_reconciler_grant_delete_does_not_wait_for_stop(monkeypatch):
