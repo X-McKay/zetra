@@ -30,6 +30,14 @@ agent-runtime = { git = "https://github.com/X-McKay/zetra.git", rev = "@@ZETRA_R
 zetra-agents = { git = "https://github.com/X-McKay/zetra.git", rev = "@@ZETRA_REV@@", subdirectory = "platform/agent-tools" }
 agent-platform-contracts = { git = "https://github.com/X-McKay/zetra.git", rev = "@@ZETRA_REV@@", subdirectory = "platform/contracts" }
 
+# The pytest configuration of every agent, so `pytest` here, `pytest agents/<name>` and
+# `just check` run a test alike. The zetra-agents pytest plugin makes each agent's src/
+# importable for its own tests; an agent's pyproject needs no pytest section.
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["agents"]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100

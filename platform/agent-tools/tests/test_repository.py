@@ -3,6 +3,7 @@ fixture files outside the allowlist are refused."""
 
 import hashlib
 import json
+import shutil
 import textwrap
 
 import pytest
@@ -403,6 +404,114 @@ def test_the_scaffolded_tests_pass_with_the_plugin_fixture(repo, pytester):
     agent = layout.find(repo, AGENT)
     result = pytester.runpytest_subprocess("-o", "asyncio_mode=auto", "-q", str(agent.root))
     result.assert_outcomes(passed=3)
+
+
+SAME_CONFIGURATION = "*mode=Mode.AUTO*asyncio_default_fixture_loop_scope=function*"
+
+
+def test_pytest_at_the_repository_root_runs_the_tests_as_just_check_does(
+    repo, pytester, monkeypatch
+):
+    """Bare `pytest` at the root, `pytest agents/<name>` (the justfile's `check-agent`,
+    CI and the release action) and `pytest` inside the agent directory all read the
+    rendered root configuration, so the scaffold's async test runs in each."""
+    for directory, arguments in (
+        (repo, []),
+        (repo, ["-q", f"agents/{AGENT}"]),
+        (repo / "agents" / AGENT, []),
+    ):
+        monkeypatch.chdir(directory)
+        result = pytester.runpytest_subprocess(*arguments)
+        result.assert_outcomes(passed=3)
+        if "-q" not in arguments:
+            result.stdout.fnmatch_lines([f"rootdir: {repo}", SAME_CONFIGURATION])
+
+
+def second_agent(repo, name):
+    """Another agent in the repository, with the package and test file names of the first:
+    each is alone in its image, so nothing keeps the names apart."""
+    target = repo / "agents" / name
+    shutil.copytree(repo / "agents" / AGENT, target, ignore=shutil.ignore_patterns("__pycache__"))
+    for relative in ("agent.yaml", "deploy/agent.yaml", "pyproject.toml"):
+        path = target / relative
+        path.write_text(path.read_text().replace(AGENT, name))
+    return target
+
+
+WHO_TEST = """
+from demo_agent import who
+
+OWN = {name!r}
+
+
+async def test_imports_find_this_agent(agent_dir):
+    import demo_agent.late  # first imported while the test runs
+
+    assert (who.NAME, demo_agent.late.NAME, agent_dir.name) == (OWN,) * 3
+"""
+WHO_CONFTEST = """
+import pytest
+from demo_agent import who
+
+
+@pytest.fixture
+def from_conftest():
+    return who.NAME
+"""
+WHO_CONFTEST_TEST = """
+def test_the_conftest_imported_this_agent(agent_dir, from_conftest):
+    assert from_conftest == agent_dir.name
+"""
+
+
+def test_pytest_at_the_root_gives_each_agent_its_own_modules(repo, pytester, monkeypatch):
+    """Agents that name their package and their test files alike are collected and run
+    in one process, and every import in a test, at collection, in its conftest and while
+    it runs, finds the code of the agent the test belongs to."""
+    agents = [repo / "agents" / AGENT, second_agent(repo, "other-agent")]
+    assert run(repo, "check") == 0
+    for agent in agents:
+        (agent / "tests" / "test_agent.py").unlink()  # the session it runs is slow
+        for module in ("who", "late"):
+            (agent / "src" / "demo_agent" / f"{module}.py").write_text(f"NAME = {agent.name!r}\n")
+        (agent / "tests" / "test_who.py").write_text(WHO_TEST.format(name=agent.name))
+    monkeypatch.chdir(repo)
+    pytester.runpytest_subprocess().assert_outcomes(passed=2)
+    pytester.runpytest_subprocess(
+        "agents/other-agent/tests/test_who.py", f"agents/{AGENT}/tests/test_who.py"
+    ).assert_outcomes(passed=2)
+    for agent in agents:
+        (agent / "tests" / "conftest.py").write_text(WHO_CONFTEST)
+        (agent / "tests" / "test_conftest.py").write_text(WHO_CONFTEST_TEST)
+    pytester.runpytest_subprocess().assert_outcomes(passed=4)
+    for agent in agents:
+        pytester.runpytest_subprocess(f"agents/{agent.name}").assert_outcomes(passed=2)
+
+
+def test_an_agent_that_keeps_its_own_pytest_configuration_is_tested_as_before(
+    repo, pytester, monkeypatch
+):
+    """Agents written before the root configuration carry their own; `pytest agents/<name>`
+    still reads it, and the root run covers them with the root's."""
+    agent = repo / "agents" / AGENT
+    pyproject = agent / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text()
+        + '\n[tool.pytest.ini_options]\nasyncio_mode = "auto"\n'
+        + 'asyncio_default_fixture_loop_scope = "function"\n'
+        + 'testpaths = ["tests"]\npythonpath = ["src"]\n'
+    )
+    (agent / "tests" / "test_direct.py").write_text(
+        "from demo_agent import agent\n\n\n"
+        "async def test_the_package_is_importable():\n    assert agent.create_agent\n"
+    )
+    monkeypatch.chdir(repo)
+    own = pytester.runpytest_subprocess(f"agents/{AGENT}")
+    own.assert_outcomes(passed=4)
+    own.stdout.fnmatch_lines([f"rootdir: {agent}", SAME_CONFIGURATION])
+    root = pytester.runpytest_subprocess()
+    root.assert_outcomes(passed=4)
+    root.stdout.fnmatch_lines([f"rootdir: {repo}", SAME_CONFIGURATION])
 
 
 def test_dockerfile_targets_match_the_layout():
