@@ -257,10 +257,10 @@ def _detail(record: dict, last: dict) -> str:
 
 def mcp_problems(agent: AgentDir, calls: list[dict]) -> list[str]:
     found = []
-    for backend, tool in sorted(
-        {(c["backend"], c["tool"]) for c in calls if c["outcome"] == "denied"}
-    ):
-        found.append(testing.ungranted(agent.name, backend, tool))
+    denied = sorted({(c["backend"], c["tool"]) for c in calls if c["outcome"] == "denied"})
+    grants = testing.mcp_grants(agent.agent_cr()) if denied else {}
+    for backend, tool in denied:
+        found.append(testing.ungranted(agent.name, backend, tool, entry=backend in grants))
     for backend, tool in sorted(
         {(c["backend"], c["tool"]) for c in calls if c["outcome"] == "unscripted"}
     ):

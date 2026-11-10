@@ -164,8 +164,11 @@ def test_an_ungranted_call_is_refused_and_reported_even_when_the_agent_swallows_
         (problem,) = agent.mcp.problems()
     assert "probe called MCP kubernetes/pods_delete" in problem
     assert "add `pods_delete` to the tools of the `kubernetes` entry" in problem
+    stranger = testing.FakeMcp({})
     with pytest.raises(PolicyDenied):
-        asyncio.run(testing.FakeMcp({})("github", "issues_list", {}))
+        asyncio.run(stranger("github", "issues_list", {}))
+    (problem,) = stranger.problems()
+    assert "add `{backend: github, effect: remote_read, tools: [issues_list]}`" in problem
 
 
 def test_an_unscripted_call_and_a_misdeclared_effect_are_reported(agent_dir, tmp_path):

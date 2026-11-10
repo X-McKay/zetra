@@ -43,12 +43,18 @@ def mcp_grants(agent_cr: dict) -> dict[str, set[str]]:
     return grants
 
 
-def ungranted(agent: str, backend: str, tool: str) -> str:
-    """What to do about an MCP call the Agent does not grant."""
+def ungranted(agent: str, backend: str, tool: str, *, entry: bool = True) -> str:
+    """What to do about an MCP call the Agent does not grant. `entry` says whether the
+    Agent already has an entry for the backend."""
+    where = (
+        f"add `{tool}` to the tools of the `{backend}` entry under spec.capabilities.mcp"
+        if entry
+        else f"add `{{backend: {backend}, effect: remote_read, tools: [{tool}]}}` under "
+        "spec.capabilities.mcp"
+    )
     return (
         f"{agent} called MCP {backend}/{tool}, which deploy/agent.yaml does not "
-        f"grant; the gateway would refuse it. If the agent needs it, add `{tool}` to "
-        f"the tools of the `{backend}` entry under spec.capabilities.mcp (a "
+        f"grant; the gateway would refuse it. If the agent needs it, {where} (a "
         "capability change for review); otherwise remove the call"
     )
 
@@ -125,7 +131,7 @@ class FakeMcp:
         """Calls the deployed agent could not have made, or the test did not account for."""
         found = []
         for backend, tool in sorted({(b, t) for b, t, _ in self.denied}):
-            found.append(ungranted(self.agent, backend, tool))
+            found.append(ungranted(self.agent, backend, tool, entry=backend in self.grants))
         for backend, tool in sorted({(b, t) for b, t, _ in self.unscripted}):
             found.append(
                 f"{self.agent} called MCP {backend}/{tool} with no scripted reply; "
