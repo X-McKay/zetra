@@ -199,7 +199,7 @@ class GenerationActivities:
             return
 
     @activity.defn(name="preflight")
-    def preflight(self, inp: SessionInput):
+    def preflight(self, inp: SessionInput) -> int | None:
         self.case(inp)
         return act.preflight(inp)
 

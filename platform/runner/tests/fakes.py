@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
@@ -93,6 +94,16 @@ spec:
 """
 
 
+def policy_bundle(max_boundaries=64) -> str:
+    """The controller's canonical JSON of a policy bundle, cut down to what the runner reads."""
+    doc = {"agent": "investigator", "runtime": {"max_boundaries": max_boundaries}}
+    return json.dumps(doc, sort_keys=True, separators=(",", ":"))
+
+
+def policy_digest(bundle: str) -> str:
+    return "sha256:" + hashlib.sha256(bundle.encode()).hexdigest()
+
+
 class _Resp:
     def __init__(self, data):
         self.data = json.dumps(data)
@@ -121,6 +132,7 @@ class FakeCore:
         self.phase = "Running"
         self.annotations = {"agentplatform.io/netpol-digest": digest or controller_digest()}
         self.template = POD_TEMPLATE
+        self.policy: dict | None = {"bundle.json": policy_bundle()}
 
     def read_namespace(self, ns):
         return client.V1Namespace(
@@ -128,6 +140,8 @@ class FakeCore:
         )
 
     def read_namespaced_config_map(self, name, ns):
+        if name == f"policy-{RELEASE}" and self.policy is not None:
+            return client.V1ConfigMap(data=self.policy)
         if name != f"podtemplate-{RELEASE}":
             raise ApiException(status=404)
         return client.V1ConfigMap(data={"pod.yaml": self.template})
@@ -183,6 +197,7 @@ class FakeCustom:
             "ready": True,
             "identityMode": "agent",
             "delegationRequired": False,
+            "policyDigest": policy_digest(policy_bundle()),
             **(status or {}),
         }
         self.agent = agent

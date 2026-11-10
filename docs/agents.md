@@ -150,11 +150,16 @@ gateway reserves against it before every model call and refuses a call whose res
 would pass it. Here only the SDK's advisory check runs, after a model turn that called a tool; a
 scripted model reports no usage, so a scripted run is never stopped by the budget, and a
 `--live` run can end over it. The boundary limit is the Agent's
-`spec.runtime.maxBoundaries`, and here a local run is stricter than the platform is
-today: the Session Runner stops a session at the limit
-its submitter passes (64 unless `just agent run --max-boundaries` says otherwise) and
-does not read the Agent's own. A session that ends locally for reaching the Agent's
-limit could run on to 64 there. An agent `zetra-agents check` refuses, or whose Agent
+`spec.runtime.maxBoundaries`. On the platform that depends on the Session Runner image:
+one built with zetra #76 reads the limit from the release's policy bundle and stops a
+session it starts at the smaller of that and the limit its submitter passes (64 unless
+`just agent run --max-boundaries` says otherwise). A runner built before that holds a
+session to the submitter's limit alone, and so does a session already running when the
+runner is replaced, or one whose preflight an older worker ran during the rollout. A
+request above the Agent's limit is also met differently: `--max-boundaries` over it is
+refused here, and there the session is submitted, and a runner built with #76 ends it at
+the Agent's limit. An
+agent `zetra-agents check` refuses, or whose Agent
 does not compile, is not run. Each boundary is held to the exec deadline and the task
 to 16 KiB. After every boundary `workspace/` and `state/` are measured as the tar the
 platform snapshots, by GNU tar's arithmetic: a file with several names is stored once

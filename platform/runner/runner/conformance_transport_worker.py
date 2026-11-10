@@ -148,7 +148,7 @@ class TransportActivities:
         raise TimeoutError("operator capture completion missing")
 
     @activity.defn(name="preflight")
-    def preflight(self, inp: SessionInput) -> None:
+    def preflight(self, inp: SessionInput) -> int | None:
         self.case(inp)
         return act.preflight(inp)
 

@@ -116,12 +116,16 @@ class SessionWorkflow:
         )
 
     async def _session(self, inp: SessionInput) -> str:
-        await workflow.execute_activity(
+        agent_limit = await workflow.execute_activity(
             act.preflight, inp, start_to_close_timeout=timedelta(seconds=60), retry_policy=THREE
         )
+        # The session stops at the smaller of the submitter's limit and the Agent's
+        # spec.runtime.maxBoundaries. A history recorded before preflight returned the
+        # Agent's limit replays with none, and keeps the submitter's as it had then.
+        limit = inp.max_boundaries if agent_limit is None else min(inp.max_boundaries, agent_limit)
         await self._provision(inp)
         boundary = len(self.committed)
-        while boundary < inp.max_boundaries:
+        while boundary < limit:
             self.state = "RUNNING"
             try:
                 out: BoundaryOut = await workflow.execute_activity(

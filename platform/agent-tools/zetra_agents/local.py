@@ -10,10 +10,13 @@ scenario's scripted replies, behind the grants in `deploy/agent.yaml`). That fil
 first held to the Agent CRD's schema as `zetra_agents.schema` reads it, which is not in
 every respect how the API server does (the differences are listed there); the grants, the
 session's token budget and its boundary limit are then read from the policy bundle the
-contracts compile the Agent to. The boundary limit is where a local run is stricter than
-the platform is today: the Session Runner bounds a session by what its submitter passes
-(64 unless told otherwise) and does not read the Agent's `spec.runtime.maxBoundaries`,
-which a local run holds the agent to. The token budget is where it is laxer: the step is
+contracts compile the Agent to. The boundary limit is the Agent's
+`spec.runtime.maxBoundaries`. A Session Runner built with zetra #76 reads it from the same
+bundle and stops a session it starts at the smaller of it and what the submitter passes
+(64 unless told otherwise); a runner built before that, and a session already running
+when the runner is replaced, are held to the submitter's limit alone. A local run refuses
+a request above the Agent's limit where such a runner ends the session at it. The token
+budget is where a local run is laxer: the step is
 given the figure as the pod template gives it, but what holds a platform session to it is
 the gateway's reservation before each model call, and that is not here. Only the SDK's
 own advisory check is, and a scripted model reports no usage for it to count. An agent
@@ -263,8 +266,8 @@ def new_directory(agent: AgentDir, out: Path | None) -> Path:
 def compiled(agent: AgentDir) -> dict:
     """The policy bundle the contracts compile this Agent to. Its MCP grants and session
     token budget are what the gateway holds a session to on the platform; its boundary
-    limit is the Agent's own, which the Session Runner does not read (the submitter sets
-    that one)."""
+    limit is the Agent's own, which a Session Runner built with zetra #76 reads from the
+    release's bundle and holds a session to, along with the submitter's limit."""
     release = {"metadata": {"name": "local"}, "spec": {"agent": agent.name, "image": "local"}}
     try:
         return compile_bundle(

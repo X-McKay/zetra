@@ -79,3 +79,9 @@ def test_wrapper_never_executes_unbound_session(monkeypatch, field, value):
     with pytest.raises(ValueError):
         ActivityEnvironment().run(wrapped.preflight, inp)
     assert called == []
+
+
+def test_preflight_hands_back_the_agents_boundary_limit(monkeypatch):
+    _, inp, wrapped = setup()
+    monkeypatch.setattr(activities, "preflight", lambda arg: 3)
+    assert ActivityEnvironment().run(wrapped.preflight, inp) == 3
