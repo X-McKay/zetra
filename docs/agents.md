@@ -155,7 +155,8 @@ session it starts at the smaller of that and the limit its submitter passes (64 
 session to the submitter's limit alone, and so does a session already running when the
 runner is replaced, or one whose preflight an older worker ran during the rollout. A
 request above the Agent's limit is also met differently: `--max-boundaries` over it is
-refused here, and there the session is submitted and ends at the Agent's limit. An
+refused here, and there the session is submitted, and a runner built with #76 ends it at
+the Agent's limit. An
 agent `zetra-agents check` refuses, or whose Agent
 does not compile, is not run. Each boundary is held to the exec deadline and the task
 to 16 KiB. After every boundary `workspace/` and `state/` are measured as the tar the

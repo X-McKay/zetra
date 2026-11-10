@@ -15,7 +15,7 @@ contracts compile the Agent to. The boundary limit is the Agent's
 bundle and stops a session it starts at the smaller of it and what the submitter passes
 (64 unless told otherwise); a runner built before that, and a session already running
 when the runner is replaced, are held to the submitter's limit alone. A local run refuses
-a request above the Agent's limit where the platform ends the session at it. The token
+a request above the Agent's limit where such a runner ends the session at it. The token
 budget is where a local run is laxer: the step is
 given the figure as the pod template gives it, but what holds a platform session to it is
 the gateway's reservation before each model call, and that is not here. Only the SDK's
