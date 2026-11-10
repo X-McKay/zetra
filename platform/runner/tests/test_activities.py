@@ -27,6 +27,8 @@ from tests.fakes import (
     FakeStream,
     FakeWS,
     boundary_doc,
+    policy_bundle,
+    policy_digest,
 )
 
 
@@ -70,7 +72,72 @@ def refused(fn, arg) -> ApplicationError:
 
 def test_preflight_passes_for_ready_release_and_exact_policies(tmp_path):
     setup(tmp_path)
-    run(act.preflight, inp())
+    assert run(act.preflight, inp()) == 64
+
+
+def bundled(tmp_path, bundle: str, digest: str | None = None):
+    """A release whose policy ConfigMap holds `bundle` and whose status names `digest`."""
+    core = FakeCore()
+    core.policy = {"bundle.json": bundle}
+    custom = FakeCustom({"policyDigest": policy_digest(bundle) if digest is None else digest})
+    return setup(tmp_path, core=core, custom=custom)
+
+
+@pytest.mark.parametrize("limit", [1, 7, 64])
+def test_preflight_returns_the_agents_boundary_limit_from_the_release_bundle(tmp_path, limit):
+    bundled(tmp_path, policy_bundle(limit))
+    assert run(act.preflight, inp()) == limit
+
+
+def test_preflight_refuses_a_bundle_that_is_not_the_one_the_release_names(tmp_path):
+    # The ConfigMap was rewritten to a larger limit after the controller published the digest.
+    bundled(tmp_path, policy_bundle(64), digest=policy_digest(policy_bundle(3)))
+    err = refused(act.preflight, inp())
+    assert err.type == "Forbidden" and err.non_retryable and "policy digest" in str(err)
+
+
+@pytest.mark.parametrize(
+    "policy,status",
+    [
+        (None, {}),  # no ConfigMap
+        ({}, {}),  # no bundle in it
+        ({"bundle.json": policy_bundle()}, {"policyDigest": None}),  # no digest to hold it to
+    ],
+)
+def test_preflight_refuses_a_release_without_a_verifiable_bundle(tmp_path, policy, status):
+    core = FakeCore()
+    core.policy = policy
+    d = setup(tmp_path, core=core, custom=FakeCustom(status))
+    err = refused(act.preflight, inp())
+    assert err.type in ("Forbidden", "NotFound") and err.non_retryable
+    assert d.core.created == []
+
+
+@pytest.mark.parametrize(
+    "bundle",
+    [
+        "not json",
+        "[]",
+        '{"runtime":{}}',
+        '{"runtime":null}',
+        policy_bundle(0),
+        policy_bundle(65),
+        policy_bundle(True),
+        policy_bundle("8"),
+        policy_bundle(8.0),
+    ],
+)
+def test_preflight_refuses_a_bundle_without_a_usable_boundary_limit(tmp_path, bundle):
+    bundled(tmp_path, bundle)
+    err = refused(act.preflight, inp())
+    assert err.type == "Forbidden" and err.non_retryable and "boundary limit" in str(err)
+
+
+def test_preflight_reads_the_bundle_only_after_every_other_refusal(tmp_path):
+    core = FakeCore()
+    core.policy = None
+    setup(tmp_path, core=core, custom=FakeCustom({"ready": False}))
+    assert "release not ready" in str(refused(act.preflight, inp()))
 
 
 @pytest.mark.parametrize(

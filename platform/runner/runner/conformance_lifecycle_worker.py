@@ -69,7 +69,7 @@ class LifecycleActivities:
             time.sleep(0.25)
 
     @activity.defn(name="preflight")
-    def preflight(self, inp: SessionInput) -> None:
+    def preflight(self, inp: SessionInput) -> int | None:
         self.case(inp)
         return act.preflight(inp)
 

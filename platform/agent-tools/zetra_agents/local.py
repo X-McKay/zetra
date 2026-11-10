@@ -10,10 +10,11 @@ scenario's scripted replies, behind the grants in `deploy/agent.yaml`). That fil
 first held to the Agent CRD's schema as `zetra_agents.schema` reads it, which is not in
 every respect how the API server does (the differences are listed there); the grants, the
 session's token budget and its boundary limit are then read from the policy bundle the
-contracts compile the Agent to. The boundary limit is where a local run is stricter than
-the platform is today: the Session Runner bounds a session by what its submitter passes
-(64 unless told otherwise) and does not read the Agent's `spec.runtime.maxBoundaries`,
-which a local run holds the agent to. The token budget is where it is laxer: the step is
+contracts compile the Agent to. The boundary limit is the platform's: the Session Runner
+reads the Agent's `spec.runtime.maxBoundaries` from the same bundle and stops a session at
+the smaller of it and what the submitter passes (64 unless told otherwise); a local run
+refuses a request above the Agent's limit where the platform ends the session at it. The
+token budget is where a local run is laxer: the step is
 given the figure as the pod template gives it, but what holds a platform session to it is
 the gateway's reservation before each model call, and that is not here. Only the SDK's
 own advisory check is, and a scripted model reports no usage for it to count. An agent

@@ -167,6 +167,46 @@ async def test_boundary_limit_fails(go):
     assert r.outcome == "FAILED" and r.result.boundaries == 2
 
 
+@pytest.mark.parametrize(
+    "submitted,agent,stops_at",
+    [
+        (64, 3, 3),  # the default submission is held to the Agent's own limit
+        (2, 3, 2),  # a submitter may ask for less
+        (5, 3, 3),  # and never gets more
+        (3, 3, 3),
+    ],
+)
+async def test_a_session_stops_at_the_smaller_of_the_submitted_and_the_agents_limit(
+    go, submitted, agent, stops_at
+):
+    fake = FakeActivities(done_at=99, agent_limit=agent)
+    r = await go(fake, session_input(max_boundaries=submitted))
+    assert r.outcome == "FAILED" and r.result.boundaries == stops_at
+    assert fake.executed == [(1, n) for n in range(stops_at)]
+    assert r.result.cleanup == {"stop": "OK", "delete": "DELETED", "grant": "OK"}
+
+
+async def test_a_session_that_finishes_on_its_last_allowed_boundary_completes(go):
+    fake = FakeActivities(done_at=2, agent_limit=3)
+    r = await go(fake, session_input())
+    assert r.outcome == "COMPLETED" and r.result.boundaries == 3
+
+
+async def test_a_replaced_generation_does_not_restart_the_agents_limit(go):
+    fake = FakeActivities(done_at=99, agent_limit=3, boundary_plan=fail_once("SandboxLost", (1, 1)))
+    r = await go(fake, session_input())
+    assert r.outcome == "FAILED" and r.result.boundaries == 3 and r.result.generation == 2
+    assert fake.executed == [(1, 0), (1, 1), (2, 1), (2, 2)]
+
+
+async def test_a_history_whose_preflight_returned_nothing_keeps_the_submitted_limit(go):
+    # What preflight recorded before it read the Agent's limit: such a session replays, and
+    # ends, as it would have then.
+    fake = FakeActivities(done_at=99, agent_limit=None)
+    r = await go(fake, session_input(max_boundaries=4))
+    assert r.outcome == "FAILED" and r.result.boundaries == 4
+
+
 async def test_t24_every_cleanup_step_runs_when_others_fail(go):
     fake = FakeActivities(
         done_at=0,

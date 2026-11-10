@@ -78,6 +78,7 @@ class FakeActivities:
         grant_error=None,
         preflight_error=None,
         block_at: int | None = None,
+        agent_limit: int | None = 64,
     ):
         self.log: list[tuple] = []
         self.executed: list[tuple[int, int]] = []
@@ -89,6 +90,7 @@ class FakeActivities:
         self.stop_error = stop_error
         self.grant_error = grant_error
         self.preflight_error = preflight_error
+        self.agent_limit = agent_limit  # none: what preflight returned before it read the Agent
         self.block_at = block_at
         self.blocked = asyncio.Event()
         self.real_timeouts = False
@@ -107,10 +109,11 @@ class FakeActivities:
         ]
 
     @activity.defn(name="preflight")
-    async def preflight(self, inp: SessionInput) -> None:
+    async def preflight(self, inp: SessionInput) -> int | None:
         self.log.append(("preflight",))
         if self.preflight_error:
             raise self.preflight_error
+        return self.agent_limit
 
     @activity.defn(name="set_generation")
     async def set_generation(self, g: GenIn) -> None:

@@ -35,6 +35,7 @@ from runner.types import (
     BoundaryOut,
     ClosedSession,
     GenIn,
+    MAX_BOUNDARIES,
     MAX_TASK_BYTES,
     InvalidInput,
     OrphanPod,
@@ -331,8 +332,41 @@ def _forbidden(message: str) -> ApplicationError:
 # --- session activities ---------------------------------------------------------------------------
 
 
+def _agent_boundary_limit(d: Deps, inp: SessionInput, status: dict) -> int:
+    """The Agent's `spec.runtime.maxBoundaries`, read from the release's policy bundle.
+
+    The bundle is what the controller compiled from the Agent and found equal to the
+    release's `policySha256`; its bytes are held to `status.policyDigest` here, so the limit
+    is the one the release was approved with and not whatever the ConfigMap says now.
+    """
+    try:
+        cm = d.core.read_namespaced_config_map(f"policy-{inp.release}", inp.tenant)
+    except ApiException as e:
+        _kube_error(e, "policy bundle")
+    raw = (cm.data or {}).get("bundle.json")
+    digest = status.get("policyDigest")
+    if (
+        not isinstance(raw, str)
+        or not isinstance(digest, str)
+        or "sha256:" + hashlib.sha256(raw.encode("utf-8", "surrogatepass")).hexdigest() != digest
+    ):
+        raise _forbidden("policy bundle differs from the release's policy digest")
+    try:
+        limit = json.loads(raw)["runtime"]["max_boundaries"]
+    except (ValueError, KeyError, TypeError):
+        raise _forbidden("policy bundle carries no boundary limit") from None
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_BOUNDARIES:
+        raise _forbidden(f"policy bundle boundary limit must be 1..{MAX_BOUNDARIES}")
+    return limit
+
+
 @activity.defn
-def preflight(inp: SessionInput) -> None:
+def preflight(inp: SessionInput) -> int | None:
+    """Refuse the session or return the Agent's boundary limit.
+
+    Always an integer. The annotation allows none only so that the workflow can replay
+    histories recorded when this returned nothing.
+    """
     try:
         inp.validate()
     except InvalidInput as e:
@@ -376,6 +410,7 @@ def preflight(inp: SessionInput) -> None:
         grant = d.aps.get(f"/v1/grants/{inp.grant_handle}") if inp.grant_handle else None
         if not grant or grant.get("session_id") != inp.session_id:
             raise _forbidden("delegated session without a grant")
+    return _agent_boundary_limit(d, inp, status)
 
 
 @activity.defn
