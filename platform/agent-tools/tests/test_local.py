@@ -7,8 +7,12 @@ import http.server
 import json
 import os
 import shutil
+import signal
+import subprocess
+import sys
 import textwrap
 import threading
+import time
 from typing import ClassVar
 
 import pytest
@@ -52,12 +56,27 @@ def create_agent(ctx) -> dict:
             "environment": sorted(os.environ),
         }
 
+    async def bail() -> dict:
+        """A tool that ends the process the way a command-line parser inside it would."""
+        (ctx.workspace / "report.md").write_text("Written, then gone.")
+        raise SystemExit(2)
+
+    async def nap() -> dict:
+        """Says which process it is, then outlives any test."""
+        import os, time
+
+        (ctx.workspace / "pid").write_text(str(os.getpid()))
+        time.sleep(120)
+        return {}
+
     return {
         "tools": [
             Tool(list_pods, "remote_read"),
             Tool(list_events, "remote_read"),
             Tool(read_secret, "remote_read"),
             Tool(poke, "workspace_write"),
+            Tool(bail, "workspace_write"),
+            Tool(nap, "workspace_write"),
             report_tool(ctx.workspace),
         ]
     }
@@ -67,6 +86,8 @@ TOOLS = [
     {"name": "list_events", "effect": "remote_read"},
     {"name": "read_secret", "effect": "remote_read"},
     {"name": "poke", "effect": "workspace_write"},
+    {"name": "bail", "effect": "workspace_write"},
+    {"name": "nap", "effect": "workspace_write"},
     {"name": "write_report", "effect": "workspace_write"},
 ]
 REPORT = {"call": "write_report", "arguments": {"content": "Two pods, both running."}}
@@ -112,6 +133,7 @@ def agent(tmp_path):
             kind: Agent
             metadata: {name: probe, namespace: tenant-test}
             spec:
+              identity: {mode: agent}
               capabilities:
                 models:
                   - backend: llm-main
@@ -216,6 +238,8 @@ def test_a_scripted_mcp_error_reaches_the_model_as_the_platform_reports_it(agent
             "no_such_tool",
             None,
         ),
+        # Exit 2 with no record is not a completed session, whatever is in the workspace.
+        ({"model": [{"call": "bail"}]}, 64, "unknown", "exited 2 without a result", None),
     ],
 )
 def test_sessions_that_do_not_finish_say_why(
@@ -253,6 +277,8 @@ def test_a_manifest_that_disagrees_with_the_code_points_at_render(agent, tmp_pat
         ({"model": [{"call": "t", "arguments": "x"}]}, "arguments a mapping"),
         ({"model": [{"speak": "x"}]}, "model[0]: unknown ['speak']"),
         ({"task": {"since": datetime.date(2026, 11, 10)}}, "every value must be JSON"),
+        ({"mcp": 5}, "mcp is a list"),
+        ({"model": {"call": "list_pods"}}, "model is a list"),
         ({"mcp": [{"tool": "t", "result": {"at": float("nan")}}]}, "every value must be JSON"),
     ],
 )
@@ -288,7 +314,40 @@ def test_runs_that_cannot_start_are_refused_without_a_run_directory(agent, tmp_p
     (agent.root / "agent-cr.yaml").rename(agent.root / "deploy" / "agent.yaml")
     document = agent.manifest()
     agent.manifest_path.write_text(yaml.safe_dump({**document, "model": None}))
+    # What `check` refuses is refused here too, in its words.
+    assert "model: null requires an explicit empty model grant list" in refused(scenario())
+    agent.manifest_path.write_text(yaml.safe_dump(document))
+    (agent.root / "scenarios" / "binary.yaml").write_bytes(b"task: \xff\n")
+    assert "not UTF-8" in refused("binary")
+
+    cr_path = agent.root / "deploy" / "agent.yaml"
+    written = cr_path.read_text()
+
+    def with_capabilities(**changes):
+        cr = yaml.safe_load(written)
+        cr["spec"]["capabilities"].update(changes)
+        cr_path.write_text(yaml.safe_dump(cr))
+        return refused(scenario())
+
+    # The grants a local session is held to are the ones a release compiles, so an Agent
+    # the contracts refuse is not run on a more lenient reading of it.
+    pods = {"backend": "kubernetes", "effect": "remote_read", "tools": ["pods_list"]}
+    assert "MCP backend kubernetes declared twice" in with_capabilities(mcp=[pods, pods])
+    assert "only effect remote_read is admitted" in with_capabilities(
+        mcp=[{"backend": "kubernetes", "tools": ["pods_list"]}]
+    )
+    assert "malformed" in with_capabilities(models="abc")
+    cr_path.write_text("spec: [unclosed\n")
+    assert "malformed" in refused(scenario())
+    cr = yaml.safe_load(written)
+    cr["spec"]["runtime"] = {"maxBoundaries": 4}
+    cr_path.write_text(yaml.safe_dump(cr))
+    assert "max boundaries is 1 to 4, this Agent's limit" in refused(scenario(), max_boundaries=5)
+    cr_path.write_text(written)
+    agent.manifest_path.write_text(yaml.safe_dump({**document, "model": None}))
+    with_capabilities(models=[])
     assert "declares no model" in refused(scenario())
+    cr_path.write_text(written)
     agent.manifest_path.write_text(yaml.safe_dump(document))
     out.mkdir()
     (out / "kept").write_text("earlier run")
@@ -326,20 +385,73 @@ def test_agent_code_gets_a_read_only_image_and_not_the_callers_environment(
 def test_the_session_budget_is_the_smallest_grant_as_the_pod_template_sets_it(
     agent, tmp_path, monkeypatch
 ):
-    assert local.session_budget(agent) == 100
+    def budget():
+        return local.compiled(agent)["budgets"]["tokens_per_session"]
+
+    assert budget() == 100
     cr = agent.root / "deploy" / "agent.yaml"
     document = yaml.safe_load(cr.read_text())
     models = document["spec"]["capabilities"]["models"]
     models.insert(0, {"backend": "llm-fast", "models": ["m"]})
     cr.write_text(yaml.safe_dump(document))
-    assert local.session_budget(agent) == 100  # an undeclared budget is the default, 200000
+    assert budget() == 100  # an undeclared budget is the default, 200000
     models.append({"backend": "llm-small", "models": ["s"], "budget": {"tokensPerSession": 5}})
     cr.write_text(yaml.safe_dump(document))
-    assert local.session_budget(agent) == 5
+    assert budget() == 5
     with chat_stub(monkeypatch):  # each reply reports 10 tokens used
         result = local.run(agent, scenario(), live=True, out=tmp_path / "run")
     assert result.outcome == "budget" and not result.ok
     assert len(result.boundaries) == 1
+
+
+def test_a_session_stops_at_the_agents_own_boundary_limit(agent, tmp_path):
+    cr_path = agent.root / "deploy" / "agent.yaml"
+    cr = yaml.safe_load(cr_path.read_text())
+    cr["spec"]["runtime"] = {"maxBoundaries": 3}
+    cr_path.write_text(yaml.safe_dump(cr))
+    result = local.run(agent, "smoke", out=tmp_path / "run")  # five boundaries when allowed
+    assert result.outcome == "boundary_limit" and len(result.boundaries) == 3
+
+
+def test_the_snapshot_is_measured_as_the_tar_the_platform_takes(tmp_path):
+    for name in ("workspace", "state"):
+        (tmp_path / name).mkdir()
+    assert local.snapshot_size(tmp_path) == 2 * 512
+    for n in range(3):
+        (tmp_path / "workspace" / f"empty-{n}").touch()
+    (tmp_path / "workspace" / "nested").mkdir()
+    (tmp_path / "workspace" / "nested" / "data").write_bytes(b"x" * 513)
+    assert local.snapshot_size(tmp_path) == (2 + 3 + 1 + 1) * 512 + 1024
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root removes a read-only tree either way")
+def test_a_terminated_run_ends_its_step_and_leaves_a_removable_directory(agent, tmp_path):
+    (agent.root / "scenarios" / "nap.yaml").write_text(
+        yaml.safe_dump({"task": "Sleep.", "model": [{"call": "nap"}]})
+    )
+    out = tmp_path / "run"
+    command = [sys.executable, "-m", "zetra_agents.cli", "--repo", str(agent.root.parent.parent)]
+    running = subprocess.Popen(
+        [*command, "run", "probe", "--scenario", "nap", "--out", str(out)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    pid_file = out / "sandbox" / "workspace" / "pid"
+    try:
+        deadline = time.monotonic() + 60
+        while not pid_file.is_file() or not pid_file.read_text():
+            assert running.poll() is None and time.monotonic() < deadline, running.stderr.read()
+            time.sleep(0.05)
+        step = int(pid_file.read_text())
+        running.send_signal(signal.SIGTERM)
+        _, stderr = running.communicate(timeout=30)
+    finally:
+        running.kill()
+    assert running.returncode == 143 and b"Traceback" not in stderr
+    with pytest.raises(ProcessLookupError):
+        os.kill(step, 0)
+    shutil.rmtree(out)
+    assert not out.exists()
 
 
 def test_a_workspace_past_the_snapshot_limit_is_a_problem(agent, tmp_path, monkeypatch):

@@ -111,7 +111,9 @@ def scripted_mcp(spec: dict):
 
 def main() -> None:
     spec = json.loads(Path(os.environ[SPEC_ENV]).read_text(encoding="utf-8"))
-    # The endpoint and its key are this shim's, not the agent's: gone before its code runs.
+    # The endpoint and its key are this shim's. Out of os.environ before agent code runs,
+    # so a tool that records its environment, or a process it starts, does not carry
+    # them. That is hygiene, not isolation: this process's memory still holds them.
     settings = {
         name: os.environ.pop(name)
         for name in (MODEL_URL, MODEL_NAME, MODEL_API_KEY)

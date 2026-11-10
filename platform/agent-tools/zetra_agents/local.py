@@ -6,7 +6,10 @@ boundary limit, exec deadline and exit codes, against the `/app` layout an image
 only while the session runs, as it is there). Two things are replaced,
 because a laptop has neither: the model route (the scenario's scripted turns, or with
 `live` an OpenAI-compatible endpoint from the environment) and the MCP route (the
-scenario's scripted replies, behind the grants in `deploy/agent.yaml`).
+scenario's scripted replies, behind the grants in `deploy/agent.yaml`). The grants, the
+session's token budget and its boundary limit are read from the policy bundle the
+contracts compile the Agent to, so they are the platform's by construction; an agent
+whose layout `zetra-agents check` refuses, or whose Agent does not compile, is not run.
 
 So a local run shows what the agent does with a task: which tools it calls, what the
 grants would refuse, what the report says. It is not a deployment check. Identity, the
@@ -15,7 +18,13 @@ the real MCP servers are exercised only by a session on the platform. Two more
 differences can let a local run pass where the platform would not: the agent imports
 from the whole workspace's environment rather than the image's own packages (the CI image
 check is what proves those), and the task is not screened for credentials as the Session
-Runner screens it.
+Runner screens it. The Agent's `ttlSeconds` is not modelled either.
+
+Nothing here contains the agent's code. A step is an ordinary process running as the
+developer: the read-only layout and the clean environment make an accidental write or a
+dumped environment behave as they would in the image, but code that sets out to can read
+and write whatever the developer can, this run's own bookkeeping and the `live`
+endpoint's key included. A local pass says nothing about code one does not trust.
 
 A scenario is a YAML file, by convention `agents/<agent>/scenarios/<name>.yaml`:
 
@@ -49,7 +58,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from agent_platform.constants import MAX_BOUNDARIES, TOKENS_PER_SESSION
+from agent_platform.bundle import compile_bundle
+from agent_platform.constants import DEFAULT_TRUST_DOMAIN
 
 from zetra_agents import layout, local_step, testing
 from zetra_agents.layout import AgentDir
@@ -57,7 +67,7 @@ from zetra_agents.layout import AgentDir
 BOUNDARY_SECONDS = 290.0  # the Session Runner's exec deadline
 MAX_TASK = 16 * 1024  # `just agent run` in Kubani refuses a larger task
 MAX_REPORT = 16_000  # bytes of workspace/report.md the platform's report reader accepts
-MAX_SNAPSHOT = 64 * 1024 * 1024  # the Session Runner's limit on workspace/ plus state/
+MAX_SNAPSHOT = 64 * 1024 * 1024  # the Session Runner's limit on the tar of workspace/ and state/
 OUTCOMES = {0: "running", 2: "completed", 3: "agent_error", 4: "budget", 5: "protocol_error"}
 NOT_A_DEPLOYMENT_CHECK = (
     "local run: the model and MCP are stand-ins; identity, gateway policy, budgets, the "
@@ -142,6 +152,9 @@ def parse_scenario(document: Any, source: str = "") -> Scenario:
     except (TypeError, ValueError):
         # YAML reads an unquoted 2026-11-10 as a date, which no task or reply can carry.
         raise ScenarioError(f"{where}: every value must be JSON; quote dates and times") from None
+    for key in ("mcp", "model"):
+        if not isinstance(document.get(key) or [], list):
+            raise ScenarioError(f"{where}: {key} is a list")
     replies = []
     for i, entry in enumerate(document.get("mcp") or []):
         at = f"{where}: mcp[{i}]"
@@ -195,6 +208,8 @@ def load_scenario(agent: AgentDir, name: str | Path) -> Scenario:
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise ScenarioError(f"{path}: not YAML: {exc}") from None
+    except UnicodeDecodeError:
+        raise ScenarioError(f"{path}: not UTF-8") from None
     return parse_scenario(document, str(path))
 
 
@@ -228,15 +243,22 @@ def new_directory(agent: AgentDir, out: Path | None) -> Path:
     return out.resolve()
 
 
-def session_budget(agent: AgentDir) -> int:
-    """AGENT_TOKENS_PER_SESSION as the pod template sets it: the smallest tokensPerSession
-    of the Agent's model grants (`agent_platform.bundle`), which the driver stops at."""
-    capabilities = (agent.agent_cr().get("spec") or {}).get("capabilities") or {}
-    declared = [
-        (grant.get("budget") or {}).get("tokensPerSession", TOKENS_PER_SESSION)
-        for grant in capabilities.get("models") or []
-    ]
-    return min(declared, default=TOKENS_PER_SESSION)
+def compiled(agent: AgentDir) -> dict:
+    """The policy bundle the contracts compile this Agent to. Its MCP grants, session
+    token budget and boundary limit are what a session is held to on the platform."""
+    release = {"metadata": {"name": "local"}, "spec": {"agent": agent.name, "image": "local"}}
+    try:
+        return compile_bundle(
+            agent.agent_cr(),
+            release,
+            mcp_resource_base="https://mcp.invalid",
+            trust_domain=DEFAULT_TRUST_DOMAIN,
+        )
+    except (yaml.YAMLError, AttributeError, KeyError, TypeError, ValueError) as exc:
+        why = exc if isinstance(exc, ValueError) else f"{type(exc).__name__} {exc}"
+        raise ScenarioError(
+            f"{agent.name}: deploy/agent.yaml does not compile to a release policy: {_clip(why)}"
+        ) from None
 
 
 def _writable(root: Path, on: bool) -> None:
@@ -247,14 +269,21 @@ def _writable(root: Path, on: bool) -> None:
 
 
 def refusals(agent: AgentDir) -> list[str]:
+    """Why this agent is not run: what `check` refuses it for, so the grants and budget a
+    local session is held to are the ones a release would compile."""
     problems = layout.check_files(agent)
     if problems:
         return problems
     if layout.image_target(agent) != "runtime":
         return [f"{agent.name} is a conformance fixture; it runs only in its own image"]
-    if not isinstance(agent.manifest().get("model"), dict):
-        return [f"{agent.name} declares no model; there is no model loop to run"]
-    return []
+    try:
+        problems = layout.check(agent)
+        if not problems and not isinstance(agent.manifest().get("model"), dict):
+            return [f"{agent.name} declares no model; there is no model loop to run"]
+    except (yaml.YAMLError, AttributeError, KeyError, TypeError, ValueError) as exc:
+        why = f"{type(exc).__name__} {exc}"
+        return [f"{agent.name}: agent.yaml or deploy/agent.yaml is malformed: {_clip(why)}"]
+    return problems
 
 
 def _clip(text: str, limit: int = 160) -> str:
@@ -297,17 +326,23 @@ def mcp_problems(agent: AgentDir, calls: list[dict]) -> list[str]:
     return found
 
 
-def snapshot_problems(sandbox: Path) -> list[str]:
-    size = sum(
-        path.lstat().st_size
-        for name in ("workspace", "state")
-        for path in (sandbox / name).rglob("*")
-        if path.is_file() and not path.is_symlink()
-    )
+def snapshot_size(sandbox: Path) -> int:
+    """About what `tar -C /sandbox workspace state` writes, which is what the Session
+    Runner limits: a 512-byte header for every entry and each file padded to 512."""
+    size = 0
+    for name in ("workspace", "state"):
+        for path in [sandbox / name, *(sandbox / name).rglob("*")]:
+            size += 512
+            if path.is_file() and not path.is_symlink():
+                size += -(-path.lstat().st_size // 512) * 512
+    return size
+
+
+def snapshot_problems(size: int) -> list[str]:
     if size > MAX_SNAPSHOT:
         return [
-            f"workspace/ and state/ hold {size} bytes; the platform snapshots at most "
-            + f"{MAX_SNAPSHOT} and fails the session beyond it"
+            f"workspace/ and state/ reached about {size} bytes as a tar; the platform "
+            + f"snapshots at most {MAX_SNAPSHOT} after every boundary and fails the session"
         ]
     return []
 
@@ -332,7 +367,7 @@ def run(
     *,
     live: bool = False,
     out: Path | None = None,
-    max_boundaries: int = MAX_BOUNDARIES,
+    max_boundaries: int | None = None,
     on_boundary: Callable[[dict], None] | None = None,
 ) -> Result:
     """One session: boundaries until the agent finishes, fails or reaches the limit."""
@@ -355,8 +390,11 @@ def run(
             "no model: give the scenario a `model:` script, or pass --live to use the "
             f"endpoint in {local_step.MODEL_URL}"
         )
-    if not 1 <= max_boundaries <= MAX_BOUNDARIES:
-        raise ScenarioError(f"max boundaries is 1 to {MAX_BOUNDARIES}, the platform's limit")
+    bundle = compiled(agent)
+    limit = bundle["runtime"]["max_boundaries"]
+    max_boundaries = limit if max_boundaries is None else max_boundaries
+    if not 1 <= max_boundaries <= limit:
+        raise ScenarioError(f"max boundaries is 1 to {limit}, this Agent's limit on the platform")
     task = task_document(scenario.task)
 
     directory = new_directory(agent, out)
@@ -368,7 +406,7 @@ def run(
     mcp_log.touch(mode=0o600)
     spec = {
         "agent": agent.name,
-        "grants": {b: sorted(t) for b, t in testing.mcp_grants(agent.agent_cr()).items()},
+        "grants": {backend: entry["tools"] for backend, entry in bundle["mcp"].items()},
         "mcp": list(scenario.mcp),
         "model": None if scenario.model is None else list(scenario.model),
         "mcpLog": str(mcp_log),
@@ -380,7 +418,7 @@ def run(
     env = testing.child_environment(
         app,
         sandbox,
-        AGENT_TOKENS_PER_SESSION=str(session_budget(agent)),
+        AGENT_TOKENS_PER_SESSION=str(bundle["budgets"]["tokens_per_session"]),
         **{local_step.SPEC_ENV: str(directory / "run.json")},
         **{
             name: os.environ[name]
@@ -391,6 +429,7 @@ def run(
 
     result = Result(agent.name, "boundary_limit", "live" if live else "scripted", directory)
     result.detail = f"not finished after {max_boundaries} boundaries"
+    largest = 0
     _writable(app, False)
     try:
         for n in range(max_boundaries):
@@ -417,13 +456,20 @@ def run(
                 record = json.loads(done.stdout) if outcome else None
             except ValueError:
                 record = None
-            if not isinstance(record, dict):
-                ended = done.returncode == local_step.SCRIPT_ENDED
-                # Exit 0 without a record is no step result at all, as the runner reads it.
-                known = outcome if outcome and outcome != "running" else "unknown"
-                result.outcome = "script_ended" if ended else known
+            # As the Session Runner reads a step: 0, 2, 3 and 4 mean what they say only
+            # with a record for this boundary whose `done` agrees with the exit code. A
+            # tool that calls sys.exit(2) has not completed the session.
+            if not (
+                isinstance(record, dict)
+                and record.get("boundary") == n
+                and record.get("done") is (done.returncode == 2)
+            ):
+                result.outcome = {
+                    local_step.SCRIPT_ENDED: "script_ended",
+                    5: "protocol_error",
+                }.get(done.returncode, "unknown")
                 result.detail = _clip(stderr.splitlines()[-1] if stderr else "", 400) or (
-                    f"boundary {n} exited {done.returncode} without a result"
+                    f"boundary {n} exited {done.returncode} without a result for it"
                 )
                 break
             record["rc"] = done.returncode
@@ -433,6 +479,7 @@ def run(
                 f.write(json.dumps(record) + "\n")
             if on_boundary:
                 on_boundary(record)
+            largest = max(largest, snapshot_size(sandbox))
             if outcome != "running":
                 result.outcome, result.detail = outcome, record.get("summary", "")
                 break
@@ -443,7 +490,7 @@ def run(
     result.problems = mcp_problems(agent, result.mcp)
     if "do not match its manifest" in result.detail:
         result.problems.append("agent.yaml `tools:` differs from the code; run `just render`")
-    result.problems += snapshot_problems(sandbox)
+    result.problems += snapshot_problems(largest)
     if result.outcome == "completed":
         result.problems += report_problems(sandbox / "workspace")
     report = sandbox / "workspace" / "report.md"

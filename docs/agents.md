@@ -84,9 +84,13 @@ manifest that disagrees with the code fails here as it does in the sandbox. `age
 stands where the gateway would: it answers only tools `deploy/agent.yaml` grants, and
 raises `PolicyDenied` for the rest as the gateway's 403 does. A test fails when the agent
 made an ungranted call (the message names the grant line to add), a call with no scripted
-reply, or an MCP call from a tool not declared `remote_read`; a test that means to
-exercise a refusal sets `agent.mcp.strict = False`. The kit lives in the tooling, a
-development dependency, so no test double is ever in a signed image.
+reply, or an MCP call from a tool not declared `remote_read`. A test that means to
+exercise a refusal sets `agent.mcp.strict = False`; that turns all three checks off for
+that test, so it asserts on `agent.mcp.denied`, `unscripted` and `misdeclared` itself.
+The fixture reads the grants as `deploy/agent.yaml` writes them and does not compile the
+Agent, so a grant the platform refuses (a duplicate backend, an effect other than
+`remote_read`) is caught by `zetra-agents check` and `run`, not by a test. The kit lives
+in the tooling, a development dependency, so no test double is ever in a signed image.
 
 ### Running an agent locally
 
@@ -124,23 +128,38 @@ made no MCP call that was ungranted or missing from the scenario; each of those 
 printed with the line to add. Runs are kept under `~/.local/state/zetra/agent-runs/`.
 The scaffolded tests run the smoke scenario, so it stays true as the agent changes.
 
-A local run keeps the parts of a platform session that need no platform. The agent's
-code is laid out read-only, as the image's `/app` is, and runs from an empty read-only
-directory; only the sandbox is writable. It gets a clean environment (the caller's
-credentials and the `--live` endpoint's key are not in it). The session's token count is
-held to the smallest `tokensPerSession` among the Agent's model grants, the boundary
-count to the platform's limit, each boundary to the exec deadline, the task to 16 KiB,
-and a workspace larger than the platform's 64 MiB snapshot is reported as a problem.
+A local run keeps the parts of a platform session that need no platform. The MCP
+grants, the session's token budget and the boundary limit are read from the policy
+bundle the contracts compile `deploy/agent.yaml` to, the same compilation a release
+goes through, so `spec.runtime.maxBoundaries` and the smallest `tokensPerSession` among
+the model grants hold locally as they do on the platform. An agent `zetra-agents check`
+refuses, or whose Agent does not compile, is not run. Each boundary is held to the exec
+deadline and the task to 16 KiB. After every boundary `workspace/` and `state/` are
+measured as roughly the tar the platform snapshots, and passing its 64 MiB limit is
+reported as a problem. A step counts only when it left a result for its own boundary
+that agrees with its exit code, as the Session Runner requires; a tool that exits the
+process itself ends the run as `unknown`, never as completed. The agent's code is laid out read-only, as the image's `/app` is, and
+a step starts from an empty directory with a short environment that leaves out the
+caller's other variables. An interrupted or terminated run ends its step and leaves a
+run directory that can be removed.
+
+None of that contains the agent's code. A local step is an ordinary process running as
+you: it can read and write whatever you can, including your home directory, the run's
+own transcript and bookkeeping, and with `--live` the endpoint's key. The read-only
+layout and the short environment catch accidents, such as an agent that writes beside
+its code or leans on a variable the sandbox will not have; they stop nothing that sets
+out to get past them. Run only code you trust, and take a local pass as saying nothing
+about code you do not.
 
 A local run shows what the agent does with a task. It is not a deployment check:
-identity, the gateway's policy and budget ledger, the sandbox (a local step is an
-ordinary process: no Landlock, no network policy), the signed image and the real MCP
-servers are exercised only by a session on the platform (`just agent run` in Kubani).
-Three things can pass locally and fail there: an import the agent's own package does not
-declare, because a local step sees the whole workspace environment (the CI image step
-loads the agent from its built image and catches it); a task the Session Runner refuses
-for carrying something credential-like; and a session that outlives the Agent's own
-`spec.runtime.maxBoundaries` or `ttlSeconds`, which a local run does not read.
+identity, the gateway's policy and budget ledger, the sandbox (no Landlock, no network
+policy), the signed image and the real MCP servers are exercised only by a session on
+the platform (`just agent run` in Kubani). Three things can pass locally and fail there:
+an import the agent's own package does not declare, because a local step sees the whole
+workspace environment (the CI image step loads the agent from its built image and
+catches it); a task the Session Runner refuses for carrying something credential-like;
+and a session that outlives the Agent's `spec.runtime.ttlSeconds`, which a local run
+does not model.
 
 A release is a tag `<agent>/v<version>` pushed from merged `main`, one at a time. The
 rendered `release.yml` calls `.github/actions/agent-release`, which builds the image with

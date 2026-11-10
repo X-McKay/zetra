@@ -11,7 +11,9 @@ import dataclasses
 import datetime as dt
 import json
 import os
+import signal
 import sys
+import threading
 from pathlib import Path
 
 from agent_platform.constants import DEFAULT_TRUST_DOMAIN
@@ -104,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         "the scenario's model script",
     )
     run.add_argument("--out", type=Path, help="run directory (default: a new one under state)")
-    run.add_argument("--max-boundaries", type=int, default=local.MAX_BOUNDARIES)
+    run.add_argument("--max-boundaries", type=int, help="default: the Agent's own limit")
 
     pre = sub.add_parser(
         "preflight", help="offline source/candidate GitOps compatibility before tagging"
@@ -240,6 +242,12 @@ def render_command(repo: Path, args: argparse.Namespace) -> int:
 
 def run_command(repo: Path, args: argparse.Namespace) -> int:
     agent = layout.find(repo, args.agent)
+
+    def stop(*_):  # so a terminated run ends its step and leaves a removable directory
+        raise SystemExit(143)
+
+    main_thread = threading.current_thread() is threading.main_thread()
+    previous = signal.signal(signal.SIGTERM, stop) if main_thread else None
     try:
         name = args.scenario
         if name is None and (agent.root / "scenarios" / "smoke.yaml").is_file():
@@ -267,6 +275,12 @@ def run_command(repo: Path, args: argparse.Namespace) -> int:
     except local.ScenarioError as exc:
         print(exc, file=sys.stderr)
         return 2
+    except KeyboardInterrupt:
+        print("interrupted; the run directory holds what was written", file=sys.stderr)
+        return 130
+    finally:
+        if main_thread:
+            signal.signal(signal.SIGTERM, previous)
     for problem in result.problems:
         print(f"problem: {problem}", file=sys.stderr)
     print(json.dumps(result.document(), indent=2))

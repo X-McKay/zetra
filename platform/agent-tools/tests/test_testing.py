@@ -346,6 +346,15 @@ def test_with_tools_refuses_what_it_cannot_rewrite_in_place():
             manifest.with_tools(written, TOOLS[:1])
 
 
+def test_a_tool_name_yaml_reads_as_something_else_is_quoted():
+    from zetra_agents import manifest
+
+    tools = [{"name": name, "effect": "remote_read"} for name in ("on", "null", "list_pods")]
+    updated = manifest.with_tools("name: probe\ntools: []\n", tools)
+    assert yaml.safe_load(updated)["tools"] == tools
+    assert '  - name: "on"\n' in updated and "  - name: list_pods\n" in updated
+
+
 def test_a_rewrite_keeps_the_files_line_endings(agent_dir):
     from zetra_agents import manifest
 

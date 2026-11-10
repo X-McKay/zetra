@@ -116,8 +116,17 @@ def block(tools: list[dict[str, str]]) -> str:
     if not tools:
         return "tools: []\n"
     return "tools:\n" + "".join(
-        f"  - name: {t['name']}\n    effect: {t['effect']}\n" for t in tools
+        f"  - name: {_scalar(t['name'])}\n    effect: {t['effect']}\n" for t in tools
     )
+
+
+def _scalar(name: str) -> str:
+    """The name as YAML reads back as that text: `on`, `yes` and `null` need quotes."""
+    try:
+        plain = yaml.safe_load(name) == name
+    except yaml.YAMLError:
+        plain = False
+    return name if plain else json.dumps(name)
 
 
 def _mapping(tools: object) -> dict | None:
