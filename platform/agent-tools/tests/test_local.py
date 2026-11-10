@@ -9,6 +9,7 @@ import os
 import pathlib
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import textwrap
@@ -437,7 +438,7 @@ def test_runs_that_cannot_start_are_refused_without_a_run_directory(agent, tmp_p
         (float("inf"), "is not an integer"),
     ):
         assert f"{crd}runtime.maxBoundaries: " in (said := with_boundaries(value)) and why in said
-    assert "max boundaries is 1 to 4, this Agent's limit" in with_boundaries(4, max_boundaries=5)
+    assert "max boundaries is 1 to 4, this Agent's spec" in with_boundaries(4, max_boundaries=5)
     cr_path.write_text(written)
     agent.manifest_path.write_text(yaml.safe_dump({**document, "model": None}))
     with_capabilities(models=[])
@@ -529,41 +530,92 @@ def _tar_is_gnu() -> bool:
     return b"GNU tar" in version
 
 
-@pytest.mark.skipif(not _tar_is_gnu(), reason="the sandbox image's tar is GNU tar")
-def test_the_snapshot_is_measured_as_the_tar_the_platform_takes(tmp_path, monkeypatch):
-    workspace, state = tmp_path / "workspace", tmp_path / "state"
-    workspace.mkdir()
+def _fill(sandbox, case: str) -> None:
+    """One awkward thing for tar to store, under an empty workspace/ and state/."""
+    workspace, state = sandbox / "workspace", sandbox / "state"
+    workspace.mkdir(parents=True)
     state.mkdir()
+    under = workspace / ("d" * 50)  # with a file name below, a member name near 100 bytes
+    kind, _, number = case.partition("-")
+    if kind == "name":  # workspace/ddd…/xxx… is exactly `number` bytes
+        under.mkdir()
+        (under / ("x" * (int(number) - len(f"workspace/{under.name}/")))).write_bytes(b"x")
+    elif kind == "directory":  # the trailing slash tar adds counts toward the 100
+        (workspace / ("x" * (int(number) - len("workspace//")))).mkdir()
+    elif kind == "target":
+        (workspace / "link").symlink_to("t" * int(number))
+    elif kind == "linked":  # a second name for a file of `number` bytes behind a long first name
+        under.mkdir()
+        (under / ("x" * 60)).write_bytes(b"x" * int(number))
+        os.link(under / ("x" * 60), workspace / "again")
+    elif kind == "relinked":  # tar links a second name of a symbolic link, not of a fifo
+        under.mkdir()
+        if number == "symlink":
+            (under / ("x" * 60)).symlink_to("target")
+        else:
+            os.mkfifo(under / ("x" * 60))
+        os.link(under / ("x" * 60), under / ("y" * 60), follow_symlinks=False)
+    elif kind == "sizes":
+        for size in (0, 1, 511, 512, 513, 20_000):
+            (workspace / f"file-{size}").write_bytes(b"x" * size)
+    elif kind == "token":
+        (state / "token.json").write_text("not in the snapshot " * 600)
+        (state / "state.json").write_text("{}" * 700)
+        (workspace / "state").mkdir()
+        (workspace / "state" / "token.json").mkdir()  # the exclude is not anchored
+        (workspace / "state" / "token.json" / "under").write_bytes(b"x" * 5000)
+        (workspace / "token.json").write_bytes(b"x" * 700)  # and this is not excluded
+    elif kind == "other":
+        os.mkfifo(workspace / "fifo")
+        listener = socket.socket(socket.AF_UNIX)
+        listener.bind(str(workspace / "socket"))
+        listener.close()
+    else:
+        assert kind == "empty", case
 
-    def tar() -> int:
-        command = ["tar", "-C", str(tmp_path), "--exclude=state/token.json", "-cf", "-"]
-        archive = subprocess.run([*command, "workspace", "state"], capture_output=True, check=True)
-        return len(archive.stdout)
 
-    assert local.snapshot_size(tmp_path) == tar() == 10240
-    (state / "token.json").write_text("not in the snapshot " * 600)
-    (state / "state.json").write_text("{}" * 700)
-    deep = workspace / "a" / ("d" * 60) / ("e" * 60)  # names past 100 bytes cost two more blocks
-    deep.mkdir(parents=True)
-    for n in range(40):
-        (deep / f"file-{n}").write_bytes(b"x" * (n * 37))
-    (workspace / ("x" * 90)).write_text("a name of exactly 100 bytes")
-    (workspace / ("x" * 91)).touch()
-    (workspace / "link").symlink_to("a")
-    (workspace / "dangling").symlink_to("z" * 150)
-    (workspace / "big").write_bytes(b"\1" * 300_000)
-    assert local.snapshot_size(tmp_path) == tar() > 300_000
+@pytest.mark.skipif(not _tar_is_gnu(), reason="the sandbox image's tar is GNU tar")
+@pytest.mark.parametrize(
+    "case",
+    [
+        "empty",
+        "sizes",
+        *(f"name-{n}" for n in (99, 100, 101, 150)),
+        *(f"directory-{n}" for n in (99, 100, 101)),
+        *(f"target-{n}" for n in (99, 100, 101, 150)),
+        *(f"linked-{n}" for n in (0, 1, 2000)),
+        "relinked-symlink",
+        "relinked-fifo",
+        "token",
+        "other",
+    ],
+)
+def test_the_snapshot_is_measured_as_the_tar_the_platform_takes(tmp_path, case):
+    """Entry by entry: tar's 10 KiB records would hide an entry counted wrong, so what is
+    compared first is the archive without its padding."""
+    _fill(tmp_path, case)
+    command = ["tar", "-C", str(tmp_path), "--exclude=state/token.json", "-cf", "-"]
+    archive = subprocess.run([*command, "workspace", "state"], capture_output=True, check=False)
+    assert archive.returncode == 0 or b"socket ignored" in archive.stderr, archive.stderr
+    entries = archive.stdout.rstrip(b"\0")  # no header and no file here ends in a zero byte
+    assert local.tar_bytes(tmp_path) == -(-len(entries) // 512) * 512
+    assert local.snapshot_size(tmp_path) == len(archive.stdout)
 
-    # A tree that changes while it is measured is measured without what went missing.
+
+def test_a_tree_that_changes_while_it_is_measured_is_measured_without_what_went(
+    tmp_path, monkeypatch
+):
+    _fill(tmp_path, "sizes")
+    whole = local.tar_bytes(tmp_path)
     lstat = pathlib.Path.lstat
 
     def vanishing(path, *args, **kwargs):
-        if path.name == "big":
+        if path.name == "file-20000":
             raise FileNotFoundError(path)
         return lstat(path, *args, **kwargs)
 
     monkeypatch.setattr(pathlib.Path, "lstat", vanishing)
-    assert 0 < local.snapshot_size(tmp_path) < 300_000
+    assert local.tar_bytes(tmp_path) == whole - 512 - 20_480
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root removes a read-only tree either way")
@@ -578,9 +630,16 @@ def test_a_stopped_run_ends_its_step_and_leaves_a_removable_directory(
         yaml.safe_dump({"task": "Sleep.", "model": [{"call": "nap"}]})
     )
     out = tmp_path / "run"
-    command = [sys.executable, "-m", "zetra_agents.cli", "--repo", str(agent.root.parent.parent)]
+    # A test runner started in the background hands down an ignored SIGINT, which Python
+    # then leaves ignored; the run starts with the default, as it does from a terminal.
+    started = (
+        "import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); "
+        "os.execv(sys.executable, [sys.executable, *sys.argv[1:]])"
+    )
+    command = [sys.executable, "-c", started, "-m", "zetra_agents.cli"]
     running = subprocess.Popen(
-        [*command, "run", "probe", "--scenario", "nap", "--out", str(out)],
+        [*command, "--repo", str(agent.root.parent.parent)]
+        + ["run", "probe", "--scenario", "nap", "--out", str(out)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )

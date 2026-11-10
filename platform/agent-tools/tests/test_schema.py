@@ -44,6 +44,15 @@ def test_every_keyword_the_schema_uses_is_one_this_reads():
     assert used <= schema.CHECKED | schema.NOT_CHECKED, used - schema.CHECKED - schema.NOT_CHECKED
     assert schema.CHECKED <= used  # nothing here is read that the CRD never says
 
+    def patterns(node: dict) -> list[str]:
+        found = [node["pattern"]] if "pattern" in node else []
+        for nested in (*node.get("properties", {}).values(), node.get("items")):
+            found += patterns(nested) if nested else []
+        return found
+
+    # `_matches` turns a closing `$` into the end of the text; it knows no other use of one.
+    assert all(p.count("$") == 1 and p.endswith("$") for p in patterns(schema.agent_spec()))
+
 
 def changed(path: str, value) -> dict:
     spec = copy.deepcopy(SPEC)
@@ -97,6 +106,14 @@ def test_an_agent_the_cluster_stores_has_no_problems():
             "spec.capabilities.models[0].budget.tokensPerSession: 0 is less than 1",
         ),
         ("capabilities", [], "spec.capabilities: [] is not an object"),
+        (
+            "capabilities.mcp.0.backend",
+            "kubernetes\n",
+            'spec.capabilities.mcp[0].backend: "kubernetes\\n" does not match ^[a-z0-9-]{1,63}$',
+        ),
+        ("description", "x" * 513, "spec.description: longer than 512 characters"),
+        ("runtime.maxBoundaries", 3.0, "spec.runtime.maxBoundaries: 3.0 is not an integer"),
+        ("runtime", None, "spec.runtime: null is not an object"),
     ],
 )
 def test_what_the_cluster_would_refuse_is_named(path, value, problem):

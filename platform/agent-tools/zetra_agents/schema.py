@@ -6,8 +6,14 @@ run holds `deploy/agent.yaml` to the same schema, so a limit the cluster would n
 
 `schemas/agent-spec.json` is the `spec` schema of zetra
 `deploy/platform/crds/agents.agentplatform.io.yaml`; a test fails when they differ or when
-the CRD starts using a keyword this does not read. `default` needs no reading and `format`
-is not checked. An unknown field is not a problem here: the API server drops it.
+the CRD starts using a keyword this does not read. `default` needs no reading.
+
+This is not the API server's validator, and it differs from it in known ways. `format`
+(the owner's `email`) is not checked, nor is an integer too large for the cluster to
+store, so those reach the cluster's own refusal. In the other direction it is stricter:
+a null and an integral float such as `3.0` are refused here where the cluster would drop
+the one and accept the other. An unknown field is not a problem here: the API server
+drops it.
 """
 
 from __future__ import annotations
@@ -52,6 +58,14 @@ def problems(spec: Any) -> list[str]:
     return _problems(spec, agent_spec(), "spec")
 
 
+def _matches(pattern: str, value: str) -> bool:
+    """As the API server's RE2 reads it: `$` is the end of the text, where Python's also
+    matches before a final newline."""
+    if pattern.endswith("$") and not pattern.endswith("\\$"):
+        pattern = pattern[:-1] + "\\Z"
+    return re.search(pattern, value) is not None
+
+
 def _show(value: Any) -> str:
     text = json.dumps(value, default=str)
     return text if len(text) <= 60 else text[:57] + "..."
@@ -65,7 +79,7 @@ def _problems(value: Any, schema: dict, where: str) -> list[str]:
     found: list[str] = []
     if "enum" in schema and value not in schema["enum"]:
         found.append(f"{where}: {_show(value)} is not one of {', '.join(schema['enum'])}")
-    if "pattern" in schema and not re.search(schema["pattern"], value):
+    if "pattern" in schema and not _matches(schema["pattern"], value):
         found.append(f"{where}: {_show(value)} does not match {schema['pattern']}")
     if "maxLength" in schema and len(value) > schema["maxLength"]:
         found.append(f"{where}: longer than {schema['maxLength']} characters")

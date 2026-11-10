@@ -129,19 +129,28 @@ printed with the line to add. Runs are kept under `~/.local/state/zetra/agent-ru
 The scaffolded tests run the smoke scenario, so it stays true as the agent changes.
 
 A local run keeps the parts of a platform session that need no platform. Before
-anything runs, `deploy/agent.yaml` is held to the Agent CRD's schema, the one Kubani's
-API server applies, so an Agent the cluster would refuse to store (65 boundaries, a
-budget of zero, a grant with no `effect`) is refused here with the field at fault.
-`zetra-agents check` does not read that schema; today only a local run and the cluster
-do. The MCP grants, the session's token budget and the boundary limit then come from
-the policy bundle the contracts compile the Agent to, the same compilation a release
-goes through, so `spec.runtime.maxBoundaries` and the smallest `tokensPerSession` among
-the model grants bound the session as they would there. An agent `zetra-agents check`
-refuses, or whose Agent does not compile, is not run. Each boundary is held to the exec
-deadline and the task to 16 KiB. After every boundary `workspace/` and `state/` are
-measured as the tar the platform snapshots (GNU tar's arithmetic; a hard link is
-counted as a second file, so the figure can only be high), and passing its 64 MiB limit
-is reported as a problem.
+anything runs, `deploy/agent.yaml` is held to the schema in the Agent CRD: its types,
+ranges, patterns, enums and required fields, so an Agent the cluster would refuse to
+store (65 boundaries, a budget of zero, a grant with no `effect`) is refused here with
+the field at fault. It is a reading of that schema, not the API server's validator: a
+`format` (the owner's email) is not checked, and a null or a `3.0` where the schema
+says integer is refused here though the cluster would take it. The cluster has the last
+word. `zetra-agents check` does not read the schema; today only a local run and the
+cluster do.
+
+The MCP grants and the session's token budget then come from the policy bundle the
+contracts compile the Agent to, the same compilation a release goes through, so the
+smallest `tokensPerSession` among the model grants bounds the session as it does there.
+The boundary limit is the Agent's `spec.runtime.maxBoundaries`, and here a local run is
+stricter than the platform is today: the Session Runner stops a session at the limit
+its submitter passes (64 unless `just agent run --max-boundaries` says otherwise) and
+does not read the Agent's own. A session that ends locally for reaching the Agent's
+limit could run on to 64 there. An agent `zetra-agents check` refuses, or whose Agent
+does not compile, is not run. Each boundary is held to the exec deadline and the task
+to 16 KiB. After every boundary `workspace/` and `state/` are measured as the tar the
+platform snapshots, by GNU tar's arithmetic: a file with several names is stored once
+and linked, and a socket and any `state/token.json` are left out, as tar leaves them.
+Passing its 64 MiB limit is reported as a problem.
 
 A step counts only when it printed what the Session Runner accepts for that boundary:
 at most 64 KiB, exactly the result's six fields, this boundary's number, and `done`

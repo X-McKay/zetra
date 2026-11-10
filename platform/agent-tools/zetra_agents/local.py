@@ -2,16 +2,19 @@
 
 `zetra-agents run` drives the SDK's own boundary driver, one process per boundary, the
 way the Session Runner does: the same length-prefixed request, state file, tool dispatch,
-boundary limit, exec deadline and exit codes, against the `/app` layout an image has (read
+exec deadline and exit codes, against the `/app` layout an image has (read
 only while the session runs, as it is there). Two things are replaced,
 because a laptop has neither: the model route (the scenario's scripted turns, or with
 `live` an OpenAI-compatible endpoint from the environment) and the MCP route (the
 scenario's scripted replies, behind the grants in `deploy/agent.yaml`). That file is
 first held to the Agent CRD's schema (`zetra_agents.schema`), as the API server holds
 it; the grants, the session's token budget and its boundary limit are then read from the
-policy bundle the contracts compile the Agent to. An agent whose Agent the cluster would
-not store, whose layout `zetra-agents check` refuses, or whose Agent does not compile,
-is not run. A step counts only when it printed what the Session Runner would accept as
+policy bundle the contracts compile the Agent to. The boundary limit is where a local run
+is stricter than the platform is today: the Session Runner bounds a session by what its
+submitter passes (64 unless told otherwise) and does not read the Agent's
+`spec.runtime.maxBoundaries`, which a local run holds the agent to. An agent whose Agent
+the cluster would not store, whose layout `zetra-agents check` refuses, or whose Agent
+does not compile, is not run. A step counts only when it printed what the Session Runner would accept as
 its boundary's result (`step_result`); a tool can print that itself, there as here.
 
 So a local run shows what the agent does with a task: which tools it calls, what the
@@ -252,8 +255,9 @@ def new_directory(agent: AgentDir, out: Path | None) -> Path:
 
 
 def compiled(agent: AgentDir) -> dict:
-    """The policy bundle the contracts compile this Agent to. Its MCP grants, session
-    token budget and boundary limit are what a session is held to on the platform."""
+    """The policy bundle the contracts compile this Agent to. Its MCP grants and session
+    token budget are what a session is held to on the platform; its boundary limit is the
+    Agent's own, which the Session Runner does not read (the submitter sets that one)."""
     release = {"metadata": {"name": "local"}, "spec": {"agent": agent.name, "image": "local"}}
     try:
         return compile_bundle(
@@ -384,13 +388,15 @@ def step_result(stdout: bytes, boundary: int, rc: int) -> dict | None:
     return doc if accepted else None
 
 
-def snapshot_size(sandbox: Path) -> int:
-    """What GNU tar writes for `tar -C /sandbox --exclude=state/token.json -cf - workspace
-    state`, which is what the Session Runner limits: a 512-byte header for every entry,
-    each file padded to 512, a further header and the padded name for a name or link
-    target longer than 100 bytes, and the archive rounded up to 10 KiB. A hard link is
-    counted as another file, so this can only come out high. Something that vanishes
-    while it is being measured is left out."""
+def tar_bytes(sandbox: Path) -> int:
+    """The entries GNU tar writes for `tar -C /sandbox --exclude=state/token.json -cf -
+    workspace state`, in bytes, before the end-of-archive blocks: a 512-byte header for
+    every entry, each file padded to 512, and a further header and the padded name for a
+    name or link target longer than 100 bytes. Entries are read in tar's order, so a file or
+    symbolic link with several names is stored once and linked afterwards, as tar does it. A socket is
+    left out, as is any `state/token.json` and what is under it (the exclude is not
+    anchored). Something that vanishes while it is being measured is left out too."""
+    linked: dict[tuple[int, int], bytes] = {}
 
     def padded(length: int) -> int:
         return -(-length // 512) * 512
@@ -398,27 +404,37 @@ def snapshot_size(sandbox: Path) -> int:
     def long(name: bytes) -> int:
         return 512 + padded(len(name) + 1) if len(name) > 100 else 0
 
-    size = 0
-    for top in ("workspace", "state"):
-        size += 512
-        for folder, folders, files in os.walk(sandbox / top):
-            for entry in folders + files:
-                path = Path(folder, entry)
-                name = path.relative_to(sandbox).as_posix()
-                if name == "state/token.json":
-                    continue
-                try:
-                    status = path.lstat()
-                    if stat.S_ISLNK(status.st_mode):
-                        size += long(os.fsencode(os.readlink(path)))
-                except OSError:
-                    continue
-                if stat.S_ISDIR(status.st_mode):
-                    name += "/"
-                elif stat.S_ISREG(status.st_mode):
-                    size += padded(status.st_size)
-                size += 512 + long(os.fsencode(name))
-    return -(-(size + 1024) // 10240) * 10240
+    def entry(path: Path, name: str) -> int:
+        if name == "state/token.json" or name.endswith("/state/token.json"):
+            return 0
+        try:
+            status = path.lstat()
+            mode = status.st_mode
+            if stat.S_ISSOCK(mode):
+                return 0
+            if stat.S_ISDIR(mode):
+                with os.scandir(path) as listing:
+                    children = [child.name for child in listing]
+                size = 512 + long(os.fsencode(name + "/"))
+                return size + sum(entry(path / child, f"{name}/{child}") for child in children)
+            size = 512 + long(os.fsencode(name))
+            if status.st_nlink > 1 and (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
+                first = linked.setdefault((status.st_dev, status.st_ino), os.fsencode(name))
+                if first != os.fsencode(name):
+                    return size + long(first)
+            if stat.S_ISLNK(mode):
+                return size + long(os.fsencode(os.readlink(path)))
+        except OSError:
+            return 0
+        return size + (padded(status.st_size) if stat.S_ISREG(mode) else 0)
+
+    return sum(entry(sandbox / top, top) for top in ("workspace", "state"))
+
+
+def snapshot_size(sandbox: Path) -> int:
+    """The size of the tar the Session Runner limits: `tar_bytes`, the two empty blocks
+    that end an archive, rounded up to tar's 10 KiB record."""
+    return -(-(tar_bytes(sandbox) + 1024) // 10240) * 10240
 
 
 def snapshot_problems(size: int) -> list[str]:
@@ -477,7 +493,9 @@ def run(
     limit = bundle["runtime"]["max_boundaries"]
     max_boundaries = limit if max_boundaries is None else max_boundaries
     if not 1 <= max_boundaries <= limit:
-        raise ScenarioError(f"max boundaries is 1 to {limit}, this Agent's limit on the platform")
+        raise ScenarioError(
+            f"max boundaries is 1 to {limit}, this Agent's spec.runtime.maxBoundaries"
+        )
     task = task_document(scenario.task)
 
     directory = new_directory(agent, out)
