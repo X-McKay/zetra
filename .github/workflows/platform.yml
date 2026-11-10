@@ -41,3 +41,40 @@ jobs:
           go-version-file: platform/${{ matrix.project }}/go.mod
       - run: go vet ./...
       - run: go test ./...
+  # platform/images.json is the one list of published images; the matrix below is read from
+  # it. Its conformance-capture entry (platform/capture for amd64) rests on Kubani's manifest
+  # comment and the published image's layer history; no build record confirms it.
+  image-list:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.list.outputs.images }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - id: list
+        run: echo "images=$(jq -c . platform/images.json)" >> "$GITHUB_OUTPUT"
+  # Build only: nothing is pushed or signed, and no secret is read. The arm64 capture image
+  # compiles on the runner's own CPU and its final stage only copies, so it needs no QEMU.
+  images:
+    needs: image-list
+    name: images (${{ matrix.image.repository }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.image-list.outputs.images) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - env:
+          PLATFORM: ${{ matrix.image.platform }}
+          DOCKERFILE: ${{ matrix.image.dockerfile }}
+          CONTEXT: ${{ matrix.image.context }}
+          BUILD_ARGS: ${{ toJSON(matrix.image.buildArgs) }}
+        run: |
+          mapfile -t args < <(jq -r 'to_entries[] | "--build-arg", "\(.key)=\(.value)"' <<<"$BUILD_ARGS")
+          docker buildx build --pull --no-cache --platform "$PLATFORM" "${args[@]}" \
+            -f "$DOCKERFILE" "$CONTEXT"
