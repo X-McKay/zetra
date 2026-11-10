@@ -100,6 +100,27 @@ def test_aps_delete_404_is_success(aps_server):
     assert seen[0]["method"] == "DELETE"
 
 
+def test_aps_get_404_is_a_value_only_when_asked(aps_server):
+    client, routes, _ = aps_server
+    assert client.get("/v1/grants/gone", missing_ok=True) is None
+    routes[("GET", "/v1/grants/gh_1")] = (403, {"error": "forbidden"})
+    with pytest.raises(ApplicationError) as e:
+        client.get("/v1/grants/gh_1", missing_ok=True)
+    assert e.value.type == "Forbidden" and e.value.non_retryable
+
+
+def test_aps_grant_delete_names_the_session_and_a_refusal_is_final(aps_server):
+    client, routes, seen = aps_server
+    path = f"/v1/grants/gh_1?session_id={SESSION}"
+    routes[("DELETE", path)] = (204, None)
+    assert client.delete(path) is None
+    assert seen[0]["path"] == path
+    routes[("DELETE", path)] = (403, {"error": "forbidden", "reason": "session"})
+    with pytest.raises(ApplicationError) as e:
+        client.delete(path)
+    assert e.value.type == "Forbidden" and e.value.non_retryable
+
+
 def test_aps_unreachable_is_retryable_and_never_logs_the_token(tmp_path, caplog):
     token = tmp_path / "token"
     token.write_text(FAKE_JWT)

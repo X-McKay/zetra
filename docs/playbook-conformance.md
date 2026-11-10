@@ -491,6 +491,43 @@ actual T24 fault runs must still prove initial genuine grants and final Pod,
 active-generation, vault and grant-record absence within ten minutes. The ordinary
 GET-grant route's 404 after vault deletion is not sufficient absence evidence.
 
+### Grant cleanup is bound to the session id
+
+Cleanup deletes the handle a session was submitted with, and it runs for refused
+sessions too. The APS delete route used to check the caller's tenant alone, so a
+session submitted with another session's handle was refused at preflight and its
+cleanup then removed that other session's grant. The runner's grant step now
+reads the grant first and leaves one bound to another session in place, and it
+names its own session on the delete (`DELETE /v1/grants/<handle>?session_id=<id>`).
+APS answers 403 `session`, removing nothing, when the named session is not the
+one the grant was deposited for. The session is asserted by the runner or
+reconciler ServiceAccount, not proven: it adds no credential. The binding is to
+the session id alone, which the submitter chooses, so a session submitted under
+the same session id as the grant's passes it whatever agent it names: neither
+layer compares the agent, and the tenant is compared by APS alone. A delete
+without the
+parameter is still checked by tenant alone, because a runner image older than this
+change sends none; the two images can therefore be rolled in either order.
+
+Sessions cleaning up their own grant report `stop=OK, delete=DELETED, grant=OK`
+as before, including when stop removed the vault first and the grant read
+returned 404, and when the grant is already absent. A session that was given
+another session's handle reports `grant=FAILED:Forbidden` and ends
+`NOT_CONFIRMED`, and the other session's grant and vault are untouched once the
+new APS is rolled. With an APS older than this change the runner's read is the
+only check, so a grant it cannot see (its tokens already removed by its own
+session's stop) is still deleted by tenant alone. The
+reconciler names the session APS listed beside the handle, so its deletes are
+unchanged. The runner's `session_started` record carries `delegated` and no
+longer the handle. Runner logs written before this change still hold handle and
+session id pairs, which stay usable until those grants expire or are removed.
+
+APS HTTP tests, runner activity tests, session workflow tests in process and on
+the Temporal test server, and a replay of a history recorded by this code cover
+this. The workflow's commands are unchanged; replay across the previous and the
+new runner image was checked once by hand and is not a committed test. Nothing
+here has been exercised against a live cluster.
+
 ### Observed checkpoint failure points (T23)
 
 T23 uses a separate signed `conformance-checkpoint` fixture and an ephemeral

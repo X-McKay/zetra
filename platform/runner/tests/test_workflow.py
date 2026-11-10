@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import functools
+import json
 from datetime import timedelta
 
 import pytest
+from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
+from runner import activities as act
+from runner import records
 from runner import workflow as wf
+from runner.types import SessionInput
+from tests.fakes import FakeAPS, FakeCore, FakeCustom, FakeNet, FakeStream
 from tests.harness import (
     FakeActivities,
     Hang,
+    _environment,
     out,
     run_inproc,
     run_temporal,
@@ -223,6 +231,154 @@ async def test_t24_every_cleanup_step_runs_when_others_fail(go):
     }
     assert {"stop_session", "delete_sandbox", "delete_grant"} <= set(fake.names())
     assert r.status["state"] == "NOT_CONFIRMED"
+
+
+class RealGrantSteps(FakeActivities):
+    """Preflight, stop and the grant delete are the runner's own activities on a fake APS."""
+
+    @activity.defn(name="preflight")
+    async def preflight(self, inp: SessionInput) -> int | None:
+        self.log.append(("preflight",))
+        return act.preflight(inp)
+
+    @activity.defn(name="stop_session")
+    async def stop_session(self, inp: SessionInput) -> str:
+        self.log.append(("stop_session",))
+        return act.stop_session(inp)
+
+    @activity.defn(name="delete_grant")
+    async def delete_grant(self, inp: SessionInput) -> str:
+        self.log.append(("delete_grant",))
+        return act.delete_grant(inp)
+
+
+def real_grant_steps(tmp_path, aps: FakeAPS, delegated: bool = True, **kw) -> RealGrantSteps:
+    core = FakeCore()
+    status = {"identityMode": "on-behalf-of", "delegationRequired": True} if delegated else None
+    act.configure(
+        act.Deps(
+            core=core,
+            net=FakeNet(),
+            custom=FakeCustom(status),
+            aps=aps,
+            store=act.FilesystemStore(tmp_path / "artifacts"),
+            exec=functools.partial(act.kube_exec, core, stream_fn=FakeStream()),
+        )
+    )
+    return RealGrantSteps(**kw)
+
+
+OTHER_SESSION = "00000000-0000-4000-8000-000000000000"
+
+
+@pytest.mark.parametrize("binds_delete", [False, True])
+@pytest.mark.parametrize("delegated", [True, False])
+async def test_session_with_another_sessions_handle_leaves_that_grant(
+    go, tmp_path, binds_delete, delegated
+):
+    theirs = {"session_id": OTHER_SESSION, "tenant": "tenant-a"}
+    aps = FakeAPS(grants={"gh_theirs": dict(theirs)}, binds_delete=binds_delete)
+    fake = real_grant_steps(tmp_path, aps, delegated=delegated, done_at=0)
+    r = await go(fake, session_input(grant="gh_theirs"))
+    # A delegated release refuses the session at preflight; any other never reads the handle.
+    assert r.outcome == ("FAILED" if delegated else "COMPLETED")
+    assert (("create_sandbox", 1) in fake.log) is not delegated
+    assert r.result.cleanup == {"stop": "OK", "delete": "DELETED", "grant": "FAILED:Forbidden"}
+    assert r.status["state"] == "NOT_CONFIRMED"
+    assert aps.grants == {"gh_theirs": theirs}
+    assert not [c for c in aps.calls if c[0] == "DELETE"]
+    assert fake.names().count("delete_grant") == 1  # the refusal is final, not retried
+
+
+@pytest.mark.parametrize("binds_delete", [False, True])
+@pytest.mark.parametrize("case", ["completed", "cancelled", "refused"])
+async def test_session_still_deletes_its_own_grant(go, tmp_path, binds_delete, case):
+    inp = session_input(grant="gh_mine")
+    aps = FakeAPS(
+        grants={"gh_mine": {"session_id": inp.session_id, "tenant": "tenant-a"}},
+        binds_delete=binds_delete,
+    )
+    blocked = {"block_at": 1} if case == "cancelled" else {"done_at": 0}
+    fake = real_grant_steps(tmp_path, aps, **blocked)
+    if case == "refused":  # refused for a reason that has nothing to do with the grant
+        act.deps().custom.status["ready"] = False
+    r = await go(fake, inp, cancel=case == "cancelled")
+    assert (
+        r.outcome == {"completed": "COMPLETED", "cancelled": "CANCELLED", "refused": "FAILED"}[case]
+    )
+    assert r.status["cleanup"] == {"stop": "OK", "delete": "DELETED", "grant": "OK"}
+    assert r.status["state"] == "CLEANED"
+    assert aps.grants == {}
+    assert ("DELETE", f"/v1/grants/gh_mine?session_id={inp.session_id}") in aps.calls
+
+
+@pytest.mark.parametrize("grant", ["gh_recorded_nowhere", None])
+async def test_started_record_says_delegated_without_the_handle(go, caplog, grant):
+    inp = session_input(grant=grant)
+    r = await go(FakeActivities(done_at=0), inp)
+    assert r.outcome == "COMPLETED"
+    lines = [rec.getMessage() for rec in caplog.records if rec.name == "runner.records"]
+    [started] = [json.loads(line) for line in lines if '"session_started"' in line]
+    assert started == {
+        "event": "session_started",
+        "tenant": inp.tenant,
+        "agent": inp.agent,
+        "release": inp.release,
+        "session_id": inp.session_id,
+        "delegated": grant is not None,
+    }
+    assert any('"session_finished"' in line for line in lines)
+    assert not any("gh_recorded_nowhere" in line for line in lines)
+
+
+def test_started_record_cannot_carry_a_handle():
+    with pytest.raises(ValueError, match="grant_handle"):
+        records.emit("session_started", session_id="s", delegated=True, grant_handle="gh_1")
+    assert not any("handle" in field for fields in records.FIELDS.values() for field in fields)
+
+
+@pytest.mark.parametrize("grant_refused", [False, True])
+async def test_session_history_replays_whatever_the_grant_step_reported(grant_refused, caplog):
+    """The grant fix lives in the activity: the workflow's commands are what they were."""
+    from temporalio.worker import Replayer, Worker
+
+    refusal = ApplicationError(
+        "grant is bound to another session", type="Forbidden", non_retryable=True
+    )
+    fake = FakeActivities(done_at=1, grant_error=refusal if grant_refused else None)
+    inp = session_input(grant="gh_test")
+    async with await _environment() as env:
+        async with Worker(
+            env.client,
+            task_queue=inp.task_queue,
+            workflows=[wf.SessionWorkflow],
+            activities=fake.all(),
+        ):
+            handle = await env.client.start_workflow(
+                wf.SessionWorkflow.run,
+                inp,
+                id=inp.workflow_id,
+                task_queue=inp.task_queue,
+                execution_timeout=wf.EXECUTION_TIMEOUT,
+            )
+            result = await handle.result()
+            history = await handle.fetch_history()
+    assert result.cleanup == {
+        "stop": "OK",
+        "delete": "DELETED",
+        "grant": "FAILED:Forbidden" if grant_refused else "OK",
+    }
+    scheduled = [
+        e.activity_task_scheduled_event_attributes.activity_type.name
+        for e in history.events
+        if e.HasField("activity_task_scheduled_event_attributes")
+    ]
+    assert scheduled.count("delete_grant") == 1 and scheduled.count("stop_session") == 1
+    caplog.clear()
+    replay = await Replayer(workflows=[wf.SessionWorkflow]).replay_workflow(history)
+    assert replay.replay_failure is None
+    # Records are written once, by the task that first ran the code, never by a replay.
+    assert not [rec for rec in caplog.records if rec.name == "runner.records"]
 
 
 async def test_t24_delete_still_runs_when_stop_fails(go):

@@ -616,11 +616,97 @@ def test_delete_sandbox_not_confirmed_is_a_value(tmp_path, monkeypatch):
     assert run(act.delete_sandbox, GenIn(inp(), 1, None)) == "NOT_CONFIRMED"
 
 
+OTHER_SESSION = "00000000-0000-4000-8000-000000000000"
+GRANT_DELETE = ("DELETE", f"/v1/grants/gh_1?session_id={SESSION}")
+# An APS from before deletes were bound to a session, and one that binds them.
+either_aps = pytest.mark.parametrize("binds_delete", [False, True])
+
+
 def test_stop_and_grant_calls(tmp_path):
     d = setup(tmp_path)
     assert run(act.stop_session, inp("gh_1")) == "OK"
     assert run(act.delete_grant, inp("gh_1")) == "OK"
-    assert d.aps.calls == [("POST", f"/v1/sessions/{SESSION}/stop"), ("DELETE", "/v1/grants/gh_1")]
+    assert d.aps.calls == [
+        ("POST", f"/v1/sessions/{SESSION}/stop"),
+        ("GET", "/v1/grants/gh_1"),
+        GRANT_DELETE,
+    ]
+
+
+def test_delete_grant_without_a_handle_calls_nothing(tmp_path):
+    d = setup(tmp_path)
+    assert run(act.delete_grant, inp()) == "OK"
+    assert d.aps.calls == []
+
+
+@either_aps
+def test_delete_grant_removes_the_sessions_own_grant(tmp_path, binds_delete):
+    grants = {"gh_1": {"session_id": SESSION, "tenant": TENANT}}
+    aps = FakeAPS(grants=grants, binds_delete=binds_delete)
+    setup(tmp_path, custom=FakeCustom(DELEGATED), aps=aps)
+    run(act.preflight, inp(grant="gh_1"))
+    assert run(act.delete_grant, inp("gh_1")) == "OK"
+    assert aps.grants == {} and aps.calls[-1] == GRANT_DELETE
+    assert run(act.delete_grant, inp("gh_1")) == "OK"  # already gone, as on an activity retry
+
+
+@either_aps
+def test_delete_grant_after_stop_removed_the_tokens(tmp_path, binds_delete):
+    """Stop and the grant delete run together; once stop wins, APS no longer shows the grant."""
+    grants = {"gh_1": {"session_id": SESSION, "tenant": TENANT}}
+    aps = FakeAPS(grants=grants, binds_delete=binds_delete)
+    setup(tmp_path, aps=aps)
+    assert run(act.stop_session, inp("gh_1")) == "OK"
+    assert run(act.delete_grant, inp("gh_1")) == "OK"
+    assert aps.grants == {} and aps.calls[-1] == GRANT_DELETE
+
+
+@either_aps
+@pytest.mark.parametrize("status", [DELEGATED, None], ids=["refused", "handle-never-read"])
+def test_cleanup_leaves_the_grant_of_another_session(tmp_path, binds_delete, status):
+    """A session submitted with another session's handle cannot revoke that delegation."""
+    theirs = {"session_id": OTHER_SESSION, "tenant": TENANT}
+    aps = FakeAPS(grants={"gh_1": dict(theirs)}, binds_delete=binds_delete)
+    setup(tmp_path, custom=FakeCustom(status), aps=aps)
+    if status:  # a delegated release reads the grant and refuses the session
+        assert refused(act.preflight, inp(grant="gh_1")).message == (
+            "delegated session without a grant"
+        )
+    else:  # any other release never reads the handle before cleanup
+        run(act.preflight, inp(grant="gh_1"))
+    assert run(act.stop_session, inp("gh_1")) == "OK"
+    e = refused(act.delete_grant, inp("gh_1"))
+    assert e.type == "Forbidden" and e.non_retryable
+    assert aps.grants == {"gh_1": theirs}
+    assert not [c for c in aps.calls if c[0] == "DELETE"]
+    assert aps.get("/v1/grants/gh_1") == theirs  # still usable by its own session
+
+
+def test_aps_refuses_a_grant_the_runner_cannot_see(tmp_path):
+    """The other session's tokens are gone, so only APS can tell whose record this is."""
+    theirs = {"session_id": OTHER_SESSION, "tenant": TENANT}
+    aps = FakeAPS(grants={"gh_1": dict(theirs)})
+    aps.stopped.add(OTHER_SESSION)
+    setup(tmp_path, aps=aps)
+    e = refused(act.delete_grant, inp("gh_1"))
+    assert e.type == "Forbidden" and e.non_retryable
+    assert aps.grants == {"gh_1": theirs} and aps.calls[-1] == GRANT_DELETE
+
+
+def test_delete_grant_escapes_what_it_was_given(tmp_path):
+    """Cleanup runs on input preflight refused, so neither value is trusted as a path."""
+    theirs = {"session_id": OTHER_SESSION, "tenant": TENANT}
+    aps = FakeAPS(grants={"gh_1": dict(theirs)})
+    aps.stopped.add(OTHER_SESSION)
+    setup(tmp_path, aps=aps)
+    forged = dataclasses.replace(inp(f"gh_1?session_id={OTHER_SESSION}#"), session_id="a&b=c d")
+    assert run(act.delete_grant, forged) == "OK"  # no grant has that handle
+    assert aps.grants == {"gh_1": theirs}
+    escaped = f"/v1/grants/gh_1%3Fsession_id%3D{OTHER_SESSION}%23"
+    assert aps.calls[-2:] == [
+        ("GET", escaped),
+        ("DELETE", f"{escaped}?session_id=a%26b%3Dc%20d"),
+    ]
 
 
 @pytest.mark.parametrize("replaced", [False, True])
