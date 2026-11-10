@@ -6,10 +6,13 @@ boundary limit, exec deadline and exit codes, against the `/app` layout an image
 only while the session runs, as it is there). Two things are replaced,
 because a laptop has neither: the model route (the scenario's scripted turns, or with
 `live` an OpenAI-compatible endpoint from the environment) and the MCP route (the
-scenario's scripted replies, behind the grants in `deploy/agent.yaml`). The grants, the
-session's token budget and its boundary limit are read from the policy bundle the
-contracts compile the Agent to, so they are the platform's by construction; an agent
-whose layout `zetra-agents check` refuses, or whose Agent does not compile, is not run.
+scenario's scripted replies, behind the grants in `deploy/agent.yaml`). That file is
+first held to the Agent CRD's schema (`zetra_agents.schema`), as the API server holds
+it; the grants, the session's token budget and its boundary limit are then read from the
+policy bundle the contracts compile the Agent to. An agent whose Agent the cluster would
+not store, whose layout `zetra-agents check` refuses, or whose Agent does not compile,
+is not run. A step counts only when it printed what the Session Runner would accept as
+its boundary's result (`step_result`); a tool can print that itself, there as here.
 
 So a local run shows what the agent does with a task: which tools it calls, what the
 grants would refuse, what the report says. It is not a deployment check. Identity, the
@@ -18,7 +21,8 @@ the real MCP servers are exercised only by a session on the platform. Two more
 differences can let a local run pass where the platform would not: the agent imports
 from the whole workspace's environment rather than the image's own packages (the CI image
 check is what proves those), and the task is not screened for credentials as the Session
-Runner screens it. The Agent's `ttlSeconds` is not modelled either.
+Runner screens it. The Agent's `ttlSeconds` is not modelled either, and a process a tool
+leaves running is not ended with the run.
 
 Nothing here contains the agent's code. A step is an ordinary process running as the
 developer: the read-only layout and the clean environment make an accidental write or a
@@ -50,6 +54,7 @@ import datetime as dt
 import json
 import os
 import secrets
+import stat
 import subprocess
 import sys
 from collections.abc import Callable
@@ -61,13 +66,16 @@ import yaml
 from agent_platform.bundle import compile_bundle
 from agent_platform.constants import DEFAULT_TRUST_DOMAIN
 
-from zetra_agents import layout, local_step, testing
+from zetra_agents import layout, local_step, schema, testing
 from zetra_agents.layout import AgentDir
 
 BOUNDARY_SECONDS = 290.0  # the Session Runner's exec deadline
 MAX_TASK = 16 * 1024  # `just agent run` in Kubani refuses a larger task
 MAX_REPORT = 16_000  # bytes of workspace/report.md the platform's report reader accepts
 MAX_SNAPSHOT = 64 * 1024 * 1024  # the Session Runner's limit on the tar of workspace/ and state/
+MAX_OUTPUT = 65536  # the Session Runner's limit on what a step prints
+MAX_SUMMARY = 512
+RESULT_FIELDS = {"boundary", "kind", "done", "tool", "usage", "summary"}
 OUTCOMES = {0: "running", 2: "completed", 3: "agent_error", 4: "budget", 5: "protocol_error"}
 NOT_A_DEPLOYMENT_CHECK = (
     "local run: the model and MCP are stand-ins; identity, gateway policy, budgets, the "
@@ -254,7 +262,14 @@ def compiled(agent: AgentDir) -> dict:
             mcp_resource_base="https://mcp.invalid",
             trust_domain=DEFAULT_TRUST_DOMAIN,
         )
-    except (yaml.YAMLError, AttributeError, KeyError, TypeError, ValueError) as exc:
+    except (
+        yaml.YAMLError,
+        ArithmeticError,
+        AttributeError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
         why = exc if isinstance(exc, ValueError) else f"{type(exc).__name__} {exc}"
         raise ScenarioError(
             f"{agent.name}: deploy/agent.yaml does not compile to a release policy: {_clip(why)}"
@@ -269,14 +284,19 @@ def _writable(root: Path, on: bool) -> None:
 
 
 def refusals(agent: AgentDir) -> list[str]:
-    """Why this agent is not run: what `check` refuses it for, so the grants and budget a
-    local session is held to are the ones a release would compile."""
+    """Why this agent is not run: its Agent is outside the CRD, or `check` refuses it, so
+    the grants and limits a local session is held to are ones the platform could have."""
     problems = layout.check_files(agent)
     if problems:
         return problems
     if layout.image_target(agent) != "runtime":
         return [f"{agent.name} is a conformance fixture; it runs only in its own image"]
     try:
+        refused = schema.problems((agent.agent_cr() or {}).get("spec"))
+        if refused:
+            return [
+                f"{agent.name}: deploy/agent.yaml is outside the Agent CRD: {p}" for p in refused
+            ]
         problems = layout.check(agent)
         if not problems and not isinstance(agent.manifest().get("model"), dict):
             return [f"{agent.name} declares no model; there is no model loop to run"]
@@ -326,16 +346,79 @@ def mcp_problems(agent: AgentDir, calls: list[dict]) -> list[str]:
     return found
 
 
+def step_result(stdout: bytes, boundary: int, rc: int) -> dict | None:
+    """What a step printed, if the Session Runner would take it as this boundary's result
+    (spec 10.4; zetra platform/runner `BoundaryOut.parse_strict` and `run_boundary`): at
+    most 64 KiB, exactly the six fields with their types, this boundary, and `done` true
+    exactly when the step exited 2."""
+
+    def count(value) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    if len(stdout) > MAX_OUTPUT:
+        return None
+    try:
+        doc = json.loads(stdout.decode("utf-8"))
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(doc, dict) or set(doc) != RESULT_FIELDS:
+        return None
+    tool, usage, summary = doc["tool"], doc["usage"], doc["summary"]
+    accepted = (
+        count(doc["boundary"])
+        and doc["boundary"] == boundary
+        and doc["kind"] in ("model", "tool")
+        and doc["done"] is (rc == 2)
+        and (tool is None or (isinstance(tool, str) and 0 < len(tool) <= 128))
+        and (
+            usage is None
+            or (
+                isinstance(usage, dict)
+                and set(usage) == {"input_tokens", "output_tokens"}
+                and all(count(v) for v in usage.values())
+            )
+        )
+        and isinstance(summary, str)
+        and len(summary) <= MAX_SUMMARY
+    )
+    return doc if accepted else None
+
+
 def snapshot_size(sandbox: Path) -> int:
-    """About what `tar -C /sandbox workspace state` writes, which is what the Session
-    Runner limits: a 512-byte header for every entry and each file padded to 512."""
+    """What GNU tar writes for `tar -C /sandbox --exclude=state/token.json -cf - workspace
+    state`, which is what the Session Runner limits: a 512-byte header for every entry,
+    each file padded to 512, a further header and the padded name for a name or link
+    target longer than 100 bytes, and the archive rounded up to 10 KiB. A hard link is
+    counted as another file, so this can only come out high. Something that vanishes
+    while it is being measured is left out."""
+
+    def padded(length: int) -> int:
+        return -(-length // 512) * 512
+
+    def long(name: bytes) -> int:
+        return 512 + padded(len(name) + 1) if len(name) > 100 else 0
+
     size = 0
-    for name in ("workspace", "state"):
-        for path in [sandbox / name, *(sandbox / name).rglob("*")]:
-            size += 512
-            if path.is_file() and not path.is_symlink():
-                size += -(-path.lstat().st_size // 512) * 512
-    return size
+    for top in ("workspace", "state"):
+        size += 512
+        for folder, folders, files in os.walk(sandbox / top):
+            for entry in folders + files:
+                path = Path(folder, entry)
+                name = path.relative_to(sandbox).as_posix()
+                if name == "state/token.json":
+                    continue
+                try:
+                    status = path.lstat()
+                    if stat.S_ISLNK(status.st_mode):
+                        size += long(os.fsencode(os.readlink(path)))
+                except OSError:
+                    continue
+                if stat.S_ISDIR(status.st_mode):
+                    name += "/"
+                elif stat.S_ISREG(status.st_mode):
+                    size += padded(status.st_size)
+                size += 512 + long(os.fsencode(name))
+    return -(-(size + 1024) // 10240) * 10240
 
 
 def snapshot_problems(size: int) -> list[str]:
@@ -452,18 +535,11 @@ def run(
             if stderr:
                 (directory / f"boundary-{n:02d}.stderr").write_text(stderr + "\n", encoding="utf-8")
             outcome = OUTCOMES.get(done.returncode)
-            try:
-                record = json.loads(done.stdout) if outcome else None
-            except ValueError:
-                record = None
             # As the Session Runner reads a step: 0, 2, 3 and 4 mean what they say only
-            # with a record for this boundary whose `done` agrees with the exit code. A
-            # tool that calls sys.exit(2) has not completed the session.
-            if not (
-                isinstance(record, dict)
-                and record.get("boundary") == n
-                and record.get("done") is (done.returncode == 2)
-            ):
+            # with the driver's result for this boundary, `done` agreeing with the exit
+            # code. A tool that calls sys.exit(2) has not completed the session.
+            record = step_result(done.stdout, n, done.returncode) if outcome else None
+            if record is None:
                 result.outcome = {
                     local_step.SCRIPT_ENDED: "script_ended",
                     5: "protocol_error",

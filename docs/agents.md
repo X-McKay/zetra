@@ -128,20 +128,32 @@ made no MCP call that was ungranted or missing from the scenario; each of those 
 printed with the line to add. Runs are kept under `~/.local/state/zetra/agent-runs/`.
 The scaffolded tests run the smoke scenario, so it stays true as the agent changes.
 
-A local run keeps the parts of a platform session that need no platform. The MCP
-grants, the session's token budget and the boundary limit are read from the policy
-bundle the contracts compile `deploy/agent.yaml` to, the same compilation a release
+A local run keeps the parts of a platform session that need no platform. Before
+anything runs, `deploy/agent.yaml` is held to the Agent CRD's schema, the one Kubani's
+API server applies, so an Agent the cluster would refuse to store (65 boundaries, a
+budget of zero, a grant with no `effect`) is refused here with the field at fault.
+`zetra-agents check` does not read that schema; today only a local run and the cluster
+do. The MCP grants, the session's token budget and the boundary limit then come from
+the policy bundle the contracts compile the Agent to, the same compilation a release
 goes through, so `spec.runtime.maxBoundaries` and the smallest `tokensPerSession` among
-the model grants hold locally as they do on the platform. An agent `zetra-agents check`
+the model grants bound the session as they would there. An agent `zetra-agents check`
 refuses, or whose Agent does not compile, is not run. Each boundary is held to the exec
 deadline and the task to 16 KiB. After every boundary `workspace/` and `state/` are
-measured as roughly the tar the platform snapshots, and passing its 64 MiB limit is
-reported as a problem. A step counts only when it left a result for its own boundary
-that agrees with its exit code, as the Session Runner requires; a tool that exits the
-process itself ends the run as `unknown`, never as completed. The agent's code is laid out read-only, as the image's `/app` is, and
-a step starts from an empty directory with a short environment that leaves out the
-caller's other variables. An interrupted or terminated run ends its step and leaves a
-run directory that can be removed.
+measured as the tar the platform snapshots (GNU tar's arithmetic; a hard link is
+counted as a second file, so the figure can only be high), and passing its 64 MiB limit
+is reported as a problem.
+
+A step counts only when it printed what the Session Runner accepts for that boundary:
+at most 64 KiB, exactly the result's six fields, this boundary's number, and `done`
+agreeing with the exit code. A step that ends without that, for example because a tool
+exited the process, ends the run as `unknown`. A tool shares the step's standard
+output, so one that prints the driver's own result and exits is taken at its word, on
+the platform exactly as here; the check is fidelity to the runner, not a defence
+against the agent's code. The agent's code is laid out read-only, as the image's
+`/app` is, and a step starts from an empty directory with a short environment that
+leaves out the caller's other variables. An interrupted or terminated run ends its step
+and leaves a run directory that can be removed; a process a tool started and left
+behind is not tracked and keeps running.
 
 None of that contains the agent's code. A local step is an ordinary process running as
 you: it can read and write whatever you can, including your home directory, the run's
@@ -154,12 +166,14 @@ about code you do not.
 A local run shows what the agent does with a task. It is not a deployment check:
 identity, the gateway's policy and budget ledger, the sandbox (no Landlock, no network
 policy), the signed image and the real MCP servers are exercised only by a session on
-the platform (`just agent run` in Kubani). Three things can pass locally and fail there:
-an import the agent's own package does not declare, because a local step sees the whole
-workspace environment (the CI image step loads the agent from its built image and
-catches it); a task the Session Runner refuses for carrying something credential-like;
-and a session that outlives the Agent's `spec.runtime.ttlSeconds`, which a local run
-does not model.
+the platform (`just agent run` in Kubani). Among the things that can pass locally and
+fail there: an import the agent's own package does not declare, because a local step
+sees the whole workspace environment (the CI image step loads the agent from its built
+image and catches it); a task the Session Runner refuses for carrying something
+credential-like; a session that outlives the Agent's `spec.runtime.ttlSeconds`, which a
+local run does not model; and anything that depends on what a scripted MCP reply or
+model turn left out. The list is not complete, which is why the first session on the
+platform is still a step of its own.
 
 A release is a tag `<agent>/v<version>` pushed from merged `main`, one at a time. The
 rendered `release.yml` calls `.github/actions/agent-release`, which builds the image with
