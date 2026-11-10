@@ -1,7 +1,7 @@
 # Session Runner and cleanup reconciler image (spec 10.6, 10.7).
 # Build from this directory: docker build -t agent-platform/session-runner .
-FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
-FROM python:3.12.14-slim
+FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
+FROM python:3.12.14-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
 COPY --from=uv /uv /usr/local/bin/uv
 RUN groupadd --gid 1600 runner && useradd --uid 1600 --gid runner --no-create-home runner
 WORKDIR /app
