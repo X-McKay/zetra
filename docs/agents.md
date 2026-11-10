@@ -54,8 +54,10 @@ per `agent_runtime.step`; the report is `workspace/report.md`, at most 16000 byt
 
 A tool is declared once, in the code. `just render` reads the list from `create_agent`
 and writes the `tools:` block of `agent.yaml`; `render --check` (in `just check` and CI)
-names any difference. Only that block is rewritten, and only when a name or effect
-changed, because the manifest's bytes are hashed into every release. The grants in
+names any difference. Only that block is replaced (comments inside it go with it;
+everything outside it, line endings included, is kept), and only when a name or effect
+changed, because the manifest's bytes are hashed into every release. `tools:` must be a
+plain key at the left margin. The grants in
 `deploy/agent.yaml` are not derived: they are the capabilities a security review
 approves, so they stay written by a person. The conformance fixtures are not derived
 either; their own image build holds them to their manifests.
@@ -99,7 +101,7 @@ per boundary as the Session Runner does, and prints each boundary, the report pa
 the transcript path. The model and MCP are stand-ins described by a scenario:
 
 ```yaml
-task: Why is the checkout pod restarting?     # text, or a mapping sent as given
+task: Why is the checkout pod restarting?     # text is sent as {request: text}, a mapping as given
 mcp:                                          # what each granted MCP tool returns
   - tool: pods_list_in_namespace
     backend: kubernetes                       # optional
@@ -122,10 +124,23 @@ made no MCP call that was ungranted or missing from the scenario; each of those 
 printed with the line to add. Runs are kept under `~/.local/state/zetra/agent-runs/`.
 The scaffolded tests run the smoke scenario, so it stays true as the agent changes.
 
+A local run keeps the parts of a platform session that need no platform. The agent's
+code is laid out read-only, as the image's `/app` is, and runs from an empty read-only
+directory; only the sandbox is writable. It gets a clean environment (the caller's
+credentials and the `--live` endpoint's key are not in it). The session's token count is
+held to the smallest `tokensPerSession` among the Agent's model grants, the boundary
+count to the platform's limit, each boundary to the exec deadline, the task to 16 KiB,
+and a workspace larger than the platform's 64 MiB snapshot is reported as a problem.
+
 A local run shows what the agent does with a task. It is not a deployment check:
-identity, the gateway's policy and budgets, the sandbox, the network policy, the signed
-image and the real MCP servers are exercised only by a session on the platform
-(`just agent run` in Kubani).
+identity, the gateway's policy and budget ledger, the sandbox (a local step is an
+ordinary process: no Landlock, no network policy), the signed image and the real MCP
+servers are exercised only by a session on the platform (`just agent run` in Kubani).
+Three things can pass locally and fail there: an import the agent's own package does not
+declare, because a local step sees the whole workspace environment (the CI image step
+loads the agent from its built image and catches it); a task the Session Runner refuses
+for carrying something credential-like; and a session that outlives the Agent's own
+`spec.runtime.maxBoundaries` or `ttlSeconds`, which a local run does not read.
 
 A release is a tag `<agent>/v<version>` pushed from merged `main`, one at a time. The
 rendered `release.yml` calls `.github/actions/agent-release`, which builds the image with

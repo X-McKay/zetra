@@ -197,6 +197,22 @@ def test_grants_are_read_per_backend():
     }
     assert testing.mcp_grants(cr) == {"kubernetes": {"pods_get", "events_list"}, "github": set()}
     assert testing.mcp_grants({"spec": {"capabilities": {"mcp": []}}}) == {}
+    # A malformed grant is `check`'s to report, not a crash here.
+    assert testing.mcp_grants({"spec": {"capabilities": {"mcp": [{"tools": ["x"]}, "y"]}}}) == {}
+
+
+def test_agent_code_is_laid_out_with_links_kept_and_run_without_the_callers_environment(
+    agent_dir, tmp_path, monkeypatch
+):
+    (tmp_path / "outside.txt").write_text("not part of the image")
+    (agent_dir / "src" / "probe_agent" / "linked.txt").symlink_to(tmp_path / "outside.txt")
+    app = testing.lay_out(AgentDir(agent_dir), tmp_path / "app")
+    assert (app / "probe_agent" / "linked.txt").is_symlink()
+    monkeypatch.setenv("GH_TOKEN", "t")
+    monkeypatch.setenv("TZ", "UTC")
+    environment = testing.child_environment(app, tmp_path / "sandbox", EXTRA="1")
+    assert "GH_TOKEN" not in environment and environment["TZ"] == "UTC"
+    assert environment["AGENT_APP_DIR"] == str(app) and environment["EXTRA"] == "1"
 
 
 PLUGIN_TEST = """
@@ -324,6 +340,38 @@ def test_with_tools_refuses_what_it_cannot_rewrite_in_place():
         )
     with pytest.raises(manifest.ToolsError, match="more than one"):
         manifest.with_tools("tools: []\ntools: []\n", TOOLS[:1])
+    # A key the rewrite does not recognise must not gain a second `tools:` beside it.
+    for written in ('"tools": []\n', "tools : []\n", "name: probe\n'tools':\n  - name: a\n"):
+        with pytest.raises(manifest.ToolsError, match="plain key at the left margin"):
+            manifest.with_tools(written, TOOLS[:1])
+
+
+def test_a_rewrite_keeps_the_files_line_endings(agent_dir):
+    from zetra_agents import manifest
+
+    agent = AgentDir(agent_dir)
+    crlf = "name: probe\r\ntools:\r\n  - name: old\r\n    effect: remote_read\r\nlast: 1\r\n"
+    updated = manifest.with_tools(crlf, TOOLS[:1])
+    assert updated.startswith("name: probe\r\ntools:\r\n  - name: ")
+    assert updated.endswith("\r\nlast: 1\r\n") and "\n" not in updated.replace("\r\n", "")
+    document = yaml.safe_load(agent.manifest_path.read_text())
+    document["tools"] = []
+    agent.manifest_path.write_bytes(yaml.safe_dump(document).replace("\n", "\r\n").encode())
+    assert manifest.write(agent) is True
+    assert b"\n" not in agent.manifest_path.read_bytes().replace(b"\r\n", b"")
+    assert manifest.difference(agent) is None
+
+
+def test_a_manifest_that_cannot_be_read_is_a_tools_error(agent_dir):
+    from zetra_agents import manifest
+
+    agent = AgentDir(agent_dir)
+    agent.manifest_path.write_text("name: [unclosed\n")
+    with pytest.raises(manifest.ToolsError, match="not YAML"):
+        manifest.difference(agent)
+    agent.manifest_path.write_text("- a list\n")
+    with pytest.raises(manifest.ToolsError, match="not a mapping"):
+        manifest.write(agent)
 
 
 def test_code_that_cannot_be_loaded_is_reported_with_its_error(agent_dir):

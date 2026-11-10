@@ -72,6 +72,17 @@ def test_a_symlinked_evidence_directory_is_refused(tmp_path):
         Evidence(tmp_path).record("a", {})
 
 
+async def test_a_report_never_writes_through_a_link(tmp_path):
+    (tmp_path / "state.json").write_text("kept")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "report.md").symlink_to(tmp_path / "state.json")
+    assert await report_tool(workspace).fn("All good.") == {"path": "report.md"}
+    assert (tmp_path / "state.json").read_text() == "kept"
+    assert not (workspace / "report.md").is_symlink()
+    assert (workspace / "report.md").read_text() == "All good.\n"
+
+
 async def test_report_without_evidence_is_a_bounded_text(tmp_path):
     tool = report_tool(tmp_path)
     assert tool.effect == "workspace_write" and tool.fn.__name__ == "write_report"

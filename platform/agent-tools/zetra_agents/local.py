@@ -2,7 +2,8 @@
 
 `zetra-agents run` drives the SDK's own boundary driver, one process per boundary, the
 way the Session Runner does: the same length-prefixed request, state file, tool dispatch,
-bounds and exit codes, against the `/app` layout an image has. Two things are replaced,
+boundary limit, exec deadline and exit codes, against the `/app` layout an image has (read
+only while the session runs, as it is there). Two things are replaced,
 because a laptop has neither: the model route (the scenario's scripted turns, or with
 `live` an OpenAI-compatible endpoint from the environment) and the MCP route (the
 scenario's scripted replies, behind the grants in `deploy/agent.yaml`).
@@ -10,11 +11,16 @@ scenario's scripted replies, behind the grants in `deploy/agent.yaml`).
 So a local run shows what the agent does with a task: which tools it calls, what the
 grants would refuse, what the report says. It is not a deployment check. Identity, the
 gateway's policy and budgets, the sandbox VM, the network policy, the signed image and
-the real MCP servers are exercised only by a session on the platform.
+the real MCP servers are exercised only by a session on the platform. Two more
+differences can let a local run pass where the platform would not: the agent imports
+from the whole workspace's environment rather than the image's own packages (the CI image
+check is what proves those), and the task is not screened for credentials as the Session
+Runner screens it.
 
 A scenario is a YAML file, by convention `agents/<agent>/scenarios/<name>.yaml`:
 
-    task: Why is the checkout pod restarting?      # text, or a mapping sent as given
+    task: Why is the checkout pod restarting?      # text, sent as {"request": text},
+                                                   # or a mapping sent as given
     mcp:                                           # what each granted MCP tool returns
       - tool: pods_list_in_namespace
         backend: kubernetes                        # optional: any backend otherwise
@@ -43,7 +49,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from agent_platform.constants import MAX_BOUNDARIES
+from agent_platform.constants import MAX_BOUNDARIES, TOKENS_PER_SESSION
 
 from zetra_agents import layout, local_step, testing
 from zetra_agents.layout import AgentDir
@@ -51,6 +57,7 @@ from zetra_agents.layout import AgentDir
 BOUNDARY_SECONDS = 290.0  # the Session Runner's exec deadline
 MAX_TASK = 16 * 1024  # `just agent run` in Kubani refuses a larger task
 MAX_REPORT = 16_000  # bytes of workspace/report.md the platform's report reader accepts
+MAX_SNAPSHOT = 64 * 1024 * 1024  # the Session Runner's limit on workspace/ plus state/
 OUTCOMES = {0: "running", 2: "completed", 3: "agent_error", 4: "budget", 5: "protocol_error"}
 NOT_A_DEPLOYMENT_CHECK = (
     "local run: the model and MCP are stand-ins; identity, gateway policy, budgets, the "
@@ -130,6 +137,11 @@ def _keys(where: str, entry: Any, required: set[str], optional: set[str]) -> dic
 def parse_scenario(document: Any, source: str = "") -> Scenario:
     where = source or "scenario"
     document = _keys(where, document, set(), {"task", "mcp", "model"})
+    try:
+        json.dumps(document, allow_nan=False)
+    except (TypeError, ValueError):
+        # YAML reads an unquoted 2026-11-10 as a date, which no task or reply can carry.
+        raise ScenarioError(f"{where}: every value must be JSON; quote dates and times") from None
     replies = []
     for i, entry in enumerate(document.get("mcp") or []):
         at = f"{where}: mcp[{i}]"
@@ -157,8 +169,9 @@ def parse_scenario(document: Any, source: str = "") -> Scenario:
             turns.append(dict(entry))
         if not turns:
             raise ScenarioError(f"{where}: model has no turns; omit it to use a live model")
+    task = document.get("task")
     return Scenario(
-        task=document.get("task"),
+        task={"request": task} if isinstance(task, str) else task,
         mcp=tuple(replies),
         model=None if turns is None else tuple(turns),
         source=source,
@@ -186,13 +199,16 @@ def load_scenario(agent: AgentDir, name: str | Path) -> Scenario:
 
 
 def task_document(task: Any) -> Any:
-    """Text becomes `{"request": text}`, as `just agent run --task` sends it."""
-    document = {"request": task} if isinstance(task, str) else task
-    if document is None:
+    """The task as it is sent, measured as `just agent run` in Kubani measures it."""
+    if task is None:
         raise ScenarioError("no task: give --task, --task-json or a scenario with `task:`")
-    if len(json.dumps(document).encode()) > MAX_TASK:
+    try:
+        encoded = json.dumps(task, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError):
+        raise ScenarioError("the task must be JSON") from None
+    if len(encoded.encode()) > MAX_TASK:
         raise ScenarioError("the task is larger than 16 KiB")
-    return document
+    return task
 
 
 def state_home() -> Path:
@@ -204,20 +220,30 @@ def new_directory(agent: AgentDir, out: Path | None) -> Path:
     if out is None:
         stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
         out = state_home() / agent.name / f"{stamp}-{secrets.token_hex(2)}"
+    if out.is_symlink() or (out.exists() and not out.is_dir()):
+        raise ScenarioError(f"{out} is not a directory")
     if out.exists() and any(out.iterdir()):
         raise ScenarioError(f"{out} is not empty; a run directory is never reused")
     out.mkdir(mode=0o700, parents=True, exist_ok=True)
     return out.resolve()
 
 
-def session_budget(agent: AgentDir) -> int | None:
-    """tokensPerSession of the model grant the manifest uses; advisory in the sandbox."""
-    model = agent.manifest().get("model") or {}
+def session_budget(agent: AgentDir) -> int:
+    """AGENT_TOKENS_PER_SESSION as the pod template sets it: the smallest tokensPerSession
+    of the Agent's model grants (`agent_platform.bundle`), which the driver stops at."""
     capabilities = (agent.agent_cr().get("spec") or {}).get("capabilities") or {}
-    for grant in capabilities.get("models") or []:
-        if grant.get("backend") == model.get("backend"):
-            return (grant.get("budget") or {}).get("tokensPerSession")
-    return None
+    declared = [
+        (grant.get("budget") or {}).get("tokensPerSession", TOKENS_PER_SESSION)
+        for grant in capabilities.get("models") or []
+    ]
+    return min(declared, default=TOKENS_PER_SESSION)
+
+
+def _writable(root: Path, on: bool) -> None:
+    for path in [root, *root.rglob("*")]:
+        if not path.is_symlink():
+            mode = path.stat().st_mode
+            path.chmod(mode | 0o200 if on else mode & ~0o222)
 
 
 def refusals(agent: AgentDir) -> list[str]:
@@ -271,6 +297,21 @@ def mcp_problems(agent: AgentDir, calls: list[dict]) -> list[str]:
     return found
 
 
+def snapshot_problems(sandbox: Path) -> list[str]:
+    size = sum(
+        path.lstat().st_size
+        for name in ("workspace", "state")
+        for path in (sandbox / name).rglob("*")
+        if path.is_file() and not path.is_symlink()
+    )
+    if size > MAX_SNAPSHOT:
+        return [
+            f"workspace/ and state/ hold {size} bytes; the platform snapshots at most "
+            + f"{MAX_SNAPSHOT} and fails the session beyond it"
+        ]
+    return []
+
+
 def report_problems(workspace: Path) -> list[str]:
     report = workspace / "report.md"
     if not report.is_file() or report.is_symlink():
@@ -319,9 +360,11 @@ def run(
     task = task_document(scenario.task)
 
     directory = new_directory(agent, out)
-    sandbox, mcp_log = directory / "sandbox", directory / "mcp.jsonl"
-    testing.lay_out(agent, directory / "app")
+    app, sandbox, mcp_log = directory / "app", directory / "sandbox", directory / "mcp.jsonl"
+    testing.lay_out(agent, app)
     sandbox.mkdir(mode=0o700)
+    # The working directory: empty and read only, like the image's root filesystem.
+    (directory / "cwd").mkdir(mode=0o500)
     mcp_log.touch(mode=0o600)
     spec = {
         "agent": agent.name,
@@ -334,69 +377,78 @@ def run(
         json.dumps({"task": task, "scenario": scenario.source, **spec}, indent=2) + "\n",
         encoding="utf-8",
     )
-    env = {
-        **os.environ,
-        "AGENT_APP_DIR": str(directory / "app"),
-        "AGENT_SANDBOX_DIR": str(sandbox),
-        local_step.SPEC_ENV: str(directory / "run.json"),
-        "PYTHONDONTWRITEBYTECODE": "1",
-    }
-    budget = session_budget(agent)
-    if budget is not None:
-        env["AGENT_TOKENS_PER_SESSION"] = str(budget)
+    env = testing.child_environment(
+        app,
+        sandbox,
+        AGENT_TOKENS_PER_SESSION=str(session_budget(agent)),
+        **{local_step.SPEC_ENV: str(directory / "run.json")},
+        **{
+            name: os.environ[name]
+            for name in (local_step.MODEL_URL, local_step.MODEL_NAME, local_step.MODEL_API_KEY)
+            if live and name in os.environ
+        },
+    )
 
     result = Result(agent.name, "boundary_limit", "live" if live else "scripted", directory)
     result.detail = f"not finished after {max_boundaries} boundaries"
-    for n in range(max_boundaries):
-        payload = json.dumps({"boundary": n, "task": task}, separators=(",", ":")).encode()
-        try:
-            done = subprocess.run(
-                [sys.executable, "-m", "zetra_agents.local_step"],
-                input=f"{len(payload)}\n".encode() + payload,
-                capture_output=True,
-                cwd=directory,
-                env=env,
-                timeout=BOUNDARY_SECONDS,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            result.outcome = "timeout"
-            result.detail = f"boundary {n} ran past {BOUNDARY_SECONDS:.0f} s"
-            break
-        stderr = done.stderr.decode("utf-8", "replace").strip()
-        if stderr:
-            (directory / f"boundary-{n:02d}.stderr").write_text(stderr + "\n", encoding="utf-8")
-        outcome = OUTCOMES.get(done.returncode)
-        try:
-            record = json.loads(done.stdout) if outcome else None
-        except ValueError:
-            record = None
-        if not isinstance(record, dict):
-            ended = done.returncode == local_step.SCRIPT_ENDED
-            result.outcome = "script_ended" if ended else outcome or "unknown"
-            result.detail = _clip(stderr.splitlines()[-1] if stderr else "", 400) or (
-                f"boundary {n} exited {done.returncode} without a result"
-            )
-            break
-        record["rc"] = done.returncode
-        record["detail"] = _detail(record, _last_message(directory))
-        result.boundaries.append(record)
-        with (directory / "boundaries.jsonl").open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record) + "\n")
-        if on_boundary:
-            on_boundary(record)
-        if outcome != "running":
-            result.outcome, result.detail = outcome, record.get("summary", "")
-            break
+    _writable(app, False)
+    try:
+        for n in range(max_boundaries):
+            payload = json.dumps({"boundary": n, "task": task}, separators=(",", ":")).encode()
+            try:
+                done = subprocess.run(
+                    [sys.executable, "-m", "zetra_agents.local_step"],
+                    input=f"{len(payload)}\n".encode() + payload,
+                    capture_output=True,
+                    cwd=directory / "cwd",
+                    env=env,
+                    timeout=BOUNDARY_SECONDS,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                result.outcome = "timeout"
+                result.detail = f"boundary {n} ran past {BOUNDARY_SECONDS:.0f} s"
+                break
+            stderr = done.stderr.decode("utf-8", "replace").strip()
+            if stderr:
+                (directory / f"boundary-{n:02d}.stderr").write_text(stderr + "\n", encoding="utf-8")
+            outcome = OUTCOMES.get(done.returncode)
+            try:
+                record = json.loads(done.stdout) if outcome else None
+            except ValueError:
+                record = None
+            if not isinstance(record, dict):
+                ended = done.returncode == local_step.SCRIPT_ENDED
+                # Exit 0 without a record is no step result at all, as the runner reads it.
+                known = outcome if outcome and outcome != "running" else "unknown"
+                result.outcome = "script_ended" if ended else known
+                result.detail = _clip(stderr.splitlines()[-1] if stderr else "", 400) or (
+                    f"boundary {n} exited {done.returncode} without a result"
+                )
+                break
+            record["rc"] = done.returncode
+            record["detail"] = _detail(record, _last_message(directory))
+            result.boundaries.append(record)
+            with (directory / "boundaries.jsonl").open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+            if on_boundary:
+                on_boundary(record)
+            if outcome != "running":
+                result.outcome, result.detail = outcome, record.get("summary", "")
+                break
+    finally:
+        _writable(app, True)  # so the run directory can be removed
 
     result.mcp = [json.loads(line) for line in mcp_log.read_text(encoding="utf-8").splitlines()]
     result.problems = mcp_problems(agent, result.mcp)
     if "do not match its manifest" in result.detail:
         result.problems.append("agent.yaml `tools:` differs from the code; run `just render`")
+    result.problems += snapshot_problems(sandbox)
     if result.outcome == "completed":
         result.problems += report_problems(sandbox / "workspace")
-    if (sandbox / "workspace" / "report.md").is_file():
-        result.report = sandbox / "workspace" / "report.md"  # in place: its links are relative
+    report = sandbox / "workspace" / "report.md"
+    if report.is_file() and not report.is_symlink():
+        result.report = report  # in place: its links are relative
     (directory / "result.json").write_text(
         json.dumps(result.document(), indent=2) + "\n", encoding="utf-8"
     )

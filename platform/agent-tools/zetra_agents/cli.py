@@ -251,7 +251,7 @@ def run_command(repo: Path, args: argparse.Namespace) -> int:
             except ValueError:
                 raise local.ScenarioError("--task-json is not JSON") from None
         elif args.task is not None:
-            scenario = dataclasses.replace(scenario, task=args.task)
+            scenario = dataclasses.replace(scenario, task={"request": args.task})
         mode = "live model" if args.live else "scripted model"
         print(f"{agent.name}: {mode}, {scenario.source or 'no scenario'}", file=sys.stderr)
         result = local.run(

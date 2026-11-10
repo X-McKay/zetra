@@ -1,8 +1,12 @@
 """`zetra-agents run` drives the SDK's own boundary driver through a whole session, with
 the scenario standing in for the model and for MCP behind the Agent's grants."""
 
+import contextlib
+import datetime
 import http.server
 import json
+import os
+import shutil
 import textwrap
 import threading
 from typing import ClassVar
@@ -30,11 +34,30 @@ def create_agent(ctx) -> dict:
         """Not granted."""
         return await ctx.mcp("kubernetes", "secrets_get", {"name": name})
 
+    async def poke() -> dict:
+        """What this process may write and what it was handed."""
+        import os, pathlib
+
+        def writes(path) -> bool:
+            try:
+                pathlib.Path(path).write_text("x")
+            except OSError:
+                return False
+            return True
+
+        return {
+            "app": writes(pathlib.Path(__file__).with_name("scratch")),
+            "cwd": writes("scratch"),
+            "workspace": writes(ctx.workspace / "scratch"),
+            "environment": sorted(os.environ),
+        }
+
     return {
         "tools": [
             Tool(list_pods, "remote_read"),
             Tool(list_events, "remote_read"),
             Tool(read_secret, "remote_read"),
+            Tool(poke, "workspace_write"),
             report_tool(ctx.workspace),
         ]
     }
@@ -43,6 +66,7 @@ TOOLS = [
     {"name": "list_pods", "effect": "remote_read"},
     {"name": "list_events", "effect": "remote_read"},
     {"name": "read_secret", "effect": "remote_read"},
+    {"name": "poke", "effect": "workspace_write"},
     {"name": "write_report", "effect": "workspace_write"},
 ]
 REPORT = {"call": "write_report", "arguments": {"content": "Two pods, both running."}}
@@ -228,6 +252,8 @@ def test_a_manifest_that_disagrees_with_the_code_points_at_render(agent, tmp_pat
         ({"model": [{"call": "t", "say": "x"}]}, "model[0]: unknown ['call']"),
         ({"model": [{"call": "t", "arguments": "x"}]}, "arguments a mapping"),
         ({"model": [{"speak": "x"}]}, "model[0]: unknown ['speak']"),
+        ({"task": {"since": datetime.date(2026, 11, 10)}}, "every value must be JSON"),
+        ({"mcp": [{"tool": "t", "result": {"at": float("nan")}}]}, "every value must be JSON"),
     ],
 )
 def test_a_scenario_is_checked_before_anything_runs(document, message):
@@ -252,6 +278,11 @@ def test_runs_that_cannot_start_are_refused_without_a_run_directory(agent, tmp_p
     assert "no task" in refused(scenario(task=None))
     assert "larger than 16 KiB" in refused(scenario(task="x" * 17000))
     assert "max boundaries is 1 to 64" in refused(scenario(), max_boundaries=65)
+    (tmp_path / "file").write_text("not a directory")
+    (tmp_path / "dangling").symlink_to(tmp_path / "nowhere")
+    for taken in ("file", "dangling"):
+        with pytest.raises(local.ScenarioError, match="is not a directory"):
+            local.run(agent, scenario(), out=tmp_path / taken)
     (agent.root / "deploy" / "agent.yaml").rename(agent.root / "agent-cr.yaml")
     assert "probe: missing deploy/agent.yaml" in refused(scenario())
     (agent.root / "agent-cr.yaml").rename(agent.root / "deploy" / "agent.yaml")
@@ -273,6 +304,51 @@ def test_a_conformance_fixture_is_refused(agent, tmp_path):
         local.run(layout.AgentDir(fixture), scenario(), out=tmp_path / "run")
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes through a read-only mode")
+def test_agent_code_gets_a_read_only_image_and_not_the_callers_environment(
+    agent, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("REGISTRY_PASSWORD", "hunter2")  # pragma: allowlist secret
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "t")
+    turns = [{"call": "poke"}, REPORT, {"say": "Done."}]
+    result = local.run(agent, scenario(model=turns), out=tmp_path / "run")
+    assert result.ok, (result.outcome, result.detail, result.problems)
+    seen = json.loads(json.loads(result.transcript.read_text())["messages"][3]["content"])
+    assert (seen["app"], seen["cwd"], seen["workspace"]) == (False, False, True)
+    assert {"AGENT_APP_DIR", "AGENT_SANDBOX_DIR", "AGENT_TOKENS_PER_SESSION"} <= {
+        *seen["environment"]
+    }
+    assert not {"REGISTRY_PASSWORD", "ACTIONS_ID_TOKEN_REQUEST_TOKEN"} & {*seen["environment"]}
+    shutil.rmtree(result.directory)  # writable again once the session is over
+    assert not result.directory.exists()
+
+
+def test_the_session_budget_is_the_smallest_grant_as_the_pod_template_sets_it(
+    agent, tmp_path, monkeypatch
+):
+    assert local.session_budget(agent) == 100
+    cr = agent.root / "deploy" / "agent.yaml"
+    document = yaml.safe_load(cr.read_text())
+    models = document["spec"]["capabilities"]["models"]
+    models.insert(0, {"backend": "llm-fast", "models": ["m"]})
+    cr.write_text(yaml.safe_dump(document))
+    assert local.session_budget(agent) == 100  # an undeclared budget is the default, 200000
+    models.append({"backend": "llm-small", "models": ["s"], "budget": {"tokensPerSession": 5}})
+    cr.write_text(yaml.safe_dump(document))
+    assert local.session_budget(agent) == 5
+    with chat_stub(monkeypatch):  # each reply reports 10 tokens used
+        result = local.run(agent, scenario(), live=True, out=tmp_path / "run")
+    assert result.outcome == "budget" and not result.ok
+    assert len(result.boundaries) == 1
+
+
+def test_a_workspace_past_the_snapshot_limit_is_a_problem(agent, tmp_path, monkeypatch):
+    monkeypatch.setattr(local, "MAX_SNAPSHOT", 64)
+    result = local.run(agent, "smoke", out=tmp_path / "run")
+    assert result.outcome == "completed" and not result.ok
+    assert any("the platform snapshots at most 64" in p for p in result.problems)
+
+
 class ChatStub(http.server.BaseHTTPRequestHandler):
     requests: ClassVar[list] = []
 
@@ -280,8 +356,12 @@ class ChatStub(http.server.BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         type(self).requests.append((self.path, self.headers.get("Authorization"), body))
         asked = sum(1 for m in body["messages"] if m["role"] == "assistant")
-        if asked == 0:
-            call = {"name": "write_report", "arguments": json.dumps({"content": "Live."})}
+        if asked < 2:
+            call = (
+                {"name": "poke", "arguments": "{}"}
+                if asked == 0
+                else {"name": "write_report", "arguments": json.dumps({"content": "Live."})}
+            )
             message = {
                 "role": "assistant",
                 "content": None,
@@ -309,23 +389,39 @@ class ChatStub(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def test_a_live_run_asks_the_endpoint_in_the_environment(agent, tmp_path, monkeypatch):
+@contextlib.contextmanager
+def chat_stub(monkeypatch):
     ChatStub.requests = []
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), ChatStub)
     threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setenv(local_step.MODEL_URL, f"http://127.0.0.1:{server.server_port}/v1")
+    monkeypatch.setenv(local_step.MODEL_NAME, "local-model")
+    monkeypatch.setenv(local_step.MODEL_API_KEY, "local-key")  # pragma: allowlist secret
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
     try:
-        monkeypatch.setenv(local_step.MODEL_URL, f"http://127.0.0.1:{server.server_port}/v1")
-        monkeypatch.setenv(local_step.MODEL_NAME, "local-model")
-        monkeypatch.setenv(local_step.MODEL_API_KEY, "local-key")  # pragma: allowlist secret
-        monkeypatch.setenv("NO_PROXY", "127.0.0.1")
-        result = local.run(agent, scenario(), live=True, out=tmp_path / "run")
+        yield
     finally:
         server.shutdown()
+
+
+def test_a_live_run_asks_the_endpoint_in_the_environment(agent, tmp_path, monkeypatch):
+    with chat_stub(monkeypatch):
+        result = local.run(agent, scenario(), live=True, out=tmp_path / "run")
     assert result.ok, (result.outcome, result.detail, result.problems)
     assert result.report.read_text() == "Live.\n"
     document = result.document()
-    assert document["model"] == "live" and document["boundaries"] == 3
-    assert document["usage"] == {"input_tokens": 14, "output_tokens": 6}
+    assert document["model"] == "live" and document["boundaries"] == 5
+    assert document["usage"] == {"input_tokens": 21, "output_tokens": 9}
+    # The endpoint's key is the shim's: the agent's code never sees it and no file keeps it.
+    transcript = json.loads(result.transcript.read_text())["messages"]
+    handed = json.loads(transcript[3]["content"])["environment"]
+    assert "AGENT_APP_DIR" in handed and not {*handed} & {
+        local_step.MODEL_URL,
+        local_step.MODEL_NAME,
+        local_step.MODEL_API_KEY,
+    }
+    for path in result.directory.rglob("*"):
+        assert path.is_dir() or b"local-key" not in path.read_bytes(), path
     paths, keys, bodies = zip(*ChatStub.requests, strict=True)
     assert set(paths) == {"/v1/chat/completions"} and set(keys) == {"Bearer local-key"}
     assert {b["model"] for b in bodies} == {"local-model"}
@@ -357,8 +453,10 @@ def test_the_command_takes_a_task_and_reports_refusals_and_failures(agent, tmp_p
     capsys.readouterr()
     state = json.loads((out / "sandbox/state/state.json").read_text())
     assert json.loads(state["messages"][1]["content"]) == {"request": "Count again."}
-    assert cli.main([*base, "--task-json", '{"pods": 2}', "--out", str(tmp_path / "b")]) == 0
+    assert cli.main([*base, "--task-json", '"as given"', "--out", str(tmp_path / "b")]) == 0
     capsys.readouterr()
+    state = json.loads((tmp_path / "b/sandbox/state/state.json").read_text())
+    assert json.loads(state["messages"][1]["content"]) == "as given"
     assert cli.main([*base, "--task-json", "{", "--out", str(tmp_path / "c")]) == 2
     assert "--task-json is not JSON" in capsys.readouterr().err
     assert cli.main([*base, "--scenario", "missing", "--out", str(tmp_path / "d")]) == 2

@@ -39,8 +39,43 @@ def mcp_grants(agent_cr: dict) -> dict[str, set[str]]:
     grants: dict[str, set[str]] = {}
     capabilities = (agent_cr.get("spec") or {}).get("capabilities") or {}
     for grant in capabilities.get("mcp") or []:
-        grants.setdefault(grant["backend"], set()).update(grant.get("tools") or [])
+        if isinstance(grant, dict) and isinstance(grant.get("backend"), str):
+            grants.setdefault(grant["backend"], set()).update(grant.get("tools") or [])
     return grants
+
+
+# What a child process that runs agent code inherits. Agent code is not handed the
+# caller's environment: a release job's registry password or identity token, or a
+# developer's cloud credentials, are none of its business.
+INHERITED = (
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TMPDIR",
+    "TZ",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "NO_PROXY",
+    "https_proxy",
+    "http_proxy",
+    "no_proxy",
+)
+
+
+def child_environment(app: Path, sandbox: Path, **extra: str) -> dict[str, str]:
+    """The environment for a process that imports an agent laid out at `app`."""
+    kept = {name: os.environ[name] for name in INHERITED if name in os.environ}
+    return {
+        **kept,
+        "AGENT_APP_DIR": str(app),
+        "AGENT_SANDBOX_DIR": str(sandbox),
+        "PYTHONDONTWRITEBYTECODE": "1",
+        **extra,
+    }
 
 
 def ungranted(agent: str, backend: str, tool: str, *, entry: bool = True) -> str:
@@ -184,8 +219,9 @@ class LocalAgent:
 
 
 def lay_out(agent: AgentDir, app: Path) -> Path:
-    """Copy what the Dockerfile copies: `agent.yaml` and everything under `src/`."""
-    shutil.copytree(agent.src, app, ignore=shutil.ignore_patterns("__pycache__"))
+    """Copy what the Dockerfile copies: `agent.yaml` and everything under `src/`. A
+    symbolic link stays a link, as `COPY` keeps it."""
+    shutil.copytree(agent.src, app, symlinks=True, ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copy(agent.manifest_path, app / "agent.yaml")
     return app
 

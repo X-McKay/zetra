@@ -1,8 +1,9 @@
 """Evidence files and the report tool most agents end with (spec 11.7).
 
-Both write only inside the workspace, so both are `workspace_write` behaviour. An agent
-records what a remote read returned as a content-addressed evidence file, and its report
-tool appends the exact links, so a report can cite only what was actually observed:
+Both write only inside the workspace. The report tool is declared `workspace_write`; a
+tool that reads through `ctx.mcp` and records what came back stays `remote_read`, since
+the evidence file is the record of that read. The report tool appends the exact links,
+so a report can cite only what was actually observed:
 
     def create_agent(ctx) -> dict:
         evidence = Evidence(ctx.workspace)
@@ -128,7 +129,10 @@ def report_tool(
             report += "\n## Evidence\n\n" + "\n".join(f"- [{p}]({p})" for p in links) + "\n"
         if len(report.encode()) > max_bytes:
             return {"error": f"Keep the report below {max_bytes} UTF-8 bytes."}
-        (workspace / REPORT).write_text(report, encoding="utf-8")
+        path = workspace / REPORT
+        if path.is_symlink():  # a restored workspace may hold one; never write through it
+            path.unlink()
+        path.write_text(report, encoding="utf-8")
         return {"path": REPORT}
 
     write_report.__doc__ = description or (

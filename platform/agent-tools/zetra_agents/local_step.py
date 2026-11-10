@@ -49,17 +49,17 @@ def scripted_client(turns: list[dict]):
     return NS(chat=NS(completions=NS(create=create)))
 
 
-def live_client():
-    """An OpenAI-compatible endpoint from the environment. The manifest's model name is
-    the platform route's; `ZETRA_AGENTS_MODEL_NAME` says what the local endpoint calls it."""
+def live_client(settings: dict):
+    """An OpenAI-compatible endpoint. The manifest's model name is the platform route's;
+    `ZETRA_AGENTS_MODEL_NAME` says what the local endpoint calls it."""
     from openai import OpenAI
 
     client = OpenAI(
-        base_url=os.environ[MODEL_URL],
-        api_key=os.environ.get(MODEL_API_KEY) or "none",
+        base_url=settings[MODEL_URL],
+        api_key=settings.get(MODEL_API_KEY) or "none",
         max_retries=0,
     )
-    name = os.environ.get(MODEL_NAME)
+    name = settings.get(MODEL_NAME)
 
     def create(**kwargs):
         if name:
@@ -111,12 +111,20 @@ def scripted_mcp(spec: dict):
 
 def main() -> None:
     spec = json.loads(Path(os.environ[SPEC_ENV]).read_text(encoding="utf-8"))
+    # The endpoint and its key are this shim's, not the agent's: gone before its code runs.
+    settings = {
+        name: os.environ.pop(name)
+        for name in (MODEL_URL, MODEL_NAME, MODEL_API_KEY)
+        if name in os.environ
+    }
     from agent_runtime import confine, mcp, models, step
 
     confine.apply = lambda: False  # a host path layout is not the image's; nothing to confine to
     mcp.call_tool = scripted_mcp(spec)
     turns = spec["model"]
-    models.chat_client = live_client if turns is None else lambda: scripted_client(turns)
+    models.chat_client = (
+        (lambda: live_client(settings)) if turns is None else (lambda: scripted_client(turns))
+    )
     try:
         step.main()
     except ScriptEnded as exc:

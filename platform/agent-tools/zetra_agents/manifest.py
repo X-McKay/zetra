@@ -17,7 +17,6 @@ their tools to the manifest.
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -56,20 +55,26 @@ class ToolsError(ValueError):
     """The tool list could not be read from the code."""
 
 
+def declared(agent: AgentDir) -> dict:
+    """The manifest as a mapping; what else is wrong with it is `check`'s to say."""
+    try:
+        document = agent.manifest()
+    except yaml.YAMLError:
+        raise ToolsError("agent.yaml is not YAML") from None
+    if not isinstance(document, dict):
+        raise ToolsError("agent.yaml is not a mapping")
+    return document
+
+
 def code_tools(agent: AgentDir) -> list[dict[str, str]]:
     """The tools `create_agent` returns, in its order, as the manifest lists them."""
-    manifest = agent.manifest()
+    manifest = declared(agent)
     with tempfile.TemporaryDirectory(prefix="zetra-agents-tools-") as tmp:
         root = Path(tmp)
         testing.lay_out(agent, root / "app")
         (root / "sandbox" / "workspace").mkdir(parents=True)
         out = root / "tools.json"
-        environment = {
-            **os.environ,
-            "AGENT_APP_DIR": str(root / "app"),
-            "AGENT_SANDBOX_DIR": str(root / "sandbox"),
-            "PYTHONDONTWRITEBYTECODE": "1",
-        }
+        environment = testing.child_environment(root / "app", root / "sandbox")
         try:
             done = subprocess.run(
                 [
@@ -124,15 +129,24 @@ def _mapping(tools: object) -> dict | None:
 
 
 def with_tools(text: str, tools: list[dict[str, str]]) -> str:
-    """`text` with its top-level `tools:` replaced and every other byte kept."""
+    """`text` with its top-level `tools:` block replaced, comments inside the block
+    included, and everything outside it kept (a missing final newline is added)."""
     lines = text.splitlines(keepends=True)
+    newline = "\r\n" if lines and lines[0].endswith("\r\n") else "\n"
     if lines and not lines[-1].endswith("\n"):
-        lines[-1] += "\n"
+        lines[-1] += newline
     starts = [i for i, line in enumerate(lines) if TOOLS_KEY.match(line)]
     if len(starts) > 1:
         raise ToolsError("agent.yaml has more than one top-level tools: key")
+    try:
+        before = yaml.safe_load(text)
+    except yaml.YAMLError:
+        before = None
+    if not starts and isinstance(before, dict) and "tools" in before:
+        # A quoted or oddly spaced key: appending a block would leave two.
+        raise ToolsError("agent.yaml: write `tools:` as a plain key at the left margin")
     if not starts:
-        updated = "".join(lines) + block(tools)
+        updated = "".join(lines) + block(tools).replace("\n", newline)
     else:
         start = end = starts[0]
         end += 1
@@ -142,7 +156,9 @@ def with_tools(text: str, tools: list[dict[str, str]]) -> str:
             end += 1
         while not lines[end - 1].strip():
             end -= 1
-        updated = "".join(lines[:start]) + block(tools) + "".join(lines[end:])
+        updated = (
+            "".join(lines[:start]) + block(tools).replace("\n", newline) + "".join(lines[end:])
+        )
     try:
         rewritten = yaml.safe_load(updated)
     except yaml.YAMLError:
@@ -173,7 +189,7 @@ def describe(declared: dict | None, wanted: dict) -> str | None:
 
 def difference(agent: AgentDir) -> str | None:
     """What `render` would change in this agent's manifest, or None when it agrees."""
-    return describe(_mapping(agent.manifest().get("tools")), _mapping(code_tools(agent)))
+    return describe(_mapping(declared(agent).get("tools")), _mapping(code_tools(agent)))
 
 
 def write(agent: AgentDir) -> bool:
@@ -181,8 +197,9 @@ def write(agent: AgentDir) -> bool:
     that already agrees keeps its order and layout: the manifest's bytes are hashed into
     every release."""
     tools = code_tools(agent)
-    if _mapping(agent.manifest().get("tools")) == _mapping(tools):
+    if _mapping(declared(agent).get("tools")) == _mapping(tools):
         return False
-    text = agent.manifest_path.read_text(encoding="utf-8")
-    agent.manifest_path.write_text(with_tools(text, tools), encoding="utf-8")
+    # Bytes, not text mode: universal newlines would rewrite a CRLF file's every line.
+    text = agent.manifest_path.read_bytes().decode("utf-8")
+    agent.manifest_path.write_bytes(with_tools(text, tools).encode("utf-8"))
     return True
