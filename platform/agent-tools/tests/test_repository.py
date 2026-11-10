@@ -4,7 +4,6 @@ fixture files outside the allowlist are refused."""
 import hashlib
 import json
 import textwrap
-import types
 
 import pytest
 import yaml
@@ -324,40 +323,27 @@ def test_explicit_no_inference_contract(tmp_path, model, grants, valid):
     assert (not layout.check(layout.AgentDir(root))) is valid
 
 
-def test_the_scaffolded_agent_is_a_working_agent(repo, tmp_path, monkeypatch):
+def test_the_scaffolded_agent_is_a_working_agent(repo, tmp_path):
     """Laid out as the image's /app, the rendered agent passes the SDK's own manifest and
     tool agreement check, and its tool writes a bounded report."""
     import asyncio
-    import shutil
-    import sys
 
-    from agent_runtime import step
+    from zetra_agents import testing
 
-    app = tmp_path / "app"
-    app.mkdir()
+    with testing.loaded(layout.find(repo, AGENT).root, tmp_path / "local") as agent:
+        assert "Report ready" in agent.instructions
+        assert set(agent.tools) == {"write_report"}
+        assert agent.schema("write_report")["function"]["parameters"]["required"] == ["content"]
+        assert asyncio.run(agent.call("write_report", content="All good.")) == {"path": "report.md"}
+        assert (agent.workspace / "report.md").read_text() == "All good.\n"
+        assert "error" in asyncio.run(agent.call("write_report", content="word " * 151))
+
+
+def test_the_scaffolded_tests_pass_with_the_plugin_fixture(repo, pytester):
+    """The rendered tests need nothing but the `agent` fixture this package provides."""
     agent = layout.find(repo, AGENT)
-    shutil.copy(agent.manifest_path, app / "agent.yaml")
-    shutil.copytree(agent.package_dir(), app / agent.package_dir().name)
-    monkeypatch.setenv("AGENT_APP_DIR", str(app))
-    monkeypatch.setenv("AGENT_SANDBOX_DIR", str(tmp_path / "sandbox"))
-    try:
-        instructions, built = step.build_agent(step.load_manifest())
-        assert "Report ready" in instructions
-        assert set(built) == {"write_report"}
-        assert step.schema(built["write_report"])["function"]["parameters"]["required"] == [
-            "content"
-        ]
-        module = sys.modules["demo_agent.agent"]  # imported from /app, as in the image
-        ctx = types.SimpleNamespace(workspace=tmp_path, instructions="", mcp=None)
-        tools = {t.fn.__name__: t.fn for t in module.create_agent(ctx)["tools"]}
-        assert asyncio.run(tools["write_report"]("All good.")) == {"path": "report.md"}
-        assert (tmp_path / "report.md").read_text() == "All good.\n"
-        assert "error" in asyncio.run(tools["write_report"]("word " * 151))
-    finally:
-        if str(app) in sys.path:
-            sys.path.remove(str(app))
-        sys.modules.pop("demo_agent.agent", None)
-        sys.modules.pop("demo_agent", None)
+    result = pytester.runpytest_subprocess("-o", "asyncio_mode=auto", "-q", str(agent.root))
+    result.assert_outcomes(passed=2)
 
 
 def test_dockerfile_targets_match_the_layout():
@@ -571,6 +557,12 @@ def test_rename_edits_only_the_known_fields(tmp_path, capsys, monkeypatch, old, 
     assert cli.main([*argv, "--no-lock", "--no-git"]) == 0
     (target / "uv.lock").write_text(lock_text(REV))
     readme_before = (target / "README.md").read_text()
+    # The starter tests name the agent only through the `agent` fixture; tests that import
+    # the package, as older ones do, are followed too.
+    old_package = old.replace("-", "_")
+    with (target / "agents" / old / "tests/test_agent.py").open("a") as tests:
+        tests.write(f"\nfrom {old_package}.agent import create_agent  # noqa\n")
+        tests.write(f'PACKAGE = "{old_package}"\n')
     capsys.readouterr()
     assert cli.main(["--repo", str(target), "rename", old, new]) == 0
     assert f"agents/{new}" in capsys.readouterr().out
@@ -587,7 +579,7 @@ def test_rename_edits_only_the_known_fields(tmp_path, capsys, monkeypatch, old, 
     assert f'name = "zetra-agent-{new}"' in pyproject and '"agent-runtime"' in pyproject
     tests = (agent.root / "tests/test_agent.py").read_text()
     assert f'PACKAGE = "{new_package}"' in tests and f"from {new_package}.agent import" in tests
-    assert 'ROOT / "agent.yaml"' in tests
+    assert "async def test_report_is_bounded(agent):" in tests
     assert (agent.package_dir() / "instructions/base.md").read_text().startswith(f"You are {new}.")
     assert (target / "README.md").read_text() == readme_before  # prose is left to the user
     assert layout.check(agent) == []
