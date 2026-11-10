@@ -1,0 +1,61 @@
+[
+  {
+    "repository": "agent-policy-service",
+    "dockerfile": "platform/aps/Dockerfile",
+    "context": "platform/aps",
+    "platform": "linux/amd64",
+    "buildArgs": {}
+  },
+  {
+    "repository": "budget-backend",
+    "dockerfile": "platform/budget-backend/Dockerfile",
+    "context": "platform/budget-backend",
+    "platform": "linux/amd64",
+    "buildArgs": {}
+  },
+  {
+    "repository": "capture",
+    "dockerfile": "platform/capture/Dockerfile",
+    "context": "platform/capture",
+    "platform": "linux/arm64",
+    "buildArgs": {}
+  },
+  {
+    "repository": "conformance-capture",
+    "dockerfile": "platform/capture/Dockerfile",
+    "context": "platform/capture",
+    "platform": "linux/amd64",
+    "buildArgs": {}
+  },
+  {
+    "repository": "egress-guard",
+    "dockerfile": "platform/egress-guard/Dockerfile",
+    "context": "platform/egress-guard",
+    "platform": "linux/amd64",
+    "buildArgs": {}
+  },
+  {
+    "repository": "netpol-attestor",
+    "dockerfile": "platform/netpol-attestor/Dockerfile",
+    "context": "platform/netpol-attestor",
+    "platform": "linux/amd64",
+    "buildArgs": {}
+  },
+  {
+    "repository": "registry-controller",
+    "dockerfile": "platform/controller/Dockerfile",
+    "context": "platform",
+    "platform": "linux/amd64",
+    "buildArgs": {
+      "COSIGN_VERSION": "v2.6.1",
+      "COSIGN_SHA256": "064954c5d8c7e3b28188eee5b1727b31c411550bc5fefd41aa672d3c761d103a"
+    }
+  },
+  {
+    "repository": "session-runner",
+    "dockerfile": "platform/runner/Dockerfile",
+    "context": "platform/runner",
+    "platform": "linux/amd64",
+    "buildArgs": {}
+  }
+]
