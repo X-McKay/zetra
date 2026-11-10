@@ -488,6 +488,79 @@ def test_pytest_at_the_root_gives_each_agent_its_own_modules(repo, pytester, mon
         pytester.runpytest_subprocess(f"agents/{agent.name}").assert_outcomes(passed=2)
 
 
+def namesakes(repo, files):
+    """Two agents that hold `files` under the same names; `{name}` in one is its agent's."""
+    agents = [repo / "agents" / AGENT, second_agent(repo, "other-agent")]
+    for agent in agents:
+        (agent / "tests" / "test_agent.py").unlink()  # the session it runs is slow
+        for relative, text in files.items():
+            path = agent / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text.format(name=agent.name))
+    return agents
+
+
+OWN_NAME = "NAME = {name!r}\n"
+WHO_SOURCES = {f"src/demo_agent/{module}.py": OWN_NAME for module in ("who", "late", "last")}
+NESTED_TEST = """
+from demo_agent.util import helper
+
+
+def test_a_directory_without_an_init_file_is_this_agent_s(agent_dir):
+    assert helper.NAME == agent_dir.name
+"""
+
+
+@pytest.mark.parametrize(
+    "options", [(), ("--import-mode=importlib",)], ids=["default", "importlib"]
+)
+def test_a_subpackage_without_an_init_file_is_set_aside_with_its_agent(
+    repo, pytester, monkeypatch, options
+):
+    """A directory without `__init__.py` is a namespace package. Python works its path out
+    from its parent package each time the path is read, so it is read while the parent is
+    still imported. In pytest's importlib mode `agents/<name>/tests` is such a package too."""
+    namesakes(repo, {"src/demo_agent/util/helper.py": OWN_NAME, "tests/test_util.py": NESTED_TEST})
+    monkeypatch.chdir(repo)
+    pytester.runpytest_subprocess(*options).assert_outcomes(passed=2)
+
+
+def test_an_agent_package_without_an_init_file_is_set_aside_with_its_agent(
+    repo, pytester, monkeypatch
+):
+    """The agent's whole package may be a namespace package, and then a part of it may lie
+    outside every agent, as a library the agents share would. Each agent still imports its
+    own modules from it."""
+    for agent in namesakes(repo, WHO_SOURCES | {"tests/test_who.py": WHO_TEST}):
+        (agent / "src" / "demo_agent" / "__init__.py").unlink()
+    monkeypatch.chdir(repo)
+    pytester.runpytest_subprocess().assert_outcomes(passed=2)
+    (repo / "shared" / "demo_agent").mkdir(parents=True)
+    pytester.runpytest_subprocess("-o", "pythonpath=shared").assert_outcomes(passed=2)
+
+
+SESSION_CONFTEST = """
+import pytest
+
+
+@pytest.fixture(scope="session", autouse=True)
+def finished_after_the_last_test():
+    yield
+    from demo_agent import last, who  # `last` is first imported here
+
+    assert (who.NAME, last.NAME) == ({name!r},) * 2
+"""
+
+
+def test_a_fixture_is_finished_among_the_modules_of_its_agent(repo, pytester, monkeypatch):
+    """pytest finishes a session fixture during the last test of the run, which is another
+    agent's for all agents but one; what its teardown imports is its own agent's code."""
+    files = {"tests/conftest.py": SESSION_CONFTEST, "tests/test_who.py": WHO_TEST}
+    namesakes(repo, WHO_SOURCES | files)
+    monkeypatch.chdir(repo)
+    pytester.runpytest_subprocess().assert_outcomes(passed=2)
+
+
 def test_an_agent_that_keeps_its_own_pytest_configuration_is_tested_as_before(
     repo, pytester, monkeypatch
 ):

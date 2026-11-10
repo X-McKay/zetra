@@ -74,16 +74,21 @@ def _take(agent: Path) -> tuple[list[str], dict[str, ModuleType]]:
     def inside(origin: object) -> bool:
         return isinstance(origin, str) and (origin + os.sep).startswith(roots)
 
-    paths = [entry for entry in sys.path if inside(entry)]
-    sys.path[:] = [entry for entry in sys.path if not inside(entry)]
-    modules = {}
+    # Choose the modules before removing anything. A package without `__init__.py` works
+    # its path out again whenever the path is read, from `sys.path` or from its parent
+    # package in `sys.modules`: read after the agent has left `sys.path` it can name
+    # another directory, and read after the parent has been removed it raises.
+    names = []
     for name, module in list(sys.modules.items()):
         # Read from the module's namespace: a module may compute its other attributes.
         namespace = getattr(module, "__dict__", {})
-        origins = [namespace.get("__file__"), *(namespace.get("__path__") or ())]
+        locations = namespace.get("__path__")
+        origins = [namespace.get("__file__"), *(() if locations is None else locations)]
         if any(inside(origin) for origin in origins):
-            modules[name] = sys.modules.pop(name)
-    return paths, modules
+            names.append(name)
+    paths = [entry for entry in sys.path if inside(entry)]
+    sys.path[:] = [entry for entry in sys.path if not inside(entry)]
+    return paths, {name: sys.modules.pop(name) for name in names}
 
 
 _IMPORTS = pytest.StashKey[AgentImports]()
@@ -113,6 +118,29 @@ def pytest_collectstart(collector) -> None:
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_protocol(item) -> None:
     _imports(item.config).enter_for(item.path)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_fixture_setup(request):
+    """A fixture is finished among the modules it was set up among. pytest finishes a
+    session fixture during the last test of the run, which may be another agent's, and
+    what the fixture imports then is still its own agent's code."""
+    imports = _imports(request.config)
+    owner, interrupted = imports.active, []
+
+    def enter_owner() -> None:
+        interrupted.append(imports.active)
+        imports.enter(owner)
+
+    def leave_owner() -> None:
+        if interrupted:
+            imports.enter(interrupted.pop())
+
+    # A fixture's finalizers run last added first, and its own teardown is added between.
+    request.addfinalizer(leave_owner)
+    result = yield
+    request.addfinalizer(enter_owner)
+    return result
 
 
 @pytest.fixture
