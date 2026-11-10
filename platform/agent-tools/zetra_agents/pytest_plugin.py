@@ -124,7 +124,9 @@ def pytest_runtest_protocol(item) -> None:
 def pytest_fixture_setup(request):
     """A fixture is finished among the modules it was set up among. pytest finishes a
     session fixture during the last test of the run, which may be another agent's, and
-    what the fixture imports then is still its own agent's code."""
+    what the fixture imports then is still its own agent's code. A fixture defined outside
+    every agent belongs to the agent whose test first asked for it."""
+    __tracebackhide__ = True
     imports = _imports(request.config)
     owner, interrupted = imports.active, []
 

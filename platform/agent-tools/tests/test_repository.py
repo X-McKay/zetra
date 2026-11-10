@@ -530,7 +530,8 @@ def test_an_agent_package_without_an_init_file_is_set_aside_with_its_agent(
 ):
     """The agent's whole package may be a namespace package, and then a part of it may lie
     outside every agent, as a library the agents share would. Each agent still imports its
-    own modules from it."""
+    own modules from it. (A module in the shared part is not set aside: it stays imported
+    from one agent to the next.)"""
     for agent in namesakes(repo, WHO_SOURCES | {"tests/test_who.py": WHO_TEST}):
         (agent / "src" / "demo_agent" / "__init__.py").unlink()
     monkeypatch.chdir(repo)
@@ -559,6 +560,38 @@ def test_a_fixture_is_finished_among_the_modules_of_its_agent(repo, pytester, mo
     namesakes(repo, WHO_SOURCES | files)
     monkeypatch.chdir(repo)
     pytester.runpytest_subprocess().assert_outcomes(passed=2)
+
+
+SHARED_CONFTEST = """
+import pytest
+
+
+@pytest.fixture(scope="session", params=[1, 2])
+def shared(request):
+    yield request.param
+"""
+SHARED_TEST = """
+def test_this_agent_is_back_once_the_other_agent_s_fixture_is_finished(agent_dir, shared):
+    from demo_agent import late  # first imported here
+
+    assert late.NAME == agent_dir.name
+"""
+
+
+def test_a_test_runs_among_its_own_modules_after_another_agent_s_fixture_is_finished(
+    repo, pytester, monkeypatch
+):
+    """A session fixture set up for one agent's test is finished when another agent's test
+    asks for its next value. That test then runs among its own agent's modules again."""
+    first, second = namesakes(repo, WHO_SOURCES | {"tests/test_shared.py": SHARED_TEST})
+    (repo / "conftest.py").write_text(SHARED_CONFTEST)
+    monkeypatch.chdir(repo)
+    test = (
+        "tests/test_shared.py::test_this_agent_is_back_once_the_other_agent_s_fixture_is_finished"
+    )
+    pytester.runpytest_subprocess(
+        f"agents/{second.name}/{test}[1]", f"agents/{first.name}/{test}[2]"
+    ).assert_outcomes(passed=2)
 
 
 def test_an_agent_that_keeps_its_own_pytest_configuration_is_tested_as_before(
