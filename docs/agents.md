@@ -136,15 +136,16 @@ store (65 boundaries, a budget of zero, a grant with no `effect`) is refused her
 the field at fault. It is a reading of that schema, not the API server's validator: a
 `format` (the owner's email) is not checked, the file is read as YAML 1.1 with the last
 of a repeated key winning, and a null or a `3.0` where the schema says integer is
-refused here though the cluster would take it. The cluster has the last word. `zetra-agents check` does not read the schema; today only a local run and the
-cluster do.
+refused here though the cluster would take it. The cluster has the last word.
+`zetra-agents check` does not read the schema; today only a local run and the cluster
+do.
 
 The MCP grants and the session's token budget then come from the policy bundle the
 contracts compile the Agent to, the same compilation a release goes through. The budget
 (the smallest `tokensPerSession` among the model grants) is handed to the step as the
 pod template hands it, but nothing local enforces it as the platform does: there the
-gateway reserves against it before every model call and refuses the call that would pass
-it. Here only the SDK's advisory check runs, after a model turn that called a tool; a
+gateway reserves against it before every model call and refuses a call whose reservation
+would pass it. Here only the SDK's advisory check runs, after a model turn that called a tool; a
 scripted model reports no usage, so a scripted run is never stopped by the budget, and a
 `--live` run can end over it. The boundary limit is the Agent's
 `spec.runtime.maxBoundaries`, and here a local run is stricter than the platform is
@@ -156,8 +157,9 @@ does not compile, is not run. Each boundary is held to the exec deadline and the
 to 16 KiB. After every boundary `workspace/` and `state/` are measured as the tar the
 platform snapshots, by GNU tar's arithmetic: a file with several names is stored once
 and linked, and a socket and any `state/token.json` are left out, as tar leaves them.
-Passing its 64 MiB limit is reported as a problem. Only the size is modelled: a file the
-agent leaves unreadable fails the platform's snapshot and is not reported here.
+Passing its 64 MiB limit is reported as a problem. Only the size is modelled: a file or
+directory the agent leaves unreadable fails the platform's snapshot and is not reported
+here.
 
 A step counts only when it exited 0, 2, 3 or 4 and printed what the Session Runner
 accepts for that boundary:

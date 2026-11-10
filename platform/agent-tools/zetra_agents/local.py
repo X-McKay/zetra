@@ -441,7 +441,8 @@ def tar_bytes(sandbox: Path) -> int:
 def snapshot_size(sandbox: Path) -> int:
     """The size of the tar the Session Runner limits: `tar_bytes`, the two empty blocks
     that end an archive, rounded up to tar's 10 KiB record. Only the size is modelled: a
-    file tar cannot read fails the platform's snapshot and is counted here at its size."""
+    file or directory tar cannot read fails the platform's snapshot and is not reported
+    here."""
     return -(-(tar_bytes(sandbox) + 1024) // 10240) * 10240
 
 
