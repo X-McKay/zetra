@@ -33,7 +33,10 @@ accepted. Deployment manifests live in Kubani.
 Dockerfile, build context, target platform and build arguments. The `images`
 job in `.github/workflows/platform.yml` reads that file and builds each entry
 with `docker buildx build --pull --no-cache`. A passing job means every image
-builds from that commit with its base images pinned by digest.
+builds from that commit. The job does not check the pins: the `contracts` tests
+(`platform/contracts/tests/test_images.py`) fail when a `FROM` in a
+`platform/*/Dockerfile` names an image without a tag and a digest, or when a
+build argument in `images.json` is not declared by its Dockerfile.
 
 The job pushes and signs nothing, and the images Kubani deploys are still built
 and pushed by hand. Builds are not bit-reproducible: netpol-attestor's
@@ -45,9 +48,12 @@ Each `FROM` keeps its tag and adds the digest of the multi-platform index, not
 of one platform's manifest, so the cross-compiled and arm64 builds resolve the
 right base. To refresh a digest, run
 `docker buildx imagetools inspect <image>:<tag>`, take the top-level `Digest`
-and replace it in every Dockerfile that names the image. `COSIGN_SHA256` in
+and replace it in every `platform/*/Dockerfile` that names the image. The
+Dockerfiles outside `platform/` are not pinned this way. `COSIGN_SHA256` in
 `images.json` is the SHA-256 of the `cosign-linux-amd64` release binary for
 `COSIGN_VERSION`; change the two together, hashing the binary you downloaded.
+`platform/controller/Dockerfile` keeps a default for `COSIGN_VERSION`; the same
+tests fail when it differs from `images.json`.
 
 ## Token qualification (T4/T5)
 
