@@ -164,3 +164,10 @@ def test_arbitrary_stderr_fields_are_rejected_without_logging_contents(caplog):
     with pytest.raises(ConfigConflict):
         hooks.stage(b, event)
     assert "never-log-this-token" not in caplog.text
+
+
+def test_preflight_hands_back_the_agents_boundary_limit(monkeypatch):
+    from runner import activities as act
+
+    monkeypatch.setattr(act, "preflight", lambda arg: 3)
+    assert Hooks(SimpleNamespace(core=None), Control()).preflight(bound().inp) == 3

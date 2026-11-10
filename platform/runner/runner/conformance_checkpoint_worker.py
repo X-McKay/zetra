@@ -212,7 +212,7 @@ class Hooks:
             self.gate("after_read_before_done", b)
 
     @activity.defn(name="preflight")
-    def preflight(self, inp: SessionInput):
+    def preflight(self, inp: SessionInput) -> int | None:
         self.binding(inp)
         return act.preflight(inp)
 

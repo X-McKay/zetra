@@ -74,3 +74,10 @@ def test_final_real_t4_exec_holds_same_pod_until_capture_stops(monkeypatch):
     )
     assert w.run_boundary(BoundaryIn(inp(), 1, 2)) is result
     assert calls == ["real", "capture_stopped"]
+
+
+def test_preflight_hands_back_the_agents_boundary_limit(monkeypatch):
+    from runner import activities
+
+    monkeypatch.setattr(activities, "preflight", lambda arg: 3)
+    assert worker().preflight(inp()) == 3

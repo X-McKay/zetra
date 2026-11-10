@@ -137,3 +137,9 @@ def test_finalizer_must_hold_real_pod_not_a_simulated_failure(monkeypatch):
     monkeypatch.setattr(act.activity, "heartbeat", lambda *args: None)
     with pytest.raises(ValueError, match="did not hold"):
         wrapped.delete_for_recovery("blocked_deletion", arg)
+
+
+def test_preflight_hands_back_the_agents_boundary_limit(monkeypatch):
+    wrapped, arg, _, _ = fixture("fence_only")
+    monkeypatch.setattr(act, "preflight", lambda inp: 3)
+    assert wrapped.preflight(arg.inp) == 3
