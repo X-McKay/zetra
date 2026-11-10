@@ -77,7 +77,7 @@ import yaml
 from agent_platform.bundle import compile_bundle
 from agent_platform.constants import DEFAULT_TRUST_DOMAIN
 
-from zetra_agents import layout, local_step, schema, testing
+from zetra_agents import layout, local_step, testing
 from zetra_agents.layout import AgentDir
 
 BOUNDARY_SECONDS = 290.0  # the Session Runner's exec deadline
@@ -298,19 +298,15 @@ def _writable(root: Path, on: bool) -> None:
 
 
 def refusals(agent: AgentDir) -> list[str]:
-    """Why this agent is not run: its Agent is outside the CRD, or `check` refuses it, so
-    the grants and limits a local session is held to are ones the platform could have."""
+    """Why this agent is not run: `check` refuses it, its Agent being outside the CRD
+    included, so the grants and limits a local session is held to are ones the platform
+    could have."""
     problems = layout.check_files(agent)
     if problems:
         return problems
     if layout.image_target(agent) != "runtime":
         return [f"{agent.name} is a conformance fixture; it runs only in its own image"]
     try:
-        refused = schema.problems((agent.agent_cr() or {}).get("spec"))
-        if refused:
-            return [
-                f"{agent.name}: deploy/agent.yaml is outside the Agent CRD: {p}" for p in refused
-            ]
         problems = layout.check(agent)
         if not problems and not isinstance(agent.manifest().get("model"), dict):
             return [f"{agent.name} declares no model; there is no model loop to run"]

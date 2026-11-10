@@ -40,6 +40,7 @@ sandbox SDK in the images, the tooling and the contracts the Registry Controller
 lock whose zetra entries are not the pinned commit, and on a member that overrides a
 source; change the templates in zetra instead. `zetra-agents check` requires
 `agent.yaml` and `deploy/agent.yaml` to agree (the model is granted, names match),
+holds `deploy/agent.yaml` to the Agent CRD's schema,
 compiles each release policy (only `remote_read` grants), refuses network and process
 imports and stray files in agent packages, and admits the fixture image target only for
 the conformance fixtures it lists.
@@ -137,8 +138,9 @@ the field at fault. It is a reading of that schema, not the API server's validat
 `format` (the owner's email) is not checked, the file is read as YAML 1.1 with the last
 of a repeated key winning, and a null or a `3.0` where the schema says integer is
 refused here though the cluster would take it. The cluster has the last word.
-`zetra-agents check` does not read the schema; today only a local run and the cluster
-do.
+`zetra-agents check` reads the schema the same way and a local run refuses an agent
+`check` refuses, so CI and the release step refuse the same Agents, the null and the `3.0`
+included.
 
 The MCP grants and the session's token budget then come from the policy bundle the
 contracts compile the Agent to, the same compilation a release goes through. The budget

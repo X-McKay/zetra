@@ -1,8 +1,9 @@
 """What the Agent CRD admits in `spec`.
 
-Kubani's API server refuses an Agent outside this schema when Flux applies it. A local
-run holds `deploy/agent.yaml` to the same schema, so a limit the cluster would never store
-(sixty-five boundaries, a budget of zero) cannot shape a session here.
+Kubani's API server refuses an Agent outside this schema when Flux applies it.
+`zetra-agents check` holds `deploy/agent.yaml` to the same schema, and with it a release
+and a local run, so a limit the cluster would never store (sixty-five boundaries, a budget
+of zero) is found before a tag is pushed and cannot shape a session here.
 
 `schemas/agent-spec.json` is the `spec` schema of zetra
 `deploy/platform/crds/agents.agentplatform.io.yaml`; a test fails when they differ or when

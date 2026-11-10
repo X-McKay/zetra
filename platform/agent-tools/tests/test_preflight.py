@@ -45,6 +45,8 @@ def inputs(tmp_path):
         "kind": "Agent",
         "metadata": {"name": AGENT, "namespace": "tenant-test"},
         "spec": {
+            "owner": "dev@example.com",
+            "identity": {"mode": "agent"},
             "capabilities": {
                 "models": [
                     {
@@ -64,7 +66,7 @@ def inputs(tmp_path):
                         "delegation": "inherit",
                     }
                 ],
-            }
+            },
         },
     }
     agent = source / "agents" / AGENT
