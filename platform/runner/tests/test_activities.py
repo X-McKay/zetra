@@ -702,10 +702,11 @@ def test_delete_grant_escapes_what_it_was_given(tmp_path):
     forged = dataclasses.replace(inp(f"gh_1?session_id={OTHER_SESSION}#"), session_id="a&b=c d")
     assert run(act.delete_grant, forged) == "OK"  # no grant has that handle
     assert aps.grants == {"gh_1": theirs}
-    assert aps.calls[-1] == (
-        "DELETE",
-        f"/v1/grants/gh_1%3Fsession_id%3D{OTHER_SESSION}%23?session_id=a%26b%3Dc%20d",
-    )
+    escaped = f"/v1/grants/gh_1%3Fsession_id%3D{OTHER_SESSION}%23"
+    assert aps.calls[-2:] == [
+        ("GET", escaped),
+        ("DELETE", f"{escaped}?session_id=a%26b%3Dc%20d"),
+    ]
 
 
 @pytest.mark.parametrize("replaced", [False, True])
