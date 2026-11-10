@@ -42,7 +42,8 @@ def main(argv: list[str] | None = None) -> int:
 
     chk = sub.add_parser(
         "check",
-        help="repository layout, agent layout, static imports, and each release policy compiles",
+        help="repository layout, agent layout, the Agent CRD schema, static imports, and each "
+        "release policy compiles",
     )
     chk.add_argument("agents", nargs="*", help="default: every agent")
     chk.add_argument(

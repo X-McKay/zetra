@@ -16,6 +16,7 @@ REV = "0123456789abcdef0123456789abcdef01234567"
 AGENT = "demo-agent"
 IMAGE = f"registry.almckay.io/agents/{AGENT}@sha256:" + "a9" * 32
 BASE = "https://mcp.almckay.io"
+SPEC = {"owner": "dev@example.com", "identity": {"mode": "agent"}}
 
 
 def lock_text(revision, overrides=None):
@@ -280,7 +281,11 @@ def fixture_agent(repo, name="conformance-checkpoint", *, step=True, verify=True
     (root / "agent.yaml").write_text(yaml.safe_dump({"name": name, "model": None, "tools": []}))
     (root / "deploy/agent.yaml").write_text(
         yaml.safe_dump(
-            {"kind": "Agent", "metadata": {"name": name}, "spec": {"capabilities": {"models": []}}}
+            {
+                "kind": "Agent",
+                "metadata": {"name": name},
+                "spec": {**SPEC, "capabilities": {"models": []}},
+            }
         )
     )
     if verify:
@@ -373,7 +378,7 @@ def test_explicit_no_inference_contract(tmp_path, model, grants, valid):
     cr = {
         "kind": "Agent",
         "metadata": {"name": "example"},
-        "spec": {"capabilities": {"models": grants}},
+        "spec": {**SPEC, "capabilities": {"models": grants}},
     }
     if grants == "missing":
         del cr["spec"]["capabilities"]["models"]
@@ -438,22 +443,70 @@ def test_network_and_fixture_allowlists_are_exact():
     assert "investigator" not in layout.FIXTURES and "db-admin" not in layout.FIXTURES
 
 
-def test_check_compiles_every_release_policy_and_refuses_a_write_grant(repo, capsys):
+def test_check_and_release_hold_the_agent_to_the_crd(repo, capsys, tmp_path):
+    agent = layout.find(repo, AGENT)
+    written = agent.agent_cr()
+    crd = f"{AGENT}: deploy/agent.yaml is outside the Agent CRD: spec"
+
+    def refused(change, *command):
+        cr = yaml.safe_load(yaml.safe_dump(written))
+        change(cr)
+        agent.agent_cr_path.write_text(yaml.safe_dump(cr, sort_keys=False))
+        assert run(repo, *(command or ("check",))) == 1
+        return capsys.readouterr().err
+
+    def boundaries(cr):
+        cr["spec"]["runtime"] = {"maxBoundaries": 65}
+
+    assert f"{crd}.runtime.maxBoundaries: 65 is more than 64" in refused(boundaries)
+    assert f"{crd}.owner is required" in refused(lambda cr: cr["spec"].pop("owner"))
+    assert f"{crd}: null is not an object" in refused(lambda cr: cr.pop("spec"))
+
+    # A shape the later checks could not read is reported, not raised, and named with the
+    # directory's other problems.
+    def models(cr):
+        cr["metadata"]["name"] = "other"
+        cr["spec"]["capabilities"]["models"] = ["llm-main"]
+
+    said = refused(models)
+    assert f"{AGENT}: deploy/agent.yaml must be the Agent named {AGENT}" in said
+    assert f'{crd}.capabilities.models[0]: "llm-main" is not an object' in said
+
+    # A release is cut from nothing `check` refuses.
+    out = tmp_path / "out"
+    release_args = ("release", AGENT, "--image", IMAGE, "--revision", "0" * 40, "--out", str(out))
+    assert f"{crd}.runtime.maxBoundaries: 65 is more than 64" in refused(boundaries, *release_args)
+    assert not out.exists()
+
+    agent.agent_cr_path.write_text(yaml.safe_dump(written, sort_keys=False))
+    assert run(repo, "check") == 0
+
+
+def test_check_refuses_a_write_grant_and_compiles_every_release_policy(repo, capsys):
     agent = layout.find(repo, AGENT)
     cr = agent.agent_cr()
-    cr["spec"]["capabilities"]["mcp"] = [
-        {
-            "backend": "kubernetes",
-            "effect": "remote_write",
-            "tools": ["pods_delete"],
-            "delegation": "inherit",
-        }
-    ]
+    grant = {
+        "backend": "kubernetes",
+        "effect": "remote_write",
+        "tools": ["pods_delete"],
+        "delegation": "inherit",
+    }
+    cr["spec"]["capabilities"]["mcp"] = [grant]
     agent.agent_cr_path.write_text(yaml.safe_dump(cr, sort_keys=False))
-    assert layout.check(agent) == []  # the layout check alone does not see the grant
     assert run(repo, "check") == 1
-    err = capsys.readouterr().err
-    assert "release policy does not compile" in err or "only remote_read" in err
+    assert (
+        f"{AGENT}: deploy/agent.yaml is outside the Agent CRD: spec.capabilities.mcp[0].effect"
+        in capsys.readouterr().err
+    )
+    # Inside the CRD, and still not a policy the contracts compile.
+    cr["spec"]["capabilities"]["mcp"] = [{**grant, "effect": "remote_read"}] * 2
+    agent.agent_cr_path.write_text(yaml.safe_dump(cr, sort_keys=False))
+    assert layout.check(agent) == []  # the layout check alone does not see it
+    assert run(repo, "check") == 1
+    assert (
+        f"{AGENT}: release policy does not compile: MCP backend kubernetes declared twice"
+        in capsys.readouterr().err
+    )
 
 
 def test_approval_does_not_change_the_policy_digest(repo):

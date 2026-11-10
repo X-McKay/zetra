@@ -111,8 +111,8 @@ PLACEHOLDER_DIGEST = "0" * 64
 def compile_problems(agent: AgentDir, mcp_resource_base: str) -> list[str]:
     """Compile the agent's release policy against a placeholder image, as a release would.
 
-    Catches what the layout checks cannot: a grant the bundle refuses (anything but
-    remote_read), or an Agent the contracts cannot compile, before a tag is pushed.
+    Catches what the layout checks cannot: an Agent that is inside the CRD and that the
+    contracts still cannot compile (a backend declared twice), before a tag is pushed.
     """
     try:
         artifacts = build(
