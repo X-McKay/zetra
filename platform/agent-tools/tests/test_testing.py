@@ -12,6 +12,7 @@ from agent_runtime import mcp as runtime_mcp
 from agent_runtime.gateway import PolicyDenied
 
 from zetra_agents import testing
+from zetra_agents.layout import AgentDir
 
 AGENT_CODE = '''
 from agent_runtime.tools import Tool
@@ -231,3 +232,105 @@ def test_the_fixture_needs_an_agent_directory(pytester):
     result = pytester.runpytest_subprocess("-q")
     result.stdout.fnmatch_lines(["*is not under an agent directory*"])
     assert result.ret != 0
+
+
+# The manifest's tool list is derived from the code (zetra_agents.manifest).
+
+
+def test_code_tools_are_read_in_declaration_order(agent_dir):
+    from zetra_agents import manifest
+
+    assert manifest.code_tools(AgentDir(agent_dir)) == TOOLS
+    assert manifest.difference(AgentDir(agent_dir)) is None
+    assert manifest.write(AgentDir(agent_dir)) is False
+
+
+def test_write_replaces_only_the_tools_list(agent_dir):
+    from zetra_agents import manifest
+
+    agent = AgentDir(agent_dir)
+    agent.manifest_path.write_text(
+        textwrap.dedent(
+            """\
+            # A comment that stays.
+            schema_version: 1
+            name: probe
+            entrypoint: probe_agent.agent:create_agent
+            tools:
+              - name: list_pods
+                effect: workspace_read   # wrong
+
+              - name: gone
+                effect: remote_read
+
+            instructions: probe_agent/instructions/base.md
+            model: null   # deterministic
+            """
+        )
+    )
+    detail = manifest.difference(agent)
+    assert "delete_pod (remote_read) is in the code but not listed" in detail
+    assert "gone is listed but not in the code" in detail
+    assert "list_pods is remote_read in the code but listed workspace_read" in detail
+    assert manifest.write(agent) is True
+    assert agent.manifest_path.read_text() == textwrap.dedent(
+        """\
+        # A comment that stays.
+        schema_version: 1
+        name: probe
+        entrypoint: probe_agent.agent:create_agent
+        tools:
+          - name: list_pods
+            effect: remote_read
+          - name: delete_pod
+            effect: remote_read
+          - name: note
+            effect: workspace_write
+
+        instructions: probe_agent/instructions/base.md
+        model: null   # deterministic
+        """
+    )
+    assert manifest.write(agent) is False
+
+
+@pytest.mark.parametrize(
+    "tools_text",
+    [
+        "",
+        "tools: []\n",
+        "tools:\n- name: note\n  effect: workspace_write\n",
+        "tools: [{name: note, effect: workspace_write}]",
+    ],
+)
+def test_with_tools_handles_every_way_the_list_is_written(tools_text):
+    from zetra_agents import manifest
+
+    text = "name: probe\n" + tools_text
+    updated = manifest.with_tools(text, TOOLS[:1])
+    assert updated == "name: probe\ntools:\n  - name: list_pods\n    effect: remote_read\n"
+    assert manifest.with_tools(updated, []) == "name: probe\ntools: []\n"
+
+
+def test_with_tools_refuses_what_it_cannot_rewrite_in_place():
+    from zetra_agents import manifest
+
+    with pytest.raises(manifest.ToolsError, match="edit it by hand"):
+        manifest.with_tools(
+            "tools:\n  - name: a\n# a comment at the margin\n  - name: b\n", TOOLS[:1]
+        )
+    with pytest.raises(manifest.ToolsError, match="more than one"):
+        manifest.with_tools("tools: []\ntools: []\n", TOOLS[:1])
+
+
+def test_code_that_cannot_be_loaded_is_reported_with_its_error(agent_dir):
+    from zetra_agents import manifest
+
+    (agent_dir / "src" / "probe_agent" / "agent.py").write_text("import not_installed_anywhere\n")
+    with pytest.raises(manifest.ToolsError, match="ModuleNotFoundError.*just setup"):
+        manifest.code_tools(AgentDir(agent_dir))
+    (agent_dir / "src" / "probe_agent" / "agent.py").write_text(
+        AGENT_CODE.replace("Tool(note,", "Tool(list_pods,")
+    )
+    with pytest.raises(manifest.ToolsError, match="same name"):
+        manifest.code_tools(AgentDir(agent_dir))

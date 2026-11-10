@@ -14,7 +14,7 @@ from pathlib import Path
 
 from agent_platform.constants import DEFAULT_TRUST_DOMAIN
 
-from zetra_agents import attestations, layout, preflight, release, render
+from zetra_agents import attestations, layout, manifest, preflight, release, render
 
 MCP_RESOURCE_BASE = "https://mcp.almckay.io"  # Kubani registry-controller.yaml
 DEFAULT_TENANT = "tenant-test"
@@ -40,7 +40,11 @@ def main(argv: list[str] | None = None) -> int:
     tgt = sub.add_parser("image-target", help="print the Dockerfile target an agent builds with")
     tgt.add_argument("agent")
 
-    rnd = sub.add_parser("render", help="write the rendered repository files, or --check them")
+    rnd = sub.add_parser(
+        "render",
+        help="write the rendered repository files and each manifest's tools: list from "
+        "its code, or --check them",
+    )
     rnd.add_argument("--check", action="store_true", help="verify instead of writing")
     rnd.add_argument("--zetra-rev", help="40-hex zetra commit to pin (default: the pinned one)")
 
@@ -189,6 +193,12 @@ def render_command(repo: Path, args: argparse.Namespace) -> int:
         return 2
     for path in render.write(repo, revision):
         print(path)
+    try:
+        for path in render.write_tools(repo):
+            print(f"{path} (tools: rewritten from the code)")
+    except manifest.ToolsError as exc:
+        print(f"tools: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

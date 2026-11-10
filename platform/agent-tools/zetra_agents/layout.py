@@ -143,9 +143,13 @@ def forbidden_imports(src: Path) -> list[str]:
     return found
 
 
+def check_files(agent: AgentDir) -> list[str]:
+    return [f"{agent.name}: missing {f}" for f in REQUIRED if not (agent.root / f).is_file()]
+
+
 def check(agent: AgentDir) -> list[str]:
     """Every problem with one agent directory; an empty list means it is releasable."""
-    problems = [f"{agent.name}: missing {f}" for f in REQUIRED if not (agent.root / f).is_file()]
+    problems = check_files(agent)
     if problems:
         return problems
     if not NAME.match(agent.name):

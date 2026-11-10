@@ -10,6 +10,7 @@ import yaml
 from agent_platform import cli as agentctl
 
 from zetra_agents import cli, layout, release, render
+from zetra_agents import manifest as manifest_tools
 
 REV = "0123456789abcdef0123456789abcdef01234567"
 AGENT = "demo-agent"
@@ -109,6 +110,39 @@ def test_render_check_reports_hand_edits_and_render_repairs_them(repo, capsys):
     assert run(repo, "render") == 0
     capsys.readouterr()
     assert run(repo, "render", "--check") == 0
+
+
+def test_a_tool_is_declared_in_the_code_and_render_lists_it(repo, capsys):
+    agent = layout.find(repo, AGENT)
+    code = agent.package_dir() / "agent.py"
+    code.write_text(
+        code.read_text()
+        .replace(
+            "from agent_runtime.report import report_tool",
+            "from agent_runtime.report import report_tool\nfrom agent_runtime.tools import Tool",
+        )
+        .replace(
+            '    return {"tools": [report_tool(ctx.workspace)]}',
+            "    async def read_notes() -> dict:\n"
+            '        """Read the notes."""\n'
+            '        return {"notes": (ctx.workspace / "notes.md").read_text()}\n\n'
+            '    return {"tools": [Tool(read_notes, "workspace_read"), '
+            "report_tool(ctx.workspace)]}",
+        )
+    )
+    assert run(repo, "render", "--check") == 1
+    err = capsys.readouterr().err
+    assert f"agents/{AGENT}/agent.yaml: read_notes (workspace_read) is in the code" in err
+    assert "run `zetra-agents render`" in err
+    assert run(repo, "render") == 0
+    assert f"agents/{AGENT}/agent.yaml (tools: rewritten from the code)" in capsys.readouterr().out
+    assert agent.manifest()["tools"] == [
+        {"name": "read_notes", "effect": "workspace_read"},
+        {"name": "write_report", "effect": "workspace_write"},
+    ]
+    assert run(repo, "render", "--check") == 0
+    assert run(repo, "check") == 0
+    capsys.readouterr()
 
 
 def test_render_check_requires_a_pinned_zetra_revision(repo, capsys):
@@ -269,6 +303,31 @@ def test_allowlisted_fixtures_build_with_the_fixture_target_and_need_both_files(
     assert capsys.readouterr().out.strip() == "fixture"
     assert "conformance-checkpoint" in layout.FIXTURES
     assert "conformance" not in layout.FIXTURES and "investigator" not in layout.FIXTURES
+
+
+def test_a_fixture_is_not_asked_for_its_tools_outside_its_image(repo, capsys):
+    agent = fixture_agent(repo)
+    (agent.package_dir() / "system.md").write_text("fixture\n")
+    manifest = {
+        "name": agent.name,
+        "model": None,
+        "entrypoint": "checkpoint_fixture.agent:create_agent",
+        "instructions": "checkpoint_fixture/system.md",
+        "tools": [{"name": "probe", "effect": "workspace_read"}],
+    }
+    agent.manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False))
+    (agent.package_dir() / "agent.py").write_text(
+        "def create_agent(ctx):\n"
+        '    raise RuntimeError("checkpoint fixture requires the installed step override")\n'
+    )
+    before = agent.manifest_path.read_bytes()
+    assert layout.check_files(agent) == []
+    with pytest.raises(manifest_tools.ToolsError, match="requires the installed step override"):
+        manifest_tools.code_tools(agent)
+    assert [a.name for a in render.derived_agents(repo)] == [AGENT]
+    assert render.tool_problems(repo) == []
+    assert render.write_tools(repo) == []
+    assert agent.manifest_path.read_bytes() == before
 
 
 @pytest.mark.parametrize(
