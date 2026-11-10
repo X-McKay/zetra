@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from importlib import metadata, resources
 from pathlib import Path
 
-from zetra_agents import layout
+from zetra_agents import layout, manifest
 
 ZETRA_GIT = "https://github.com/X-McKay/zetra.git"
 ZETRA_ORIGIN = re.compile(
@@ -80,7 +80,7 @@ class RenderError(ValueError):
 @dataclass(frozen=True)
 class Difference:
     path: str
-    state: str  # "missing" | "differs" | "revision" | "lock" | "sources"
+    state: str  # "missing" | "differs" | "revision" | "lock" | "sources" | "tools"
     detail: str = ""
 
 
@@ -186,7 +186,39 @@ def check(repo: Path) -> list[Difference]:
             differences.append(Difference(relative, "differs"))
     differences += lock_problems(repo, revision)
     differences += member_source_problems(repo)
+    differences += tool_problems(repo)
     return differences
+
+
+def derived_agents(repo: Path) -> list[layout.AgentDir]:
+    """The agents whose tool list is read from their code. A conformance fixture's factory
+    refuses to run outside its own image, where the Dockerfile's fixture target and the CI
+    image check hold it to its manifest; an incomplete directory is `check`'s to report."""
+    return [
+        agent
+        for agent in layout.all_agents(repo)
+        if layout.image_target(agent) == "runtime" and not layout.check_files(agent)
+    ]
+
+
+def tool_problems(repo: Path) -> list[Difference]:
+    """Manifests whose `tools:` list is not what the agent's code declares."""
+    problems = []
+    for agent in derived_agents(repo):
+        path = agent.manifest_path.relative_to(repo).as_posix()
+        try:
+            detail = manifest.difference(agent)
+        except manifest.ToolsError as exc:
+            problems.append(Difference(path, "tools", str(exc)))
+            continue
+        if detail is not None:
+            problems.append(Difference(path, "tools", f"{detail}; run `zetra-agents render`"))
+    return problems
+
+
+def write_tools(repo: Path) -> list[Path]:
+    """Rewrite each manifest's `tools:` from its code; the manifests that changed."""
+    return [agent.manifest_path for agent in derived_agents(repo) if manifest.write(agent)]
 
 
 def lock_problems(repo: Path, revision: str) -> list[Difference]:
@@ -241,7 +273,7 @@ def member_source_problems(repo: Path) -> list[Difference]:
 
 
 def describe(difference: Difference, repo: Path) -> str:
-    if difference.state in ("lock", "sources"):
+    if difference.state in ("lock", "sources", "tools"):
         return f"{difference.path}: {difference.detail}"
     if difference.state == "revision":
         installed = installed_revision()
@@ -389,6 +421,7 @@ def next_steps(target: Path, agent: str, tenant: str, bootstrapped: dict[str, st
     if bootstrapped.get("lock") != "locked":
         steps.append("uv lock")
     steps.append("just setup && just check")
+    steps.append(f"just run {agent}   (one scripted session on this machine)")
     if bootstrapped.get("git", "").startswith("initialised"):
         steps += [
             "git add -A && git commit -m 'new agent'",

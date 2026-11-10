@@ -1,20 +1,33 @@
 """zetra-agents: `check` a repository and its agents, `render` the files every agent
-repository shares, `init` a new repository, print an agent's `image-target`, run the
-offline `preflight` against a Kubani checkout, write the `release` artifacts for one
-pushed image, or build one attestation `predicate` for it."""
+repository shares and each manifest's tool list, `init` a new repository, `run` one
+session of an agent on this machine, print an agent's `image-target`, run the offline
+`preflight` against a Kubani checkout, write the `release` artifacts for one pushed
+image, or build one attestation `predicate` for it."""
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime as dt
 import json
 import os
+import signal
 import sys
+import threading
 from pathlib import Path
 
 from agent_platform.constants import DEFAULT_TRUST_DOMAIN
 
-from zetra_agents import attestations, layout, preflight, release, render
+from zetra_agents import (
+    attestations,
+    layout,
+    local,
+    local_step,
+    manifest,
+    preflight,
+    release,
+    render,
+)
 
 MCP_RESOURCE_BASE = "https://mcp.almckay.io"  # Kubani registry-controller.yaml
 DEFAULT_TENANT = "tenant-test"
@@ -40,7 +53,11 @@ def main(argv: list[str] | None = None) -> int:
     tgt = sub.add_parser("image-target", help="print the Dockerfile target an agent builds with")
     tgt.add_argument("agent")
 
-    rnd = sub.add_parser("render", help="write the rendered repository files, or --check them")
+    rnd = sub.add_parser(
+        "render",
+        help="write the rendered repository files and each manifest's tools: list from "
+        "its code, or --check them",
+    )
     rnd.add_argument("--check", action="store_true", help="verify instead of writing")
     rnd.add_argument("--zetra-rev", help="40-hex zetra commit to pin (default: the pinned one)")
 
@@ -67,6 +84,29 @@ def main(argv: list[str] | None = None) -> int:
     )
     ren.add_argument("old")
     ren.add_argument("new")
+
+    run = sub.add_parser(
+        "run",
+        help="run one session of an agent on this machine with a scripted or local model "
+        "and scripted MCP replies; not a deployment check",
+    )
+    run.add_argument("agent")
+    task = run.add_mutually_exclusive_group()
+    task.add_argument("--task", help='task text, sent as {"request": TEXT}')
+    task.add_argument("--task-json", help="task document, sent as given")
+    run.add_argument(
+        "--scenario",
+        help="a file, or the name of agents/AGENT/scenarios/NAME.yaml (default: smoke, "
+        "when it exists)",
+    )
+    run.add_argument(
+        "--live",
+        action="store_true",
+        help=f"call the OpenAI-compatible endpoint in {local_step.MODEL_URL} instead of "
+        "the scenario's model script",
+    )
+    run.add_argument("--out", type=Path, help="run directory (default: a new one under state)")
+    run.add_argument("--max-boundaries", type=int, help="default: the Agent's own limit")
 
     pre = sub.add_parser(
         "preflight", help="offline source/candidate GitOps compatibility before tagging"
@@ -128,6 +168,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "render":
         return render_command(repo, args)
+    if args.command == "run":
+        return run_command(repo, args)
     if args.command == "rename":
         try:
             changed = render.rename(repo, args.old, args.new)
@@ -189,7 +231,60 @@ def render_command(repo: Path, args: argparse.Namespace) -> int:
         return 2
     for path in render.write(repo, revision):
         print(path)
+    try:
+        for path in render.write_tools(repo):
+            print(f"{path} (tools: rewritten from the code)")
+    except manifest.ToolsError as exc:
+        print(f"tools: {exc}", file=sys.stderr)
+        return 1
     return 0
+
+
+def run_command(repo: Path, args: argparse.Namespace) -> int:
+    agent = layout.find(repo, args.agent)
+
+    def stop(*_):  # so a terminated run ends its step and leaves a removable directory
+        raise SystemExit(143)
+
+    main_thread = threading.current_thread() is threading.main_thread()
+    previous = signal.signal(signal.SIGTERM, stop) if main_thread else None
+    try:
+        name = args.scenario
+        if name is None and (agent.root / "scenarios" / "smoke.yaml").is_file():
+            name = "smoke"
+        scenario = local.load_scenario(agent, name) if name else local.Scenario()
+        if args.task_json is not None:
+            try:
+                scenario = dataclasses.replace(scenario, task=json.loads(args.task_json))
+            except ValueError:
+                raise local.ScenarioError("--task-json is not JSON") from None
+        elif args.task is not None:
+            scenario = dataclasses.replace(scenario, task={"request": args.task})
+        mode = "live model" if args.live else "scripted model"
+        print(f"{agent.name}: {mode}, {scenario.source or 'no scenario'}", file=sys.stderr)
+        result = local.run(
+            agent,
+            scenario,
+            live=args.live,
+            out=args.out,
+            max_boundaries=args.max_boundaries,
+            on_boundary=lambda b: print(
+                f"{b['boundary']:>3}  {b['kind']:<5}  {b['detail']}", file=sys.stderr
+            ),
+        )
+    except local.ScenarioError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("interrupted; the run directory holds what was written", file=sys.stderr)
+        return 130
+    finally:
+        if main_thread:
+            signal.signal(signal.SIGTERM, previous)
+    for problem in result.problems:
+        print(f"problem: {problem}", file=sys.stderr)
+    print(json.dumps(result.document(), indent=2))
+    return 0 if result.ok else 1
 
 
 def init(args: argparse.Namespace) -> int:

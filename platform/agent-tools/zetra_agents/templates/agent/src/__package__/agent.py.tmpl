@@ -1,23 +1,26 @@
 """@@DESCRIPTION@@
 
-One workspace tool. Remote reads, when this agent needs them, go through `ctx.mcp` only
-and must be granted in deploy/agent.yaml under capabilities.mcp.
+`create_agent` returns the tools the model may call. This agent starts with the one most
+agents end with, a bounded report written to the workspace. A tool is an async function
+with a docstring (the description the model sees) and string arguments, wrapped in
+`Tool(fn, effect)`. A tool that reads outside the sandbox calls `ctx.mcp` and nothing
+else, is declared `remote_read`, and needs the MCP tool it calls granted in
+deploy/agent.yaml under capabilities.mcp:
+
+    evidence = Evidence(ctx.workspace)
+
+    async def list_pods() -> dict:
+        '''List the pods in the demonstration namespace.'''
+        result = await ctx.mcp("kubernetes", "pods_list_in_namespace", {"namespace": "demo"})
+        return evidence.record("pods", {"tool": result["tool"], "text": result["text"]})
+
+    return {"tools": [Tool(list_pods, "remote_read"), report_tool(ctx.workspace, evidence)]}
+
+After changing the tools, `just render` rewrites the `tools:` list in agent.yaml.
 """
 
-from agent_runtime.tools import Tool
-
-MAX_REPORT = 8_000
+from agent_runtime.report import report_tool
 
 
 def create_agent(ctx) -> dict:
-    async def write_report(content: str) -> dict:
-        """Write the report; at most 150 words of plain text."""
-        if not content.strip() or len(content.split()) > 150:
-            return {"error": "Write a nonempty report of at most 150 words."}
-        report = content.rstrip() + "\n"
-        if len(report.encode()) > MAX_REPORT:
-            return {"error": f"Keep the report below {MAX_REPORT} UTF-8 bytes."}
-        (ctx.workspace / "report.md").write_text(report, encoding="utf-8")
-        return {"path": "report.md"}
-
-    return {"tools": [Tool(write_report, "workspace_write")]}
+    return {"tools": [report_tool(ctx.workspace)]}

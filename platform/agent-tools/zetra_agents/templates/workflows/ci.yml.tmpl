@@ -23,11 +23,12 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}
-      - run: uv sync --locked
+      # Every agent's dependencies: `render --check` reads each tool list from the code.
+      - run: uv sync --locked --all-packages
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
       - run: uv run --locked zetra-agents check
-      - run: uv run --locked zetra-agents render --check
+      - run: uv run --locked --all-packages zetra-agents render --check
       - id: list
         run: echo "agents=$(uv run --locked zetra-agents list)" >> "$GITHUB_OUTPUT"
 

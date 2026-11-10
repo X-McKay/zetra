@@ -4,13 +4,13 @@ fixture files outside the allowlist are refused."""
 import hashlib
 import json
 import textwrap
-import types
 
 import pytest
 import yaml
 from agent_platform import cli as agentctl
 
 from zetra_agents import cli, layout, release, render
+from zetra_agents import manifest as manifest_tools
 
 REV = "0123456789abcdef0123456789abcdef01234567"
 AGENT = "demo-agent"
@@ -110,6 +110,39 @@ def test_render_check_reports_hand_edits_and_render_repairs_them(repo, capsys):
     assert run(repo, "render") == 0
     capsys.readouterr()
     assert run(repo, "render", "--check") == 0
+
+
+def test_a_tool_is_declared_in_the_code_and_render_lists_it(repo, capsys):
+    agent = layout.find(repo, AGENT)
+    code = agent.package_dir() / "agent.py"
+    code.write_text(
+        code.read_text()
+        .replace(
+            "from agent_runtime.report import report_tool",
+            "from agent_runtime.report import report_tool\nfrom agent_runtime.tools import Tool",
+        )
+        .replace(
+            '    return {"tools": [report_tool(ctx.workspace)]}',
+            "    async def read_notes() -> dict:\n"
+            '        """Read the notes."""\n'
+            '        return {"notes": (ctx.workspace / "notes.md").read_text()}\n\n'
+            '    return {"tools": [Tool(read_notes, "workspace_read"), '
+            "report_tool(ctx.workspace)]}",
+        )
+    )
+    assert run(repo, "render", "--check") == 1
+    err = capsys.readouterr().err
+    assert f"agents/{AGENT}/agent.yaml: read_notes (workspace_read) is in the code" in err
+    assert "run `zetra-agents render`" in err
+    assert run(repo, "render") == 0
+    assert f"agents/{AGENT}/agent.yaml (tools: rewritten from the code)" in capsys.readouterr().out
+    assert agent.manifest()["tools"] == [
+        {"name": "read_notes", "effect": "workspace_read"},
+        {"name": "write_report", "effect": "workspace_write"},
+    ]
+    assert run(repo, "render", "--check") == 0
+    assert run(repo, "check") == 0
+    capsys.readouterr()
 
 
 def test_render_check_requires_a_pinned_zetra_revision(repo, capsys):
@@ -272,6 +305,31 @@ def test_allowlisted_fixtures_build_with_the_fixture_target_and_need_both_files(
     assert "conformance" not in layout.FIXTURES and "investigator" not in layout.FIXTURES
 
 
+def test_a_fixture_is_not_asked_for_its_tools_outside_its_image(repo, capsys):
+    agent = fixture_agent(repo)
+    (agent.package_dir() / "system.md").write_text("fixture\n")
+    manifest = {
+        "name": agent.name,
+        "model": None,
+        "entrypoint": "checkpoint_fixture.agent:create_agent",
+        "instructions": "checkpoint_fixture/system.md",
+        "tools": [{"name": "probe", "effect": "workspace_read"}],
+    }
+    agent.manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False))
+    (agent.package_dir() / "agent.py").write_text(
+        "def create_agent(ctx):\n"
+        '    raise RuntimeError("checkpoint fixture requires the installed step override")\n'
+    )
+    before = agent.manifest_path.read_bytes()
+    assert layout.check_files(agent) == []
+    with pytest.raises(manifest_tools.ToolsError, match="requires the installed step override"):
+        manifest_tools.code_tools(agent)
+    assert [a.name for a in render.derived_agents(repo)] == [AGENT]
+    assert render.tool_problems(repo) == []
+    assert render.write_tools(repo) == []
+    assert agent.manifest_path.read_bytes() == before
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
@@ -324,40 +382,27 @@ def test_explicit_no_inference_contract(tmp_path, model, grants, valid):
     assert (not layout.check(layout.AgentDir(root))) is valid
 
 
-def test_the_scaffolded_agent_is_a_working_agent(repo, tmp_path, monkeypatch):
+def test_the_scaffolded_agent_is_a_working_agent(repo, tmp_path):
     """Laid out as the image's /app, the rendered agent passes the SDK's own manifest and
     tool agreement check, and its tool writes a bounded report."""
     import asyncio
-    import shutil
-    import sys
 
-    from agent_runtime import step
+    from zetra_agents import testing
 
-    app = tmp_path / "app"
-    app.mkdir()
+    with testing.loaded(layout.find(repo, AGENT).root, tmp_path / "local") as agent:
+        assert "Report ready" in agent.instructions
+        assert set(agent.tools) == {"write_report"}
+        assert agent.schema("write_report")["function"]["parameters"]["required"] == ["content"]
+        assert asyncio.run(agent.call("write_report", content="All good.")) == {"path": "report.md"}
+        assert (agent.workspace / "report.md").read_text() == "All good.\n"
+        assert "error" in asyncio.run(agent.call("write_report", content="word " * 151))
+
+
+def test_the_scaffolded_tests_pass_with_the_plugin_fixture(repo, pytester):
+    """The rendered tests need nothing but the `agent` fixture this package provides."""
     agent = layout.find(repo, AGENT)
-    shutil.copy(agent.manifest_path, app / "agent.yaml")
-    shutil.copytree(agent.package_dir(), app / agent.package_dir().name)
-    monkeypatch.setenv("AGENT_APP_DIR", str(app))
-    monkeypatch.setenv("AGENT_SANDBOX_DIR", str(tmp_path / "sandbox"))
-    try:
-        instructions, built = step.build_agent(step.load_manifest())
-        assert "Report ready" in instructions
-        assert set(built) == {"write_report"}
-        assert step.schema(built["write_report"])["function"]["parameters"]["required"] == [
-            "content"
-        ]
-        module = sys.modules["demo_agent.agent"]  # imported from /app, as in the image
-        ctx = types.SimpleNamespace(workspace=tmp_path, instructions="", mcp=None)
-        tools = {t.fn.__name__: t.fn for t in module.create_agent(ctx)["tools"]}
-        assert asyncio.run(tools["write_report"]("All good.")) == {"path": "report.md"}
-        assert (tmp_path / "report.md").read_text() == "All good.\n"
-        assert "error" in asyncio.run(tools["write_report"]("word " * 151))
-    finally:
-        if str(app) in sys.path:
-            sys.path.remove(str(app))
-        sys.modules.pop("demo_agent.agent", None)
-        sys.modules.pop("demo_agent", None)
+    result = pytester.runpytest_subprocess("-o", "asyncio_mode=auto", "-q", str(agent.root))
+    result.assert_outcomes(passed=3)
 
 
 def test_dockerfile_targets_match_the_layout():
@@ -571,6 +616,12 @@ def test_rename_edits_only_the_known_fields(tmp_path, capsys, monkeypatch, old, 
     assert cli.main([*argv, "--no-lock", "--no-git"]) == 0
     (target / "uv.lock").write_text(lock_text(REV))
     readme_before = (target / "README.md").read_text()
+    # The starter tests name the agent only through the `agent` fixture; tests that import
+    # the package, as older ones do, are followed too.
+    old_package = old.replace("-", "_")
+    with (target / "agents" / old / "tests/test_agent.py").open("a") as tests:
+        tests.write(f"\nfrom {old_package}.agent import create_agent  # noqa\n")
+        tests.write(f'PACKAGE = "{old_package}"\n')
     capsys.readouterr()
     assert cli.main(["--repo", str(target), "rename", old, new]) == 0
     assert f"agents/{new}" in capsys.readouterr().out
@@ -587,7 +638,7 @@ def test_rename_edits_only_the_known_fields(tmp_path, capsys, monkeypatch, old, 
     assert f'name = "zetra-agent-{new}"' in pyproject and '"agent-runtime"' in pyproject
     tests = (agent.root / "tests/test_agent.py").read_text()
     assert f'PACKAGE = "{new_package}"' in tests and f"from {new_package}.agent import" in tests
-    assert 'ROOT / "agent.yaml"' in tests
+    assert "async def test_report_is_bounded(agent):" in tests
     assert (agent.package_dir() / "instructions/base.md").read_text().startswith(f"You are {new}.")
     assert (target / "README.md").read_text() == readme_before  # prose is left to the user
     assert layout.check(agent) == []

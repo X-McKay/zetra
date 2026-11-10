@@ -1,0 +1,10 @@
+# One session of this agent on this machine: `just run <agent>` runs this file.
+# `model:` scripts what the model would say, turn by turn, so the run needs no model;
+# `just run <agent> --live` ignores it and asks a real one. Add `mcp:` replies once the
+# agent calls MCP tools (the format is in zetra docs/agents.md).
+task: Say that you are running.
+model:
+  - call: write_report
+    arguments:
+      content: The starter agent is running.
+  - say: Report ready.

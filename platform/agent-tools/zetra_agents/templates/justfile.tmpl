@@ -16,12 +16,22 @@ check:
     uv run --locked ruff check .
     uv run --locked ruff format --check .
     uv run --locked zetra-agents check
-    uv run --locked zetra-agents render --check
+    uv run --locked --all-packages zetra-agents render --check
     agents=$(uv run --locked zetra-agents list) || exit $?; for a in $(printf '%s' "$agents" | tr -d '[],"'); do just check-agent "$a" || exit $?; done
+
+# Rewrite what is derived: the files rendered from zetra, and each agent.yaml `tools:`
+# list from the tools its code declares.
+render:
+    uv run --locked --all-packages zetra-agents render
 
 # Test one agent.
 check-agent agent:
     uv run --locked pytest -q "agents/$1"
+
+# Run one session of an agent on this machine: a scripted or local model and scripted MCP
+# replies from agents/AGENT/scenarios/ (default: smoke). Not a deployment check.
+run agent *args:
+    uv run --locked --all-packages zetra-agents run "$@"
 
 # Build one agent's image locally (not pushed), with the target its kind requires.
 build agent:
