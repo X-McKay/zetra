@@ -138,8 +138,8 @@ the field at fault. It is a reading of that schema, not the API server's validat
 `format` (the owner's email) is not checked, the file is read as YAML 1.1 with the last
 of a repeated key winning, and a null or a `3.0` where the schema says integer is
 refused here though the cluster would take it. The cluster has the last word.
-`zetra-agents check` reads the schema the same way and a local run refuses whatever
-`check` does, so CI and the release step refuse the same Agents, the null and the `3.0`
+`zetra-agents check` reads the schema the same way and a local run refuses an agent
+`check` refuses, so CI and the release step refuse the same Agents, the null and the `3.0`
 included.
 
 The MCP grants and the session's token budget then come from the policy bundle the
