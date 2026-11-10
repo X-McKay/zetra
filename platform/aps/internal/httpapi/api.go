@@ -427,6 +427,12 @@ func (a *API) getGrant(w http.ResponseWriter, r *http.Request, c *caller) {
 	writeJSON(w, http.StatusOK, g)
 }
 
+// deleteGrant removes a grant and the token material of the session it is
+// bound to. A caller that names the session it is cleaning up (?session_id=)
+// is refused unless that is the session the grant was deposited for, and
+// nothing is removed. The credential carries no session, so the session is
+// asserted; a request without the parameter is checked by tenant alone, which
+// is what runners older than the parameter send.
 func (a *API) deleteGrant(w http.ResponseWriter, r *http.Request, c *caller) {
 	handle := r.PathValue("handle")
 	g, ok, err := a.loadGrant(r, handle)
@@ -439,6 +445,12 @@ func (a *API) deleteGrant(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	if !a.tenantOK(w, r, c, g.Tenant) {
+		return
+	}
+	q, err := url.ParseQuery(r.URL.RawQuery)
+	if asserted, named := q["session_id"]; err != nil || named && (len(asserted) != 1 || asserted[0] != g.SessionID) {
+		a.log().Info("grant delete refused", "reason", "session", "session_id", g.SessionID, "tenant", g.Tenant)
+		forbid(w, "session")
 		return
 	}
 	ctx := r.Context()

@@ -352,6 +352,141 @@ func TestGrantsLifecycle(t *testing.T) {
 	}
 }
 
+// deposit stores a grant for the session and returns its handle.
+func (e *env) deposit(t *testing.T, session string) string {
+	t.Helper()
+	body, _ := json.Marshal(map[string]any{"session_id": session, "tenant": "tenant-a", "agent": "investigator",
+		"refresh_token": "rt-secret-value", "expires_at": time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)})
+	w := e.do("POST", "/v1/grants", e.subject(t, consent, true), "application/json", string(body))
+	var created map[string]string
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+	if w.Code != 201 || created["grant_handle"] == "" {
+		t.Fatalf("deposit %d %s", w.Code, w.Body)
+	}
+	return created["grant_handle"]
+}
+
+// held reports whether the grant record and the vault entry of its session both exist.
+func (e *env) held(handle, session string) bool {
+	_, grant, _ := e.st.GetGrant(context.Background(), handle)
+	_, vaulted, _ := e.st.GetVault(context.Background(), session)
+	return grant && vaulted
+}
+
+const otherSess = "6f1d2c3e-0000-4000-8000-000000000002"
+
+func TestGrantDeleteIsBoundToItsSession(t *testing.T) {
+	e := newEnv(t)
+	handle := e.deposit(t, sess)
+	_ = e.st.PutExchanged(context.Background(), sess, "backend", []byte("cached"), time.Hour)
+
+	// A session that was handed another session's handle cannot remove that grant.
+	refused := []struct{ name, token, query string }{
+		{"runner for another session", runnerToken, "?session_id=" + otherSess},
+		{"reconciler for another session", reconToken, "?session_id=" + otherSess},
+		{"empty session", runnerToken, "?session_id="},
+		{"repeated session", runnerToken, "?session_id=" + sess + "&session_id=" + otherSess},
+		{"own session repeated", runnerToken, "?session_id=" + sess + "&session_id=" + sess},
+		{"malformed query", runnerToken, "?session_id=" + sess + "&x=%zz"},
+	}
+	for _, c := range refused {
+		w := e.do("DELETE", "/v1/grants/"+handle+c.query, c.token, "", "")
+		if w.Code != 403 || !strings.Contains(w.Body.String(), `"reason":"session"`) {
+			t.Errorf("%s: %d %s", c.name, w.Code, w.Body)
+		}
+		if !e.held(handle, sess) {
+			t.Fatalf("%s: the grant did not survive a refused delete", c.name)
+		}
+		if _, cached, _ := e.st.GetExchanged(context.Background(), sess, "backend"); !cached {
+			t.Fatalf("%s: exchanged tokens did not survive a refused delete", c.name)
+		}
+	}
+	if w := e.do("GET", "/v1/grants/"+handle, runnerToken, "", ""); w.Code != 200 {
+		t.Fatalf("grant unusable after refused deletes: %d", w.Code)
+	}
+	if !strings.Contains(e.logs.String(), `"msg":"grant delete refused"`) || strings.Contains(e.logs.String(), handle) {
+		t.Fatalf("refusal log: %s", e.logs)
+	}
+
+	// The tenant check still comes first and is not replaced by the assertion.
+	e.kube.tenants["tenant-a"] = false
+	if w := e.do("DELETE", "/v1/grants/"+handle+"?session_id="+sess, runnerToken, "", ""); w.Code != 403 || strings.Contains(w.Body.String(), `"reason":"session"`) {
+		t.Fatalf("other-tenant delete %d %s", w.Code, w.Body)
+	}
+	e.kube.tenants["tenant-a"] = true
+	if w := e.do("DELETE", "/v1/grants/"+handle+"?session_id="+sess, strangerTok, "", ""); w.Code != 403 || !e.held(handle, sess) {
+		t.Fatalf("stranger delete %d", w.Code)
+	}
+
+	// The session the grant is bound to removes it, with everything it guards.
+	if w := e.do("DELETE", "/v1/grants/"+handle+"?session_id="+sess, runnerToken, "", ""); w.Code != 204 {
+		t.Fatalf("own delete %d %s", w.Code, w.Body)
+	}
+	if _, ok, _ := e.st.GetGrant(context.Background(), handle); ok {
+		t.Fatal("grant record survives its own session's delete")
+	}
+	if _, ok, _ := e.st.GetVault(context.Background(), sess); ok {
+		t.Fatal("vault entry survives its own session's delete")
+	}
+	if _, ok, _ := e.st.GetExchanged(context.Background(), sess, "backend"); ok {
+		t.Fatal("exchanged tokens survive their own session's delete")
+	}
+	// An absent grant is still 404 whatever is asserted, so cleanup stays idempotent.
+	for _, q := range []string{"", "?session_id=" + sess, "?session_id=" + otherSess} {
+		if w := e.do("DELETE", "/v1/grants/"+handle+q, runnerToken, "", ""); w.Code != 404 {
+			t.Fatalf("absent grant %q: %d", q, w.Code)
+		}
+	}
+}
+
+func TestGrantDeleteLegitimatePaths(t *testing.T) {
+	e := newEnv(t)
+	// The reconciler names the session APS itself listed beside the handle.
+	handle := e.deposit(t, sess)
+	var listed struct {
+		Sessions []struct {
+			SessionID   string `json:"session_id"`
+			GrantHandle string `json:"grant_handle"`
+		} `json:"sessions"`
+	}
+	w := e.do("GET", "/v1/sessions", reconToken, "", "")
+	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil || len(listed.Sessions) != 1 ||
+		listed.Sessions[0].SessionID != sess || listed.Sessions[0].GrantHandle != handle {
+		t.Fatalf("sessions %d %s", w.Code, w.Body)
+	}
+	if w := e.do("DELETE", "/v1/grants/"+listed.Sessions[0].GrantHandle+"?session_id="+listed.Sessions[0].SessionID, reconToken, "", ""); w.Code != 204 {
+		t.Fatalf("reconciler delete %d %s", w.Code, w.Body)
+	}
+	if e.held(handle, sess) {
+		t.Fatal("grant survives the reconciler")
+	}
+
+	// Stop removes the vault first; the grant record is then deleted by its own session.
+	handle = e.deposit(t, otherSess)
+	if w := e.do("POST", "/v1/sessions/"+otherSess+"/stop", runnerToken, "application/json", "{}"); w.Code != 200 {
+		t.Fatalf("stop %d %s", w.Code, w.Body)
+	}
+	if w := e.do("GET", "/v1/grants/"+handle, runnerToken, "", ""); w.Code != 404 {
+		t.Fatalf("get after stop %d", w.Code)
+	}
+	if w := e.do("DELETE", "/v1/grants/"+handle+"?session_id="+sess, runnerToken, "", ""); w.Code != 403 {
+		t.Fatalf("another session after stop %d", w.Code)
+	}
+	if w := e.do("DELETE", "/v1/grants/"+handle+"?session_id="+otherSess, runnerToken, "", ""); w.Code != 204 {
+		t.Fatalf("own delete after stop %d %s", w.Code, w.Body)
+	}
+	if _, ok, _ := e.st.GetGrant(context.Background(), handle); ok {
+		t.Fatal("grant record survives")
+	}
+
+	// A runner older than the session parameter sends none and is checked by tenant alone.
+	const third = "6f1d2c3e-0000-4000-8000-000000000003"
+	handle = e.deposit(t, third)
+	if w := e.do("DELETE", "/v1/grants/"+handle, runnerToken, "", ""); w.Code != 204 || e.held(handle, third) {
+		t.Fatalf("unasserted delete %d", w.Code)
+	}
+}
+
 func TestGrantsRefusals(t *testing.T) {
 	e := newEnv(t)
 	cases := []struct {
