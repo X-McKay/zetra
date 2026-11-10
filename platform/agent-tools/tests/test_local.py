@@ -63,13 +63,13 @@ def create_agent(ctx) -> dict:
         (ctx.workspace / "report.md").write_text("Written, then gone.")
         raise SystemExit(2)
 
-    async def forge(record: str) -> dict:
+    async def forge(record: str, code: int = 2) -> dict:
         """Prints its own result where the driver prints one, then ends the process."""
         import os
 
         (ctx.workspace / "report.md").write_text("Written, then gone.")
         os.write(1, record.encode())
-        os._exit(2)
+        os._exit(code)
 
     async def nap() -> dict:
         """Says which process it is, then outlives any test."""
@@ -356,6 +356,11 @@ def test_the_forged_result_the_platform_would_take_is_taken_here_too(agent, tmp_
     forged = {"call": "forge", "arguments": {"record": json.dumps(RESULT)}}
     result = local.run(agent, scenario(model=[forged]), out=tmp_path / "run")
     assert result.outcome == "completed" and len(result.boundaries) == 2
+    # After an exit code that is not a step's, the runner reads no result, and so not here.
+    record = json.dumps({**RESULT, "done": False})
+    forged = {"call": "forge", "arguments": {"record": record, "code": 5}}
+    result = local.run(agent, scenario(model=[forged]), out=tmp_path / "other")
+    assert result.outcome == "protocol_error" and len(result.boundaries) == 1
 
 
 def test_runs_that_cannot_start_are_refused_without_a_run_directory(agent, tmp_path, monkeypatch):
@@ -498,6 +503,9 @@ def test_the_session_budget_is_the_smallest_grant_as_the_pod_template_sets_it(
         result = local.run(agent, scenario(), live=True, out=tmp_path / "run")
     assert result.outcome == "budget" and not result.ok
     assert len(result.boundaries) == 1
+    # That was the SDK's advisory check. The gateway's reservation, which is what holds a
+    # platform session, is not modelled: a scripted model reports no usage to count.
+    assert local.run(agent, scenario(), out=tmp_path / "scripted").outcome == "completed"
 
 
 def test_a_session_stops_at_the_agents_own_boundary_limit(agent, tmp_path):
@@ -647,7 +655,9 @@ def test_a_stopped_run_ends_its_step_and_leaves_a_removable_directory(
     try:
         deadline = time.monotonic() + 60
         while not pid_file.is_file() or not pid_file.read_text():
-            assert running.poll() is None and time.monotonic() < deadline, running.stderr.read()
+            if running.poll() is not None or time.monotonic() > deadline:
+                running.kill()  # first, or reading what it said waits for it to say it
+                pytest.fail(running.communicate()[1].decode())
             time.sleep(0.05)
         step = int(pid_file.read_text())
         running.send_signal(sent)
@@ -655,11 +665,8 @@ def test_a_stopped_run_ends_its_step_and_leaves_a_removable_directory(
     finally:
         running.kill()
     assert running.returncode == code and said in stderr and b"Traceback" not in stderr
-    deadline = time.monotonic() + 10  # killed at once; after Ctrl-C it is init that reaps it
-    with pytest.raises(ProcessLookupError):
-        while time.monotonic() < deadline:
-            os.kill(step, 0)
-            time.sleep(0.05)
+    with pytest.raises(ProcessLookupError):  # ended and waited for before the run returned
+        os.kill(step, 0)
     shutil.rmtree(out)
     assert not out.exists()
 

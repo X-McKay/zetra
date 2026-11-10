@@ -7,15 +7,20 @@ only while the session runs, as it is there). Two things are replaced,
 because a laptop has neither: the model route (the scenario's scripted turns, or with
 `live` an OpenAI-compatible endpoint from the environment) and the MCP route (the
 scenario's scripted replies, behind the grants in `deploy/agent.yaml`). That file is
-first held to the Agent CRD's schema (`zetra_agents.schema`), as the API server holds
-it; the grants, the session's token budget and its boundary limit are then read from the
-policy bundle the contracts compile the Agent to. The boundary limit is where a local run
-is stricter than the platform is today: the Session Runner bounds a session by what its
-submitter passes (64 unless told otherwise) and does not read the Agent's
-`spec.runtime.maxBoundaries`, which a local run holds the agent to. An agent whose Agent
-the cluster would not store, whose layout `zetra-agents check` refuses, or whose Agent
-does not compile, is not run. A step counts only when it printed what the Session Runner would accept as
-its boundary's result (`step_result`); a tool can print that itself, there as here.
+first held to the Agent CRD's schema as `zetra_agents.schema` reads it, which is not in
+every respect how the API server does (the differences are listed there); the grants, the
+session's token budget and its boundary limit are then read from the policy bundle the
+contracts compile the Agent to. The boundary limit is where a local run is stricter than
+the platform is today: the Session Runner bounds a session by what its submitter passes
+(64 unless told otherwise) and does not read the Agent's `spec.runtime.maxBoundaries`,
+which a local run holds the agent to. The token budget is where it is laxer: the step is
+given the figure as the pod template gives it, but what holds a platform session to it is
+the gateway's reservation before each model call, and that is not here. Only the SDK's
+own advisory check is, and a scripted model reports no usage for it to count. An agent
+whose Agent is outside the schema as read here, whose layout `zetra-agents check`
+refuses, or whose Agent does not compile, is not run. A step counts only when it exited
+as a step may and printed what the Session Runner would accept as its boundary's result
+(`step_result`); a tool can print that itself, there as here.
 
 So a local run shows what the agent does with a task: which tools it calls, what the
 grants would refuse, what the report says. It is not a deployment check. Identity, the
@@ -79,7 +84,8 @@ MAX_SNAPSHOT = 64 * 1024 * 1024  # the Session Runner's limit on the tar of work
 MAX_OUTPUT = 65536  # the Session Runner's limit on what a step prints
 MAX_SUMMARY = 512
 RESULT_FIELDS = {"boundary", "kind", "done", "tool", "usage", "summary"}
-OUTCOMES = {0: "running", 2: "completed", 3: "agent_error", 4: "budget", 5: "protocol_error"}
+# The exit codes the Session Runner reads a result after; any other is a failed boundary.
+OUTCOMES = {0: "running", 2: "completed", 3: "agent_error", 4: "budget"}
 NOT_A_DEPLOYMENT_CHECK = (
     "local run: the model and MCP are stand-ins; identity, gateway policy, budgets, the "
     "sandbox and the signed image are exercised only on the platform"
@@ -256,8 +262,9 @@ def new_directory(agent: AgentDir, out: Path | None) -> Path:
 
 def compiled(agent: AgentDir) -> dict:
     """The policy bundle the contracts compile this Agent to. Its MCP grants and session
-    token budget are what a session is held to on the platform; its boundary limit is the
-    Agent's own, which the Session Runner does not read (the submitter sets that one)."""
+    token budget are what the gateway holds a session to on the platform; its boundary
+    limit is the Agent's own, which the Session Runner does not read (the submitter sets
+    that one)."""
     release = {"metadata": {"name": "local"}, "spec": {"agent": agent.name, "image": "local"}}
     try:
         return compile_bundle(
@@ -433,8 +440,27 @@ def tar_bytes(sandbox: Path) -> int:
 
 def snapshot_size(sandbox: Path) -> int:
     """The size of the tar the Session Runner limits: `tar_bytes`, the two empty blocks
-    that end an archive, rounded up to tar's 10 KiB record."""
+    that end an archive, rounded up to tar's 10 KiB record. Only the size is modelled: a
+    file tar cannot read fails the platform's snapshot and is counted here at its size."""
     return -(-(tar_bytes(sandbox) + 1024) // 10240) * 10240
+
+
+def run_step(payload: bytes, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess:
+    """One boundary, as `subprocess.run` would run it, except that the step is ended and
+    waited for however this is left. `subprocess.run` does not wait after a Ctrl-C, which
+    leaves the step unreaped for as long as the caller lives."""
+    command = [sys.executable, "-m", "zetra_agents.local_step"]
+    pipe = subprocess.PIPE
+    with subprocess.Popen(command, stdin=pipe, stdout=pipe, stderr=pipe, cwd=cwd, env=env) as step:
+        try:
+            stdout, stderr = step.communicate(
+                f"{len(payload)}\n".encode() + payload, timeout=BOUNDARY_SECONDS
+            )
+        except BaseException:
+            step.kill()
+            step.wait()
+            raise
+    return subprocess.CompletedProcess(command, step.returncode, stdout, stderr)
 
 
 def snapshot_problems(size: int) -> list[str]:
@@ -536,15 +562,7 @@ def run(
         for n in range(max_boundaries):
             payload = json.dumps({"boundary": n, "task": task}, separators=(",", ":")).encode()
             try:
-                done = subprocess.run(
-                    [sys.executable, "-m", "zetra_agents.local_step"],
-                    input=f"{len(payload)}\n".encode() + payload,
-                    capture_output=True,
-                    cwd=directory / "cwd",
-                    env=env,
-                    timeout=BOUNDARY_SECONDS,
-                    check=False,
-                )
+                done = run_step(payload, directory / "cwd", env)
             except subprocess.TimeoutExpired:
                 result.outcome = "timeout"
                 result.detail = f"boundary {n} ran past {BOUNDARY_SECONDS:.0f} s"
@@ -555,7 +573,8 @@ def run(
             outcome = OUTCOMES.get(done.returncode)
             # As the Session Runner reads a step: 0, 2, 3 and 4 mean what they say only
             # with the driver's result for this boundary, `done` agreeing with the exit
-            # code. A tool that calls sys.exit(2) has not completed the session.
+            # code. A tool that calls sys.exit(2) has not completed the session, and after
+            # any other exit code no result is read at all.
             record = step_result(done.stdout, n, done.returncode) if outcome else None
             if record is None:
                 result.outcome = {

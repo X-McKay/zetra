@@ -9,11 +9,13 @@ run holds `deploy/agent.yaml` to the same schema, so a limit the cluster would n
 the CRD starts using a keyword this does not read. `default` needs no reading.
 
 This is not the API server's validator, and it differs from it in known ways. `format`
-(the owner's `email`) is not checked, nor is an integer too large for the cluster to
-store, so those reach the cluster's own refusal. In the other direction it is stricter:
-a null and an integral float such as `3.0` are refused here where the cluster would drop
-the one and accept the other. An unknown field is not a problem here: the API server
-drops it.
+(the owner's `email`) is not checked, and neither is an integer past 64 bits, which the
+platform cannot carry. The file is read as YAML 1.1 with the last of a repeated key
+winning, where the tools that apply it to the cluster read YAML 1.2 and refuse a repeated
+key, so `enabled: yes` is a boolean here and a string there. In the other direction
+this is stricter: a null and an integral float such as `3.0` are refused here where the
+cluster would drop the one and accept the other. An unknown field is not a problem here:
+the API server drops it. Where the two differ, the cluster has the last word.
 """
 
 from __future__ import annotations
