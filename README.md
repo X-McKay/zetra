@@ -11,7 +11,7 @@ another without client-local recovery state.
 ```bash
 uvx --from 'git+https://github.com/X-McKay/zetra@<commit>#subdirectory=platform/agent-tools' \
   zetra-agents init my-agent --name my-agent --owner you@example.com
-cd my-agent && just setup && just check
+cd my-agent && just setup && just check && just run my-agent
 ```
 
 `zetra-agents init` (or `zetra init` from a checkout) renders an agent repository for the
@@ -19,7 +19,9 @@ Agent Runtime Platform, locks it and starts its git history: `agents/<name>/`
 members of one uv workspace, one `uv.lock` that is the image lock, and a Dockerfile, CI,
 justfile and release shim rendered from `platform/agent-tools` at one pinned zetra commit.
 A repository holds one agent or many with the same layout. Agents reach the outside only
-through `ctx.mcp`; a release is a tag `<agent>/v<version>`, signed keylessly by the
+through `ctx.mcp`; tools are declared once in the code, tests get the agent as its image
+builds it with a scripted MCP, and `just run` drives a whole session locally from a
+scenario. A release is a tag `<agent>/v<version>`, signed keylessly by the
 repository's workflow, that Kubani stages and approves. See
 [agent authoring](docs/agents.md) and [the platform](docs/platform.md).
 

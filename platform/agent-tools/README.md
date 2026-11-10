@@ -13,11 +13,17 @@ sandbox SDK in its images, this tooling and the contracts the Registry Controlle
 | --- | --- |
 | `zetra-agents init DIR --agent NAME --owner EMAIL` | render a new repository holding one agent |
 | `zetra-agents check [AGENT...]` | repository layout, agent layout (spec 11.7), network-import ban (14.1), fixture gate |
-| `zetra-agents render [--check]` | write the rendered root files, or verify they match the templates at the pinned commit |
+| `zetra-agents render [--check]` | write the rendered root files and each `agent.yaml` `tools:` list from the code, or verify both |
+| `zetra-agents run AGENT [--scenario S] [--task T] [--live]` | one whole session on this machine: the SDK's boundary driver, a scripted or local model, scripted MCP behind the Agent's grants |
 | `zetra-agents image-target AGENT` | `runtime`, or `fixture` for the conformance fixtures in `layout.FIXTURES` |
 | `zetra-agents preflight AGENT --tag T --kubani PATH` | offline source/candidate compatibility against a Kubani checkout |
 | `zetra-agents release AGENT --image DIGEST --revision SHA --out DIR` | the Agent, unapproved AgentRelease, policy bundle and release predicate |
 | `zetra-agents predicate eval|vuln|provenance` | one attestation predicate for cosign |
+
+`zetra_agents.testing` and the pytest plugin this package registers give an agent's tests
+the `agent` fixture: the agent built by the SDK from the image layout, with a scripted
+MCP that answers only what `deploy/agent.yaml` grants. None of it is in an image; the
+package is a development dependency of an agent repository. See `docs/agents.md`.
 
 `.github/actions/agent-release` is the composite action a repository's rendered
 `release.yml` calls on an `<agent>/v<version>` tag: build with the agent's image target,

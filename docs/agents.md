@@ -5,7 +5,7 @@
 ```bash
 uvx --from 'git+https://github.com/X-McKay/zetra@<commit>#subdirectory=platform/agent-tools' \
   zetra-agents init my-agent --name my-agent --owner you@example.com
-cd my-agent && just setup && just check
+cd my-agent && just setup && just check && just run my-agent
 ```
 
 `zetra-agents init` renders a repository for the Agent Runtime Platform (`platform/`,
@@ -20,7 +20,7 @@ package, manifest, Agent, project name, tests and instructions, and re-locks.
 my-agent/
 ├── pyproject.toml, uv.lock          one uv workspace; uv.lock is AgentRelease.spec.lockSha256
 ├── Dockerfile, .dockerignore        one image recipe for every agent (targets runtime, fixture)
-├── justfile                         setup, check, check-agent, build, policy-digest, preflight
+├── justfile                         setup, check, run, render, build, policy-digest, preflight
 ├── .github/workflows/ci.yml         check, render check, per-agent tests and image build
 ├── .github/workflows/release.yml    on tags <agent>/v*: calls zetra's agent-release action
 ├── AGENTS.md, README.md, .gitignore seeded once, then yours
@@ -29,7 +29,8 @@ my-agent/
     ├── agent.yaml                   the image manifest (spec 11.7), /app/agent.yaml
     ├── deploy/agent.yaml            the Agent resource (spec 6.1) the security review approves
     ├── src/my_agent/                create_agent(ctx) and instructions/base.md
-    └── tests/                       manifest and tool agreement, bounded report
+    ├── tests/                       the agent as its image builds it, and the smoke session
+    └── scenarios/smoke.yaml         a scripted session for `just run`
 ```
 
 The files outside `agents/` that every repository shares are rendered from
@@ -41,14 +42,90 @@ source; change the templates in zetra instead. `zetra-agents check` requires
 `agent.yaml` and `deploy/agent.yaml` to agree (the model is granted, names match),
 compiles each release policy (only `remote_read` grants), refuses network and process
 imports and stray files in agent packages, and admits the fixture image target only for
-the conformance fixtures it lists. The scaffolded tests check `create_agent` against the
-manifest through the SDK's own loader, as CI does inside the built image.
+the conformance fixtures it lists.
+
+### Writing an agent
 
 `create_agent(ctx)` receives `ctx.workspace`, `ctx.instructions` and `ctx.mcp`, and
 returns `{"tools": [Tool(fn, effect), ...]}` with effects `workspace_read`,
 `workspace_write` and `remote_read`; every remote read goes through `ctx.mcp` to a
 backend and tool granted in `deploy/agent.yaml`. The Session Runner drives one boundary
 per `agent_runtime.step`; the report is `workspace/report.md`, at most 16000 bytes.
+
+A tool is declared once, in the code. `just render` reads the list from `create_agent`
+and writes the `tools:` block of `agent.yaml`; `render --check` (in `just check` and CI)
+names any difference. Only that block is rewritten, and only when a name or effect
+changed, because the manifest's bytes are hashed into every release. The grants in
+`deploy/agent.yaml` are not derived: they are the capabilities a security review
+approves, so they stay written by a person. The conformance fixtures are not derived
+either; their own image build holds them to their manifests.
+
+`agent_runtime.report` is the ending most agents share. `Evidence(ctx.workspace)`
+records what a remote read returned as `evidence/<label>-<sha256>.json` and returns the
+data with its link; `report_tool(ctx.workspace, evidence)` is a `write_report` tool that
+bounds the narrative and appends exactly the evidence links that exist, so a report can
+cite only what was observed.
+
+### Testing an agent
+
+`zetra-agents` registers a pytest plugin, so an agent's tests need no setup of their own:
+
+```python
+async def test_pods_are_listed(agent):
+    agent.mcp.reply("pods_list_in_namespace", {"items": []})
+    result = await agent.call("list_pods")
+    assert agent.mcp.calls == [("kubernetes", "pods_list_in_namespace", {"namespace": "demo"})]
+```
+
+`agent` is the agent built by the SDK's own loader from the layout its image has, so a
+manifest that disagrees with the code fails here as it does in the sandbox. `agent.mcp`
+stands where the gateway would: it answers only tools `deploy/agent.yaml` grants, and
+raises `PolicyDenied` for the rest as the gateway's 403 does. A test fails when the agent
+made an ungranted call (the message names the grant line to add), a call with no scripted
+reply, or an MCP call from a tool not declared `remote_read`; a test that means to
+exercise a refusal sets `agent.mcp.strict = False`. The kit lives in the tooling, a
+development dependency, so no test double is ever in a signed image.
+
+### Running an agent locally
+
+```bash
+just run my-agent                         # scenarios/smoke.yaml
+just run my-agent --scenario crashloop    # agents/my-agent/scenarios/crashloop.yaml
+just run my-agent --live --task "Why is the checkout pod restarting?"
+```
+
+`zetra-agents run` drives one whole session through `agent_runtime.step`, one process
+per boundary as the Session Runner does, and prints each boundary, the report path and
+the transcript path. The model and MCP are stand-ins described by a scenario:
+
+```yaml
+task: Why is the checkout pod restarting?     # text, or a mapping sent as given
+mcp:                                          # what each granted MCP tool returns
+  - tool: pods_list_in_namespace
+    backend: kubernetes                       # optional
+    result: {items: []}                       # text, or a document sent as JSON
+  - tool: events_list
+    error: upstream unavailable               # the call fails instead
+model:                                        # scripted turns; ignored with --live
+  - call: list_pods
+    arguments: {namespace: shop}
+  - call: write_report
+    arguments: {content: Nothing is restarting.}
+  - say: The report is written.
+```
+
+With `--live` the model is any OpenAI-compatible endpoint: `ZETRA_AGENTS_MODEL_URL` is
+its `/v1` base URL, `ZETRA_AGENTS_MODEL_NAME` the name it serves the model under (the
+manifest's name is the platform route's) and `ZETRA_AGENTS_MODEL_API_KEY` its key, if
+any. The run exits 0 only when the session completed with a readable `report.md` and
+made no MCP call that was ungranted or missing from the scenario; each of those is
+printed with the line to add. Runs are kept under `~/.local/state/zetra/agent-runs/`.
+The scaffolded tests run the smoke scenario, so it stays true as the agent changes.
+
+A local run shows what the agent does with a task. It is not a deployment check:
+identity, the gateway's policy and budgets, the sandbox, the network policy, the signed
+image and the real MCP servers are exercised only by a session on the platform
+(`just agent run` in Kubani).
 
 A release is a tag `<agent>/v<version>` pushed from merged `main`, one at a time. The
 rendered `release.yml` calls `.github/actions/agent-release`, which builds the image with

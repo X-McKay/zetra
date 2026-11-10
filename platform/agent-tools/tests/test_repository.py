@@ -402,7 +402,7 @@ def test_the_scaffolded_tests_pass_with_the_plugin_fixture(repo, pytester):
     """The rendered tests need nothing but the `agent` fixture this package provides."""
     agent = layout.find(repo, AGENT)
     result = pytester.runpytest_subprocess("-o", "asyncio_mode=auto", "-q", str(agent.root))
-    result.assert_outcomes(passed=2)
+    result.assert_outcomes(passed=3)
 
 
 def test_dockerfile_targets_match_the_layout():

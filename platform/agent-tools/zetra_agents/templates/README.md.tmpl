@@ -11,8 +11,9 @@ agents/<name>/
   agent.yaml            manifest (spec 11.7), baked in as /app/agent.yaml
   deploy/agent.yaml     the Agent resource (spec 6.1): identity, models, MCP tools, budget
   pyproject.toml        this agent's dependencies; a member of the root workspace
-  src/<package>/        create_agent(ctx) and the agent's instructions
-  tests/                unit tests, including manifest/tool agreement
+  src/<package>/        create_agent(ctx), where tools are declared, and the instructions
+  tests/                tests against the agent as its image builds it
+  scenarios/            scripted sessions for `just run`
 pyproject.toml, uv.lock one workspace, one lock: its SHA-256 is AgentRelease.spec.lockSha256
 Dockerfile              one image recipe for every agent (rendered from zetra)
 .github/workflows/      CI, and the release shim that calls zetra's release action
@@ -23,8 +24,17 @@ Dockerfile              one image recipe for every agent (rendered from zetra)
 ```
 just setup      # install the locked workspace
 just check      # lint, tests, layout, rendered files
+just run @@AGENT@@     # one whole session on this machine, from scenarios/smoke.yaml
+just render     # rewrite what is derived, including agent.yaml `tools:` from the code
 just build @@AGENT@@   # build the image locally
 ```
+
+`just run` drives the agent through the SDK's own boundary driver with the scenario's
+scripted model turns and MCP replies, and prints each boundary and where the report is.
+`just run @@AGENT@@ --live --task "..."` asks a real model instead: any OpenAI-compatible
+endpoint named by `ZETRA_AGENTS_MODEL_URL` (and optionally `ZETRA_AGENTS_MODEL_NAME`,
+`ZETRA_AGENTS_MODEL_API_KEY`). A local run shows what the agent does; identity, policy,
+budgets and the sandbox are exercised only by a session on the platform.
 
 Another agent in the same repository is another directory under `agents/`; to rename one,
 `uv run --locked zetra-agents rename <old> <new>` (it re-locks the workspace).

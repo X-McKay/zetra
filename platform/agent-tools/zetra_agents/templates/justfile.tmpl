@@ -28,6 +28,11 @@ render:
 check-agent agent:
     uv run --locked pytest -q "agents/$1"
 
+# Run one session of an agent on this machine: a scripted or local model and scripted MCP
+# replies from agents/AGENT/scenarios/ (default: smoke). Not a deployment check.
+run agent *args:
+    uv run --locked --all-packages zetra-agents run "$@"
+
 # Build one agent's image locally (not pushed), with the target its kind requires.
 build agent:
     docker build --platform linux/amd64 --build-arg "AGENT=$1" --target "$(uv run --locked zetra-agents image-target "$1")" -t "agent-$1:dev" .

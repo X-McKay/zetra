@@ -43,6 +43,16 @@ def mcp_grants(agent_cr: dict) -> dict[str, set[str]]:
     return grants
 
 
+def ungranted(agent: str, backend: str, tool: str) -> str:
+    """What to do about an MCP call the Agent does not grant."""
+    return (
+        f"{agent} called MCP {backend}/{tool}, which deploy/agent.yaml does not "
+        f"grant; the gateway would refuse it. If the agent needs it, add `{tool}` to "
+        f"the tools of the `{backend}` entry under spec.capabilities.mcp (a "
+        "capability change for review); otherwise remove the call"
+    )
+
+
 class FakeMcp:
     """`ctx.mcp` without a gateway: the same signature, argument checks and result shape
     as `agent_runtime.mcp.call_tool`.
@@ -115,12 +125,7 @@ class FakeMcp:
         """Calls the deployed agent could not have made, or the test did not account for."""
         found = []
         for backend, tool in sorted({(b, t) for b, t, _ in self.denied}):
-            found.append(
-                f"{self.agent} called MCP {backend}/{tool}, which deploy/agent.yaml does not "
-                f"grant; the gateway would refuse it. If the agent needs it, add `{tool}` to "
-                f"the tools of the `{backend}` entry under spec.capabilities.mcp (a "
-                "capability change for review); otherwise remove the call"
-            )
+            found.append(ungranted(self.agent, backend, tool))
         for backend, tool in sorted({(b, t) for b, t, _ in self.unscripted}):
             found.append(
                 f"{self.agent} called MCP {backend}/{tool} with no scripted reply; "

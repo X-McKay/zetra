@@ -421,6 +421,7 @@ def next_steps(target: Path, agent: str, tenant: str, bootstrapped: dict[str, st
     if bootstrapped.get("lock") != "locked":
         steps.append("uv lock")
     steps.append("just setup && just check")
+    steps.append(f"just run {agent}   (one scripted session on this machine)")
     if bootstrapped.get("git", "").startswith("initialised"):
         steps += [
             "git add -A && git commit -m 'new agent'",
