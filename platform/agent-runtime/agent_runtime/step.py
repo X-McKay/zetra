@@ -1,6 +1,10 @@
 """One boundary: load state, call the model or one tool, persist state, print the result
 (spec 10.4, 11.8).
 
+A model-free agent (manifest `model: null`) returns a `decide` function from `create_agent`; at
+each boundary where a model would be called, `decide(task, results)` is called instead and
+returns a ToolCall or a Done. Everything after that is shared: the tool runs on the next boundary.
+
 Exit codes: 0 success; 2 completion (done: true); 3 agent error (terminal); 4 budget
 (advisory counter, or a 429 from the gateway); 5 protocol error. Anything else, such as an
 uncaught exception (1), is an unknown outcome for the runner.
@@ -22,7 +26,7 @@ import yaml
 
 from agent_runtime import confine
 from agent_runtime.identity import sandbox_dir, state_dir, write_private
-from agent_runtime.tools import EFFECTS, Tool
+from agent_runtime.tools import EFFECTS, Done, Tool, ToolCall, ToolResult
 
 MAX_INPUT = 65536
 MAX_OUTPUT = 65536
@@ -118,7 +122,14 @@ def load_manifest() -> dict:
 
 
 def build_agent(manifest: dict):
-    """Import the agent and check its tools match the manifest exactly. Errors are agent errors."""
+    """`create`, without `decide`: what an agent built with a model returns."""
+    return create(manifest)[:2]
+
+
+def create(manifest: dict):
+    """Import the agent and check its tools match the manifest exactly, and that it has a
+    `decide` exactly when the manifest declares no model. Returns (instructions, tools,
+    decide), decide being None for a model-backed agent. Errors are agent errors."""
     app = app_dir().resolve()
     module, _, factory = manifest["entrypoint"].partition(":")
     path = (app / manifest["instructions"]).resolve()
@@ -142,7 +153,20 @@ def build_agent(manifest: dict):
     tools = {t.fn.__name__: t for t in listed}
     if len(tools) != len(listed) or {n: t.effect for n, t in tools.items()} != declared:
         raise ValueError("the image's tools do not match its manifest")
-    return instructions, tools
+    decide = agent.get("decide")
+    if manifest.get("model") is None and decide is None:
+        raise ValueError(
+            "agent.yaml declares model: null, so create_agent must also return a decide "
+            'function; add `"decide": decide` to what it returns, or declare a model'
+        )
+    if manifest.get("model") is not None and decide is not None:
+        raise ValueError(
+            "create_agent returns a decide function but agent.yaml declares a model; remove "
+            "`decide` from what it returns, or declare model: null (and capabilities.models: [])"
+        )
+    if decide is not None and not callable(decide):
+        raise ValueError("decide must be callable")
+    return instructions, tools, decide
 
 
 def schema(tool: Tool) -> dict:
@@ -263,6 +287,80 @@ def run_model(state: dict, manifest: dict, tools: dict, out: dict) -> int:
     return 0
 
 
+def tool_history(messages: list) -> list[ToolResult]:
+    """The tool calls made so far, in order, read back from the session state."""
+    history, pending = [], None
+    for m in messages:
+        if m["role"] == "assistant" and m.get("tool_calls"):
+            pending = m["tool_calls"][0]["function"]
+        elif m["role"] == "tool" and pending is not None:
+            history.append(
+                ToolResult(
+                    pending["name"],
+                    json.loads(pending["arguments"] or "{}"),
+                    json.loads(m["content"]),
+                )
+            )
+            pending = None
+    return history
+
+
+def run_decide(state: dict, task, tools: dict, decide, out: dict) -> int:
+    """The boundary where a model-backed agent would call the model: ask `decide` instead and
+    record its answer in the shape the model's reply takes, so the next boundary runs the
+    tool through `run_tool` and completion is the same exit 2. No model call, so no usage;
+    the record is a `tool` boundary with no tool, which the runner already accepts. A failure
+    names the problem and never the task or the exception's text, which may hold either."""
+    out.update(kind="tool", usage=None)
+    try:
+        decision = decide(task, tool_history(state["messages"]))
+        if inspect.isawaitable(decision):
+            if inspect.iscoroutine(decision):
+                decision.close()
+            out["summary"] = "agent error: decide must be a plain function, not async"
+            return 3
+    except Exception as e:  # noqa: BLE001 - whatever decide raises is an agent error
+        out["summary"] = f"agent error: decide raised {type(e).__name__}"
+        return 3
+    if isinstance(decision, Done):
+        if not isinstance(decision.summary, str):
+            out["summary"] = "agent error: Done.summary must be a string"
+            return 3
+        state["messages"].append({"role": "assistant", "content": decision.summary})
+        out["summary"] = decision.summary
+        return 2
+    if not isinstance(decision, ToolCall):
+        out["summary"] = (
+            f"agent error: decide returned {type(decision).__name__}, not a ToolCall or a Done"
+        )
+        return 3
+    if not isinstance(decision.name, str) or decision.name not in tools:
+        out["summary"] = (
+            f"agent error: decide named a tool the agent does not have "
+            f"({short(decision.name, 64)}); its tools are {', '.join(sorted(tools))}"
+        )
+        return 3
+    try:
+        if not isinstance(decision.arguments, dict):
+            raise TypeError
+        arguments = json.dumps(decision.arguments)
+    except (TypeError, ValueError):
+        out["summary"] = f"agent error: the arguments for {decision.name} are not a JSON object"
+        return 3
+    call = {"name": decision.name, "arguments": arguments}
+    state["messages"].append(
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": f"decide_{out['boundary']}", "type": "function", "function": call}
+            ],
+        }
+    )
+    out["summary"] = f"decided to call {decision.name}"
+    return 0
+
+
 def main() -> None:
     confine.apply()
     try:
@@ -291,7 +389,7 @@ def main() -> None:
         emit({**out, "summary": "boundary mismatch"}, 5)
     try:
         manifest = load_manifest()
-        instructions, tools = build_agent(manifest)
+        instructions, tools, decide = create(manifest)
     except Exception as e:  # noqa: BLE001 - any failure to build the agent is an agent error
         emit({**out, "summary": f"agent error: {type(e).__name__}: {short(e, 200)}"}, 3)
     if not state["messages"]:
@@ -311,6 +409,8 @@ def main() -> None:
         )
         keys = list(result)[:3] if isinstance(result, dict) else "ok"
         out.update(kind="tool", tool=name, summary=f"{name} -> {keys}")
+    elif decide is not None:
+        rc = run_decide(state, req["task"], tools, decide, out)
     else:
         rc = run_model(state, manifest, tools, out)
 

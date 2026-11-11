@@ -11,12 +11,15 @@ import pytest
 from agent_runtime import step
 from agent_runtime.tools import Tool
 from tests.fakes import (
+    DECIDE_MODULE,
     MANIFEST,
+    MODEL_FREE_MANIFEST,
     FakeGateway,
     assert_redacted,
     chat_response,
     make_app,
     make_ca,
+    make_decide_app,
 )
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -311,3 +314,91 @@ def test_sync_tools_are_rejected():
 
     with pytest.raises(ValueError, match="async"):
         Tool(sync_tool, "workspace_read")
+
+
+# --- model-free agents: `decide` stands where the model would ---------------------------------
+
+
+@pytest.fixture
+def free(sandbox):
+    make_decide_app(sandbox.root / "app")
+    return sandbox
+
+
+def test_model_free_session_two_tool_calls_then_completion(free):
+    task = {"mode": "ok", "pod": "web-1"}
+    rc, out, _ = free.run(0, task)
+    assert (rc, out["kind"], out["tool"], out["usage"], out["done"]) == (
+        0,
+        "tool",
+        None,
+        None,
+        False,
+    )
+    assert out["summary"] == "decided to call get_pod"
+    call = free.saved()["messages"][-1]
+    assert call["role"] == "assistant" and call["tool_calls"][0]["function"]["name"] == "get_pod"
+
+    rc, out, _ = free.run(1, task)
+    assert (rc, out["kind"], out["tool"]) == (0, "tool", "get_pod")
+    assert (free.workspace / "pod-web-1").exists()
+
+    rc, out, _ = free.run(2, task)
+    assert (rc, out["tool"], out["summary"]) == (0, None, "decided to call write_report")
+    rc, out, _ = free.run(3, task)
+    assert (rc, out["tool"]) == (0, "write_report")
+    assert (free.workspace / "report.md").read_text() == "saw web-1"
+
+    rc, out, _ = free.run(4, task)
+    assert (rc, out["kind"], out["done"], out["summary"], out["usage"]) == (
+        2,
+        "tool",
+        True,
+        "reported on web-1",
+        None,
+    )
+    assert free.saved()["next"] == 5
+    assert free.gw.chat_requests == [] and free.gw.token_requests == []  # no model, no token
+    assert_redacted(*free.outputs)
+
+
+@pytest.mark.parametrize(
+    "mode,message",
+    [
+        ("raise", "decide raised RuntimeError"),
+        ("wrong-type", "decide returned dict, not a ToolCall or a Done"),
+        ("unknown-tool", "named a tool the agent does not have (delete_everything)"),
+        ("bad-arguments", "arguments for get_pod are not a JSON object"),
+        ("bad-summary", "Done.summary must be a string"),
+    ],
+)
+def test_decide_failures_are_agent_errors_that_do_not_echo_the_task(free, mode, message):
+    rc, out, err = free.run(0, {"mode": mode, "secret": "task-secret-value-9f3"})
+    assert rc == 3 and out["done"] is False and message in out["summary"]
+    assert out["summary"].startswith("agent error: ")
+    assert "task-secret-value-9f3" not in out["summary"] + err
+
+
+def test_async_decide_is_an_agent_error(sandbox):
+    module = DECIDE_MODULE.replace("def decide(", "async def decide(")
+    make_decide_app(sandbox.root / "app", module=module)
+    rc, out, _ = sandbox.run(0, {"mode": "ok", "pod": "p"})
+    assert rc == 3 and "plain function" in out["summary"]
+
+
+def test_model_free_manifest_without_decide_exits_3(sandbox):
+    module = DECIDE_MODULE.replace('"decide": decide', '"extra": 1')
+    make_decide_app(sandbox.root / "app", module=module)
+    rc, out, _ = sandbox.run(0, {"mode": "ok", "pod": "p"})
+    assert (
+        rc == 3
+        and "model: null" in out["summary"]
+        and "must also return a decide" in out["summary"]
+    )
+
+
+def test_model_backed_manifest_with_decide_exits_3(sandbox):
+    make_decide_app(sandbox.root / "app", {**MODEL_FREE_MANIFEST, "model": MANIFEST["model"]})
+    rc, out, _ = sandbox.run(0)
+    assert rc == 3 and "declares a model" in out["summary"] and "remove" in out["summary"]
+    assert sandbox.gw.chat_requests == []

@@ -51,7 +51,8 @@ A scenario is a YAML file, by convention `agents/<agent>/scenarios/<name>.yaml`:
         result: {items: []}                        # text, or a document sent as JSON
       - tool: events_list
         error: upstream unavailable                # the call fails instead
-    model:                                         # omit for a live model
+    model:                                         # omit for a live model, and for an
+                                                   # agent with `model: null` (it decides)
       - call: list_pods
         arguments: {namespace: shop}
       - call: write_report
@@ -308,12 +309,15 @@ def refusals(agent: AgentDir) -> list[str]:
         return [f"{agent.name} is a conformance fixture; it runs only in its own image"]
     try:
         problems = layout.check(agent)
-        if not problems and not isinstance(agent.manifest().get("model"), dict):
-            return [f"{agent.name} declares no model; there is no model loop to run"]
     except (yaml.YAMLError, AttributeError, KeyError, TypeError, ValueError) as exc:
         why = f"{type(exc).__name__} {exc}"
         return [f"{agent.name}: agent.yaml or deploy/agent.yaml is malformed: {_clip(why)}"]
     return problems
+
+
+def model_free(agent: AgentDir) -> bool:
+    """The agent declares `model: null`: its `decide` makes the choices a model would."""
+    return agent.manifest().get("model") is None
 
 
 def _clip(text: str, limit: int = 160) -> str:
@@ -503,7 +507,14 @@ def run(
     problems = refusals(agent)
     if problems:
         raise ScenarioError("; ".join(problems))
-    if live:
+    free = model_free(agent)
+    if free:
+        if live or scenario.model is not None:
+            raise ScenarioError(
+                f"{agent.name} declares no model: its `decide` makes the choices, so a "
+                "scenario takes no `model:` script and there is no --live"
+            )
+    elif live:
         if not os.environ.get(local_step.MODEL_URL):
             raise ScenarioError(
                 f"--live needs {local_step.MODEL_URL}, the /v1 base URL of an OpenAI-compatible "
@@ -554,7 +565,8 @@ def run(
         },
     )
 
-    result = Result(agent.name, "boundary_limit", "live" if live else "scripted", directory)
+    kind = "none" if free else "live" if live else "scripted"
+    result = Result(agent.name, "boundary_limit", kind, directory)
     result.detail = f"not finished after {max_boundaries} boundaries"
     largest = 0
     _writable(app, False)

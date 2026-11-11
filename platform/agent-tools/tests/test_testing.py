@@ -15,7 +15,7 @@ from zetra_agents import testing
 from zetra_agents.layout import AgentDir
 
 AGENT_CODE = '''
-from agent_runtime.tools import Tool
+from agent_runtime.tools import Done, Tool
 
 
 def create_agent(ctx) -> dict:
@@ -41,7 +41,8 @@ def create_agent(ctx) -> dict:
             Tool(list_pods, "remote_read"),
             Tool(delete_pod, "remote_read"),
             Tool(note, "workspace_write"),
-        ]
+        ],
+        "decide": lambda task, results: Done("done"),
     }
 '''
 TOOLS = [

@@ -1,0 +1,16 @@
+# Agent (spec 6.1): the capabilities the security review approves. Kubani holds the copy
+# that is applied (`just agent register`, then `just agent sync`); this file is its source.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: @@AGENT@@
+  namespace: @@TENANT@@
+spec:
+  owner: @@OWNER@@
+  description: @@DESCRIPTION@@
+  identity:
+    mode: agent
+  capabilities:
+    models: []
+    mcp: []
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

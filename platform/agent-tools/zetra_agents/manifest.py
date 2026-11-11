@@ -45,9 +45,10 @@ ctx = types.SimpleNamespace(
     instructions=(app / instructions).read_text(encoding="utf-8"),
     mcp=mcp,
 )
-listed = getattr(importlib.import_module(module), factory)(ctx)["tools"]
-tools = [{"name": t.fn.__name__, "effect": t.effect} for t in listed]
-pathlib.Path(out).write_text(json.dumps(tools), encoding="utf-8")
+agent = getattr(importlib.import_module(module), factory)(ctx)
+tools = [{"name": t.fn.__name__, "effect": t.effect} for t in agent["tools"]]
+document = {"tools": tools, "decide": agent.get("decide") is not None}
+pathlib.Path(out).write_text(json.dumps(document), encoding="utf-8")
 """
 
 
@@ -68,6 +69,40 @@ def declared(agent: AgentDir) -> dict:
 
 def code_tools(agent: AgentDir) -> list[dict[str, str]]:
     """The tools `create_agent` returns, in its order, as the manifest lists them."""
+    return read_code(agent)[0]
+
+
+def decide_problems(agent: AgentDir) -> list[str]:
+    """Where the manifest and the code disagree about a model: `model: null` needs a
+    `decide` function in what `create_agent` returns, and a model forbids one. An agent
+    whose code cannot be read has nothing to compare; `render --check` says why."""
+    try:
+        manifest = declared(agent)
+        _, has_decide = read_code(agent)
+    except ToolsError:
+        return []
+    if manifest.get("model") is None and "model" in manifest and not has_decide:
+        return [
+            (
+                f"{agent.name}: agent.yaml declares model: null but create_agent returns no "
+                'decide function; add `"decide": decide` to what it returns, or declare a '
+                "model in agent.yaml and grant it under capabilities.models in deploy/agent.yaml"
+            )
+        ]
+    if manifest.get("model") is not None and has_decide:
+        return [
+            (
+                f"{agent.name}: create_agent returns a decide function but agent.yaml declares "
+                "a model; remove `decide` from what it returns, or set model: null in agent.yaml "
+                "and capabilities.models: [] in deploy/agent.yaml"
+            )
+        ]
+    return []
+
+
+def read_code(agent: AgentDir) -> tuple[list[dict[str, str]], bool]:
+    """What `create_agent` returns: its tools as the manifest lists them, and whether it
+    returns a `decide` function."""
     manifest = declared(agent)
     with tempfile.TemporaryDirectory(prefix="zetra-agents-tools-") as tmp:
         root = Path(tmp)
@@ -102,14 +137,15 @@ def code_tools(agent: AgentDir) -> list[dict[str, str]]:
                 else ""
             )
             raise ToolsError(f"cannot read the tools from the code: {last[:300]}{hint}")
-        tools = json.loads(out.read_text(encoding="utf-8"))
+        document = json.loads(out.read_text(encoding="utf-8"))
+    tools = document["tools"]
     names = [t["name"] for t in tools]
     if len(set(names)) != len(names):
         raise ToolsError("create_agent returns two tools with the same name")
     for tool in tools:
         if not TOOL_NAME.match(tool["name"]) or not EFFECT.match(tool["effect"]):
             raise ToolsError(f"tool {tool['name']!r} has a name or effect that cannot be listed")
-    return tools
+    return tools, document["decide"]
 
 
 def block(tools: list[dict[str, str]]) -> str:

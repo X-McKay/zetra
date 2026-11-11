@@ -68,6 +68,8 @@ RENDERED = {
     ".github/workflows/release.yml": "workflows/release.yml",
 }
 AGENT_TEMPLATES = "agent"
+# Files laid over the agent templates by `init --model-free`; the rest are shared.
+MODEL_FREE_TEMPLATES = "agent-model-free"
 PACKAGE_DIR = "__package__"
 # Seeded on init and then owned by the repository: never checked.
 SEEDED = {"AGENTS.md": "AGENTS.md", ".gitignore": "gitignore", "README.md": "README.md"}
@@ -297,8 +299,10 @@ def init(
     tenant: str,
     owner: str,
     description: str,
+    model_free: bool = False,
 ) -> list[Path]:
-    """Render a new repository holding one agent. The target must not exist or be empty."""
+    """Render a new repository holding one agent. The target must not exist or be empty.
+    `model_free` starts an agent that declares no model and returns `decide`."""
     if not layout.NAME.match(agent):
         raise RenderError("agent name must be a DNS label of at most 32 characters")
     package = agent.replace("-", "_")
@@ -327,12 +331,20 @@ def init(
         path = target / relative
         path.write_text(render_text(template(name), variables), encoding="utf-8")
         written.append(path)
-    root = resources.files("zetra_agents") / "templates" / AGENT_TEMPLATES
-    for entry in _walk(root):
-        relative = Path(*[package if part == PACKAGE_DIR else part for part in entry.parts])
-        if relative.suffix != ".tmpl":
-            raise RenderError(f"agent template {entry} lacks the .tmpl suffix")
-        path = target / "agents" / agent / relative.with_suffix("")
+    templates = resources.files("zetra_agents") / "templates"
+    # Later roots replace the files of earlier ones that have the same path.
+    roots = [templates / AGENT_TEMPLATES] + (
+        [templates / MODEL_FREE_TEMPLATES] if model_free else []
+    )
+    files: dict[Path, tuple[object, Path]] = {}
+    for root in roots:
+        for entry in _walk(root):
+            relative = Path(*[package if part == PACKAGE_DIR else part for part in entry.parts])
+            if relative.suffix != ".tmpl":
+                raise RenderError(f"agent template {entry} lacks the .tmpl suffix")
+            files[relative.with_suffix("")] = (root, entry)
+    for relative, (root, entry) in files.items():
+        path = target / "agents" / agent / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         text = (root / entry).read_text(encoding="utf-8")
         path.write_text(render_text(text, variables), encoding="utf-8")

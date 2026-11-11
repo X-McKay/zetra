@@ -255,3 +255,62 @@ def make_app(directory: Path, manifest: dict = MANIFEST) -> Path:
     (directory / "instructions" / "base.md").write_text("You are a test agent.")
     (directory / "fakeagent.py").write_text(AGENT_MODULE)
     return directory
+
+
+DECIDE_MODULE = '''
+from agent_runtime.tools import Done, Tool, ToolCall
+
+SECRET = "task-secret-value-9f3"
+
+def create_agent(ctx):
+    async def get_pod(name):
+        """Get a pod."""
+        (ctx.workspace / ("pod-" + name)).write_text("x")
+        return {"pod": name}
+
+    async def write_report(text):
+        """Write the report into the workspace."""
+        (ctx.workspace / "report.md").write_text(text)
+        return {"written": len(text)}
+
+    def decide(task, results):
+        mode = task.get("mode")
+        if mode == "raise":
+            raise RuntimeError("boom " + task["secret"])
+        if mode == "wrong-type":
+            return {"call": "get_pod"}
+        if mode == "unknown-tool":
+            return ToolCall("delete_everything", {})
+        if mode == "bad-arguments":
+            return ToolCall("get_pod", {"name": {1, 2}})
+        if mode == "bad-summary":
+            return Done(7)
+        if len(results) == 0:
+            return ToolCall("get_pod", {"name": task["pod"]})
+        if len(results) == 1:
+            return ToolCall("write_report", {"text": "saw " + results[0].result["pod"]})
+        return Done("reported on " + results[0].arguments["name"])
+
+    return {"tools": [Tool(get_pod, "remote_read"), Tool(write_report, "workspace_write")],
+            "decide": decide}
+'''
+
+MODEL_FREE_MANIFEST = {
+    "schema_version": 1,
+    "name": "conformance",
+    "entrypoint": "fakeagent:create_agent",
+    "instructions": "instructions/base.md",
+    "model": None,
+    "tools": [
+        {"name": "get_pod", "effect": "remote_read"},
+        {"name": "write_report", "effect": "workspace_write"},
+    ],
+}
+
+
+def make_decide_app(
+    directory: Path, manifest: dict = MODEL_FREE_MANIFEST, module: str = DECIDE_MODULE
+) -> Path:
+    make_app(directory, manifest)
+    (directory / "fakeagent.py").write_text(module)
+    return directory
