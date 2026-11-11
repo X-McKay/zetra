@@ -1,0 +1,13 @@
+# Valid: the manifest of an agent whose session budget is above its daily one (see deploy/agent.yaml).
+schema_version: 1
+name: session-budget-above-daily
+entrypoint: session_budget_above_daily.agent:create_agent
+instructions: session_budget_above_daily/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write
