@@ -1,0 +1,3 @@
+# Invalid: agent.yaml is a list.
+- name: example-agent
+- entrypoint: example_agent.agent:create_agent

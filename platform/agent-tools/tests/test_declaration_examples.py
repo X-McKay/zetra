@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from zetra_agents import cli
+from zetra_agents import cli, layout
 
 CORPUS = Path(__file__).parents[1] / "examples" / "declarations"
 VALID = sorted(p.name for p in (CORPUS / "valid").iterdir() if p.is_dir())
@@ -66,3 +66,9 @@ def test_an_invalid_example_fails_check_as_expected(name, tmp_path, capsys, monk
     assert code == 1, problems
     assert len(problems) == expect.get("problems", 1), problems
     assert any(expect["error"] in p for p in problems), problems
+
+
+def test_the_effects_check_admits_are_the_ones_the_sdk_defines():
+    from agent_runtime import tools
+
+    assert set(layout.EFFECTS) == set(tools.EFFECTS)

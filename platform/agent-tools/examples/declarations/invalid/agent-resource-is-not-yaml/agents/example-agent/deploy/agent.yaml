@@ -1,0 +1,3 @@
+# Invalid: the flow mapping is never closed.
+spec: {owner: dev@example.com
+kind: Agent

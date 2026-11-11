@@ -1,0 +1,3 @@
+# Invalid: the flow list is never closed.
+name: [example-agent
+schema_version: 1

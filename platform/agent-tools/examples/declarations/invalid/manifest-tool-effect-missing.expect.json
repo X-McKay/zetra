@@ -1,0 +1,4 @@
+{
+  "rule": "a tool in agent.yaml has no effect.",
+  "error": "tool 'write_report' has no effect"
+}

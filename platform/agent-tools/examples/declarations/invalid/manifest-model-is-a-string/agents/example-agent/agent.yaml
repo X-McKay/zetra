@@ -1,0 +1,9 @@
+# Invalid: the model block in agent.yaml is a string, not a mapping.
+schema_version: 1
+name: example-agent
+entrypoint: example_agent.agent:create_agent
+instructions: example_agent/instructions/base.md
+model: example-model
+tools:
+  - name: write_report
+    effect: workspace_write

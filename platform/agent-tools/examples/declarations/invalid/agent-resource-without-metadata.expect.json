@@ -1,0 +1,4 @@
+{
+  "rule": "deploy/agent.yaml has no metadata.",
+  "error": "deploy/agent.yaml has no metadata mapping"
+}

@@ -1,0 +1,4 @@
+{
+  "rule": "a tool-backend grant has delegation on-behalf-of while spec.identity.mode is agent.",
+  "error": "has delegation on-behalf-of, but spec.identity.mode is agent"
+}

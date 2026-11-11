@@ -558,9 +558,9 @@ def test_source_multidocument_layout_error_is_sanitized(inputs, capsys):
     )
     result = run(inputs, capsys)
     assert {
-        "code": "input",
-        "path": "source.layout",
-        "message": "cannot read or validate input",
+        "code": "layout",
+        "path": "source",
+        "message": "selected agent failed existing layout check",
     } in result["errors"]
     assert "private_yaml_marker" not in json.dumps(result)
     assert capsys.readouterr().err == ""

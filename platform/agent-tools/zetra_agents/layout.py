@@ -52,6 +52,9 @@ FIXTURES = {
     "conformance-transport",
 }
 VERIFY_IMAGE = "verify_image.py"
+# The effects a tool may declare: `EFFECTS` of agent_runtime.tools, which a test holds this
+# to. `remote_write` is not among them and has its own refusal.
+EFFECTS = ("workspace_read", "workspace_write", "remote_read")
 # A fixture driver keeps the SDK's step module under this name and delegates to it.
 SDK_STEP_BACKUP = re.compile(r"agent_runtime\._([a-z]+)_sdk_step")
 IMAGE_TARGETS = ("runtime", "fixture")
@@ -149,6 +152,124 @@ def check_files(agent: AgentDir) -> list[str]:
     return [f"{agent.name}: missing {f}" for f in REQUIRED if not (agent.root / f).is_file()]
 
 
+def _read(path: Path, label: str, name: str) -> tuple[dict[str, Any] | None, str | None]:
+    """The YAML mapping in `path`, or the one-line reason it is not one."""
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        where = f" at line {mark.line + 1}" if mark is not None else ""
+        reason = str(getattr(exc, "problem", None) or "cannot be parsed").splitlines()[0]
+        return None, f"{name}: {label} is malformed YAML{where}: {reason}"
+    except UnicodeDecodeError:
+        return None, f"{name}: {label} is not UTF-8 text"
+    if document is None:
+        return None, f"{name}: {label} is empty; it must be a mapping"
+    if not isinstance(document, dict):
+        return None, f"{name}: {label} must be a mapping, not {_kind(document)}"
+    return document, None
+
+
+def _kind(value: Any) -> str:
+    """A value's YAML type, with an article."""
+    if isinstance(value, dict):
+        return "a mapping"
+    if isinstance(value, list):
+        return "a list"
+    if isinstance(value, bool):
+        return "a boolean"
+    if isinstance(value, (int, float)):
+        return "a number"
+    if isinstance(value, str):
+        return "a string"
+    return "null"
+
+
+def _manifest_shape(name: str, manifest: dict[str, Any]) -> list[str]:
+    """Problems with the shape of agent.yaml's `model` and `tools`, which the later
+    checks read as a mapping and a list of mappings."""
+    problems = []
+    if "model" in manifest and manifest["model"] is not None:
+        model = manifest["model"]
+        if not isinstance(model, dict) or not all(
+            isinstance(model.get(k), str) and model.get(k) for k in ("backend", "name")
+        ):
+            problems.append(
+                f"{name}: agent.yaml model is malformed: it must be a mapping with a backend "
+                "and a name (strings), or null for an agent that calls no model"
+            )
+    tools = manifest.get("tools")
+    if tools is not None and not isinstance(tools, list):
+        problems.append(
+            f"{name}: agent.yaml tools must be a list of mappings with name and effect, "
+            f"not {_kind(tools)}"
+        )
+    return problems
+
+
+def _tool_problems(name: str, tools: list[Any]) -> list[str]:
+    problems = []
+    seen: set[str] = set()
+    for index, tool in enumerate(tools):
+        if not isinstance(tool, dict):
+            problems.append(
+                f"{name}: agent.yaml tools[{index}] is {_kind(tool)}; each tool must be a "
+                "mapping with name and effect"
+            )
+            continue
+        tool_name, effect = tool.get("name"), tool.get("effect")
+        if not isinstance(tool_name, str) or not tool_name:
+            problems.append(f"{name}: agent.yaml tools[{index}] has no name (a string)")
+            continue
+        if tool_name in seen:
+            problems.append(
+                f"{name}: agent.yaml lists the tool {tool_name!r} more than once; "
+                "tool names must be unique"
+            )
+        seen.add(tool_name)
+        if effect == "remote_write":
+            problems.append(f"{name}: remote_write tools are not admitted")
+        elif effect is None:
+            problems.append(
+                f"{name}: agent.yaml tool {tool_name!r} has no effect; set effect to "
+                f"one of {', '.join(EFFECTS)}"
+            )
+        elif not isinstance(effect, str) or effect not in EFFECTS:
+            problems.append(
+                f"{name}: agent.yaml tool {tool_name!r} has effect {effect!r}, which is not "
+                f"one of {', '.join(EFFECTS)}; set effect to the one the tool has"
+            )
+    return problems
+
+
+def _cr_shape(name: str, cr: dict[str, Any]) -> list[str]:
+    """Problems that stop the later checks from reading the Agent resource at all."""
+    problems = []
+    metadata = cr.get("metadata")
+    if not isinstance(metadata, dict):
+        problems.append(
+            f"{name}: deploy/agent.yaml has no metadata mapping; it needs metadata.name "
+            "and metadata.namespace"
+        )
+    return problems
+
+
+def _grant_problems(name: str, spec: dict[str, Any]) -> list[str]:
+    """Rules about the tool-backend grants that hold once the spec is inside the CRD."""
+    problems = []
+    caps = spec.get("capabilities") or {}
+    mode = (spec.get("identity") or {}).get("mode")
+    for index, entry in enumerate(caps.get("mcp") or []):
+        if mode == "agent" and entry.get("delegation") == "on-behalf-of":
+            problems.append(
+                f"{name}: deploy/agent.yaml spec.capabilities.mcp[{index}] (backend "
+                f"{entry.get('backend')}) has delegation on-behalf-of, but spec.identity.mode "
+                "is agent, so there is no person to act for; set spec.identity.mode to "
+                "on-behalf-of or the grant's delegation to agent"
+            )
+    return problems
+
+
 def check(agent: AgentDir) -> list[str]:
     """Every problem with one agent directory; an empty list means it is releasable."""
     problems = check_files(agent)
@@ -156,18 +277,25 @@ def check(agent: AgentDir) -> list[str]:
         return problems
     if not NAME.match(agent.name):
         problems.append(f"{agent.name}: directory name is not a DNS label of at most 32")
-    manifest, cr = agent.manifest(), agent.agent_cr()
+    manifest, refused = _read(agent.manifest_path, "agent.yaml", agent.name)
+    cr, cr_refused = _read(agent.agent_cr_path, "deploy/agent.yaml", agent.name)
+    problems += [p for p in (refused, cr_refused) if p]
+    if manifest is None or cr is None:
+        return problems
+    shape = _manifest_shape(agent.name, manifest) + _cr_shape(agent.name, cr)
+    if shape:
+        return problems + shape
     if manifest.get("name") != agent.name:
         problems.append(f"{agent.name}: agent.yaml name is {manifest.get('name')!r}")
-    if cr.get("kind") != "Agent" or cr.get("metadata", {}).get("name") != agent.name:
+    if cr.get("kind") != "Agent" or cr["metadata"].get("name") != agent.name:
         problems.append(f"{agent.name}: deploy/agent.yaml must be the Agent named {agent.name}")
-    refused = schema.problems(cr.get("spec"))
-    if refused:
+    refused_spec = schema.problems(cr.get("spec"))
+    if refused_spec:
         # The checks below read the spec as the CRD shapes it, so they wait for one that is.
         return problems + [
-            f"{agent.name}: deploy/agent.yaml is outside the Agent CRD: {p}" for p in refused
+            f"{agent.name}: deploy/agent.yaml is outside the Agent CRD: {p}" for p in refused_spec
         ]
-    caps = (cr.get("spec") or {}).get("capabilities") or {}
+    caps = cr["spec"].get("capabilities") or {}
     model = manifest.get("model")
     if "model" not in manifest:
         problems.append(f"{agent.name}: manifest must declare model or explicit model: null")
@@ -178,12 +306,10 @@ def check(agent: AgentDir) -> list[str]:
             )
     else:
         models = {m["backend"]: set(m["models"]) for m in caps.get("models") or []}
-        if not isinstance(model, dict) or model.get("name") not in models.get(
-            model.get("backend"), set()
-        ):
+        if model["name"] not in models.get(model["backend"], set()):
             problems.append(f"{agent.name}: manifest model is not granted by the Agent")
-    if any(t.get("effect") == "remote_write" for t in manifest.get("tools") or []):
-        problems.append(f"{agent.name}: remote_write tools are not admitted")
+    problems += _tool_problems(agent.name, manifest.get("tools") or [])
+    problems += _grant_problems(agent.name, cr["spec"])
     if agent.src.is_dir() and agent.package_dir() is None:
         problems.append(f"{agent.name}: src/ must hold exactly one package directory")
     elif agent.src.is_dir():

@@ -1,0 +1,4 @@
+{
+  "rule": "an entry of tools in agent.yaml has no name.",
+  "error": "agent.yaml tools[0] has no name"
+}

@@ -1,0 +1,6 @@
+# Invalid: spec is absent.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: example-agent
+  namespace: tenant-example

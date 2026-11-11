@@ -1,0 +1,4 @@
+{
+  "rule": "deploy/agent.yaml is not valid YAML.",
+  "error": "deploy/agent.yaml is malformed YAML at line 3"
+}

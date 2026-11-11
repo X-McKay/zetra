@@ -1,0 +1,13 @@
+# Invalid: grants written as strings.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: example-agent
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  capabilities:
+    models: [example-model]
+    mcp: [example-cluster]

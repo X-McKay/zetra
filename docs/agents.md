@@ -82,6 +82,13 @@ one example per refusal, each breaking exactly one rule and named for it, beside
 repository as a whole (the workspace, the lock, rendered files) are not in it. To add a
 rule, add an invalid example and its expectation in the same change.
 
+A declaration that is not the right shape (a file that is empty or not YAML, a list where
+a mapping belongs, a `tools` entry that is a string) is reported as a one-line problem
+naming the file, never as a traceback. Among the rules: a tool's `effect` must be one the
+SDK defines (`workspace_read`, `workspace_write`, `remote_read`), tool names are unique,
+and a tool-backend grant may delegate `on-behalf-of` only when `spec.identity.mode` is
+`on-behalf-of`.
+
 ### Testing an agent
 
 `zetra-agents` registers a pytest plugin, so an agent's tests need no setup of their own:
