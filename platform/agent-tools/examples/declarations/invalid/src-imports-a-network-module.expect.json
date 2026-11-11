@@ -1,0 +1,4 @@
+{
+  "rule": "the package imports a network module.",
+  "error": "imports requests"
+}

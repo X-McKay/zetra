@@ -1,0 +1,4 @@
+{
+  "rule": "a tool-backend grant asks for an effect other than remote_read.",
+  "error": "spec.capabilities.mcp[0].effect: \"remote_write\" is not one of remote_read"
+}

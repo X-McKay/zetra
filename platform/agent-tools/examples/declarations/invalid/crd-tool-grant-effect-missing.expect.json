@@ -1,0 +1,4 @@
+{
+  "rule": "a tool-backend grant has no effect.",
+  "error": "spec.capabilities.mcp[0].effect is required"
+}

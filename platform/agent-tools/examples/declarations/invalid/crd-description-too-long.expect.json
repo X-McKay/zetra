@@ -1,0 +1,4 @@
+{
+  "rule": "spec.description is longer than 512 characters.",
+  "error": "spec.description: longer than 512 characters"
+}

@@ -1,0 +1,4 @@
+{
+  "rule": "spec.capabilities is required.",
+  "error": "spec.capabilities is required"
+}

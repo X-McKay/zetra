@@ -1,0 +1,13 @@
+# Invalid: the directory name is not a DNS label.
+schema_version: 1
+name: Example_Agent
+entrypoint: Example_Agent.agent:create_agent
+instructions: Example_Agent/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write

@@ -1,0 +1,4 @@
+{
+  "rule": "the Agent grants the same tool backend in two entries.",
+  "error": "MCP backend example-cluster declared twice"
+}

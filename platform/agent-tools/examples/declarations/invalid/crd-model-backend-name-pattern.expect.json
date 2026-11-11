@@ -1,0 +1,4 @@
+{
+  "rule": "a model backend name is outside ^[a-z0-9-]{1,63}$.",
+  "error": "does not match ^[a-z0-9-]{1,63}$"
+}

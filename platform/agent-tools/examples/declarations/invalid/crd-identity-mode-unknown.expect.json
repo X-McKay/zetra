@@ -1,0 +1,4 @@
+{
+  "rule": "spec.identity.mode is neither agent nor on-behalf-of.",
+  "error": "spec.identity.mode: \"service\" is not one of agent, on-behalf-of"
+}

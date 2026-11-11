@@ -1,0 +1,4 @@
+{
+  "rule": "runtime.ttlSeconds is below 60.",
+  "error": "is less than 60"
+}

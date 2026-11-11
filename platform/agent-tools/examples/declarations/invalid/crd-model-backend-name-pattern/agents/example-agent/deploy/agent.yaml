@@ -1,0 +1,16 @@
+# Invalid: a model backend name is outside ^[a-z0-9-]{1,63}$.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: example-agent
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  capabilities:
+    models:
+      - backend: LLM_Main
+        models: [example-model]
+    mcp: []
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

@@ -69,6 +69,19 @@ data with its link; `report_tool(ctx.workspace, evidence)` is a `write_report` t
 bounds the narrative and appends exactly the evidence links that exist, so a report can
 cite only what was observed.
 
+### What a declaration may say
+
+The reference for what `agent.yaml` and `deploy/agent.yaml` may and may not say is the
+corpus in [`platform/agent-tools/examples/declarations/`](../platform/agent-tools/examples/declarations):
+`valid/` holds declarations `zetra-agents check` accepts (a minimal model-backed agent,
+one with tool-backend grants, one that acts on a person's behalf), and `invalid/` holds
+one example per refusal, each breaking exactly one rule and named for it, beside a
+`<name>.expect.json` giving the error it must produce. One test
+(`platform/agent-tools/tests/test_declaration_examples.py`) runs every example through
+`zetra-agents check`, so the corpus cannot drift from the code. Rules about the
+repository as a whole (the workspace, the lock, rendered files) are not in it. To add a
+rule, add an invalid example and its expectation in the same change.
+
 ### Testing an agent
 
 `zetra-agents` registers a pytest plugin, so an agent's tests need no setup of their own:

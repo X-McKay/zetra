@@ -1,0 +1,4 @@
+{
+  "rule": "a granted tool name contains a character outside ^[A-Za-z0-9_.-]{1,128}$.",
+  "error": "does not match ^[A-Za-z0-9_.-]{1,128}$"
+}

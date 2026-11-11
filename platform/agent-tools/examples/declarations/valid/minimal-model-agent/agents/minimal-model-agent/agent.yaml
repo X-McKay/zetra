@@ -1,0 +1,13 @@
+# Valid: the smallest model-backed agent. The manifest names one model; the Agent resource grants that model on that backend.
+schema_version: 1
+name: minimal-model-agent
+entrypoint: minimal_model_agent.agent:create_agent
+instructions: minimal_model_agent/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write

@@ -1,0 +1,4 @@
+{
+  "rule": "metadata.namespace is not a tenant namespace (tenant-...).",
+  "error": "not a tenant namespace"
+}

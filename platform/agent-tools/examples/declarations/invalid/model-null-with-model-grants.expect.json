@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml says model: null while the Agent still grants a model.",
+  "error": "model: null requires an explicit empty model grant list"
+}

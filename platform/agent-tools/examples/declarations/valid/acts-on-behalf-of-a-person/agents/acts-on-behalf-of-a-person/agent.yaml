@@ -1,0 +1,13 @@
+# Valid: an agent that acts with the identity of the person who started the session. Without a person the session is refused (required: true, fallback: deny); the tool backend is asked to see the same person (delegation).
+schema_version: 1
+name: acts-on-behalf-of-a-person
+entrypoint: acts_on_behalf_of_a_person.agent:create_agent
+instructions: acts_on_behalf_of_a_person/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write

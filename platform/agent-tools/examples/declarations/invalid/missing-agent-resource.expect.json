@@ -1,0 +1,4 @@
+{
+  "rule": "deploy/agent.yaml (the Agent resource) is absent.",
+  "error": "example-agent: missing deploy/agent.yaml"
+}

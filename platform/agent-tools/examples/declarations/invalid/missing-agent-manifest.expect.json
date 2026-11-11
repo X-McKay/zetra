@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml (the image manifest) is absent.",
+  "error": "example-agent: missing agent.yaml"
+}

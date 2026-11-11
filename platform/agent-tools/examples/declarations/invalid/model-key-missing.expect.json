@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml declares neither a model nor an explicit model: null.",
+  "error": "manifest must declare model or explicit model: null"
+}

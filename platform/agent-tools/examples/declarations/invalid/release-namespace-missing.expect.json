@@ -1,0 +1,4 @@
+{
+  "rule": "metadata.namespace is absent.",
+  "error": "release policy does not compile"
+}

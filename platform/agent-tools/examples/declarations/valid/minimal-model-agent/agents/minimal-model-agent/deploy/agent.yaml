@@ -1,0 +1,17 @@
+# Valid: the smallest model-backed agent. The manifest names one model; the Agent resource grants that model on that backend.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: minimal-model-agent
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+        budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+    mcp: []
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

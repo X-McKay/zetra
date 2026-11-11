@@ -1,0 +1,15 @@
+# Valid: the manifest lists the tools the code declares, with their effects.
+schema_version: 1
+name: tool-backend-grants
+entrypoint: tool_backend_grants.agent:create_agent
+instructions: tool_backend_grants/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: list_pods
+    effect: remote_read
+  - name: write_report
+    effect: workspace_write

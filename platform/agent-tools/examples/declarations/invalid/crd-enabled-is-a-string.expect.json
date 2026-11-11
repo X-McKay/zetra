@@ -1,0 +1,4 @@
+{
+  "rule": "spec.enabled is a string where the schema says boolean.",
+  "error": "spec.enabled: \"true\" is not a boolean"
+}

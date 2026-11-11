@@ -1,0 +1,20 @@
+# Invalid: a granted tool name contains a character outside ^[A-Za-z0-9_.-]{1,128}$.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: example-agent
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+        budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+    mcp:
+      - backend: example-cluster
+        effect: remote_read
+        tools: ["pods list"]
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

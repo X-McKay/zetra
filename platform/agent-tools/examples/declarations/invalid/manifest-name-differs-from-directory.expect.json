@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml names a different agent from its directory.",
+  "error": "agent.yaml name is 'other-agent'"
+}

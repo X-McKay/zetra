@@ -1,0 +1,4 @@
+{
+  "rule": "the Agent resource is named for a different agent.",
+  "error": "deploy/agent.yaml must be the Agent named example-agent"
+}
