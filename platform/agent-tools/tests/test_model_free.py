@@ -212,3 +212,122 @@ def test_run_cli_names_the_missing_model(free, capsys, tmp_path):
     code = cli.main(["--repo", str(free.repo), "run", AGENT, "--out", str(tmp_path / "run")])
     assert code == 0
     assert "no model (decide)" in capsys.readouterr().err
+
+
+# --- review findings: what `check` and the kit say about decide --------------------------------
+
+
+def replace_decide(agent, text):
+    path = module(agent)
+    path.write_text(path.read_text().replace('"decide": decide', text))
+
+
+def test_check_refuses_a_decide_that_is_not_callable(free, capsys):
+    replace_decide(free, '"decide": 1')
+    code, err = check(free, capsys)
+    assert code == 1
+    assert "decide create_agent returns is not callable" in err
+    assert "plain function taking (task, results)" in err
+
+
+def test_check_refuses_an_async_decide(free, capsys):
+    path = module(free)
+    path.write_text(path.read_text().replace("    def decide(", "    async def decide("))
+    assert "async def decide" in path.read_text()
+    code, err = check(free, capsys)
+    assert code == 1
+    assert "is an async function" in err and "plain `def decide(task, results)`" in err
+
+
+def unreadable_file(agent):
+    import os
+
+    if os.geteuid() == 0:
+        pytest.skip("root reads any file")
+    path = agent.package_dir() / "notes.txt"
+    path.write_text("x")
+    path.chmod(0)
+    return path
+
+
+def test_check_does_not_crash_when_the_source_cannot_be_copied(backed, capsys):
+    path = unreadable_file(backed)
+    try:
+        with pytest.raises(manifest_tools.ToolsError, match="cannot copy src/") as caught:
+            manifest_tools.read_code(backed)
+        assert "\n" not in str(caught.value)
+        code, err = check(backed, capsys)  # a model-backed agent has nothing to confirm
+        assert "Traceback" not in err and code in (0, 1)
+    finally:
+        path.chmod(0o644)
+
+
+def test_check_says_a_model_free_agent_could_not_be_confirmed(free, capsys):
+    path = unreadable_file(free)
+    try:
+        code, err = check(free, capsys)
+    finally:
+        path.chmod(0o644)
+    assert code == 1 and "Traceback" not in err
+    assert "agent.yaml declares model: null, but the code could not be read" in err
+    assert "cannot copy src/" in err and "could not be confirmed" in err
+
+
+def test_unimportable_code_is_reported_for_a_model_free_agent(free, capsys):
+    module(free).write_text("raise RuntimeError('does not import')\n")
+    code, err = check(free, capsys)
+    assert code == 1 and "the code could not be read" in err and "does not import" in err
+
+
+def test_unimportable_code_is_not_a_decide_problem_for_a_model_backed_agent(backed, capsys):
+    module(backed).write_text("raise RuntimeError('does not import')\n")
+    assert manifest_tools.decide_problems(backed) == []
+    assert check(backed, capsys) == (0, "")
+
+
+def test_a_fixture_whose_code_cannot_be_read_stays_exempt(free):
+    copy = free.repo / "agents" / "conformance-checkpoint"
+    shutil.copytree(free.root, copy)
+    (copy / "src" / AGENT.replace("-", "_") / "agent.py").write_text("raise RuntimeError('x')\n")
+    assert cli.code_problems(layout.AgentDir(copy)) == []
+
+
+def test_the_kit_loads_a_fixture_without_decide_and_refuses_an_ordinary_agent(free, tmp_path):
+    copy = free.repo / "agents" / "conformance-checkpoint"
+    shutil.copytree(free.root, copy)
+    fixture = layout.AgentDir(copy)
+    replace_decide(fixture, '"x": 1')
+    with testing.loaded(fixture, tmp_path / "fixture") as agent:
+        assert agent.decide is None and "write_report" in agent.tools
+    replace_decide(free, '"x": 1')
+    with (
+        pytest.raises(ValueError, match="must also return a decide"),
+        testing.loaded(free, tmp_path / "ordinary"),
+    ):
+        pass
+
+
+def test_session_runs_tools_through_run_tool_so_decide_sees_a_failure(free, tmp_path):
+    import asyncio
+
+    path = module(free)
+    text = path.read_text()
+    start = text.index("    def decide")
+    end = text.index("    return {")
+    decide = (
+        "    def decide(task, results):\n"
+        "        if not results:\n"
+        "            return ToolCall('write_report', {'content': 'x', 'extra': 'unexpected'})\n"
+        "        return Done('saw ' + repr(results[0].result))\n\n"
+    )
+    path.write_text(
+        "from agent_runtime.tools import Done, ToolCall\n" + text[:start] + decide + text[end:]
+    )
+
+    async def session(agent):
+        return await agent.session({"request": "go"})
+
+    with testing.loaded(free, tmp_path / "local") as agent:
+        result = asyncio.run(session(agent))  # the tool's TypeError must not propagate
+    assert result.calls[0].result == {"error": "TypeError"}
+    assert result.summary == "saw {'error': 'TypeError'}"

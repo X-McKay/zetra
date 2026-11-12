@@ -248,9 +248,13 @@ returning anything else, or naming a tool the agent does not have is an agent er
 3) whose message names the problem and not the task.
 
 `zetra-agents check` fails when the two disagree: `model: null` without `decide` in what
-`create_agent` returns, or `decide` with a model declared. `agent.session(task)` in a test
-and `just run` drive the agent through `decide`; a scenario for it has no `model:` script
-and `--live` does not apply. An image that replaces the SDK's `step.py` is a conformance
+`create_agent` returns, or `decide` with a model declared, and when `decide` is not a plain
+function (a non-callable, or `async def`). If the code cannot be read, `check` says so for a
+`model: null` agent, because it could not confirm the `decide` the declaration requires.
+`agent.session(task)` in a test and `just run` drive the agent through `decide`;
+`session` runs each tool through the SDK's `run_tool`, so a tool that raises reaches
+`decide` as the result `{"error": <type>}` and the session continues, as in a sandbox. A
+scenario for it has no `model:` script and `--live` does not apply. An image that replaces the SDK's `step.py` is a conformance
 fixture, not a way to run an ordinary agent without a model.
 
 ## Local harness projects (OpenShell)

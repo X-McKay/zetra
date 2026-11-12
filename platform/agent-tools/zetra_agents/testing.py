@@ -11,6 +11,7 @@ the gateway would and answers only what `deploy/agent.yaml` grants. The pytest p
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import contextvars
 import json
@@ -22,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from zetra_agents.layout import AgentDir
+from zetra_agents.layout import AgentDir, image_target
 
 Call = tuple[str, str, dict]
 _RUNNING: contextvars.ContextVar[tuple[str, str] | None] = contextvars.ContextVar(
@@ -227,8 +228,10 @@ class LocalAgent:
     async def session(self, task: Any, *, max_boundaries: int = 50) -> Session:
         """Run a model-free agent from `task` to completion, as the boundaries would: the SDK
         asks `decide` what to do and this runs the tool it names. An agent error, which in
-        a sandbox is exit 3, raises `AgentError` with the SDK's message; a tool's exception
-        propagates, as in `call`."""
+        a sandbox is exit 3, raises `AgentError` with the SDK's message, and so does a budget
+        stop (exit 4). Tools run through the SDK's `run_tool`: a tool's exception reaches
+        `decide` as the result `{"error": <type>}` and the session goes on, as it does in a
+        sandbox."""
         from agent_runtime import step
 
         if self.decide is None:
@@ -242,9 +245,19 @@ class LocalAgent:
             if rc == 2:
                 return Session(out["summary"], step.tool_history(state["messages"]))
             call = state["messages"][-1]["tool_calls"][0]
-            result = await self.call(
-                call["function"]["name"], **json.loads(call["function"]["arguments"])
-            )
+            name = call["function"]["name"]
+            # The SDK's own run_tool, so a tool's exception, a policy refusal and a budget
+            # stop are mapped as in a sandbox. It starts its own event loop, so it runs in a
+            # worker thread; the contextvar that attributes MCP calls to the tool is copied.
+            token = _RUNNING.set((name, self.tools[name].effect))
+            try:
+                _, result, rc = await asyncio.to_thread(step.run_tool, call, self.tools)
+            finally:
+                _RUNNING.reset(token)
+            if rc == 4:
+                raise AgentError("budget exhausted (exit 4)")
+            if rc == 3:
+                raise AgentError(f"agent error: {name} was refused (unknown tool or bad arguments)")
             state["messages"].append(
                 {
                     "role": "tool",
@@ -292,7 +305,10 @@ def loaded(
     runtime_mcp.call_tool = fake
     try:
         manifest = step.load_manifest()
-        instructions, tools, decide = step.create(manifest)
+        # An ordinary agent is held to the rule about `decide`, as its boundary is; a
+        # conformance fixture's own driver never asks for one, so it loads as build_agent does.
+        load = step.load_agent if image_target(agent) == "fixture" else step.create
+        instructions, tools, decide = load(manifest)
         yield LocalAgent(agent, app, sandbox, manifest, instructions, tools, fake, decide)
     finally:
         runtime_mcp.call_tool = call_tool
