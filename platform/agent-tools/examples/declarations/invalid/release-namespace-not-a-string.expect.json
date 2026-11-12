@@ -1,0 +1,4 @@
+{
+  "rule": "metadata.namespace is a string naming the tenant namespace, not another type.",
+  "error": "metadata.namespace must be a string naming the tenant namespace"
+}

@@ -1,0 +1,4 @@
+{
+  "rule": "a tool-backend grant's delegation is not inherit, agent or on-behalf-of.",
+  "error": "is not one of inherit, agent, on-behalf-of"
+}

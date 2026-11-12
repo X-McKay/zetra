@@ -1,0 +1,4 @@
+{
+  "rule": "deploy/agent.yaml has no spec.",
+  "error": "deploy/agent.yaml is outside the Agent CRD: spec: null is not an object"
+}

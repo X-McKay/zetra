@@ -1,0 +1,4 @@
+{
+  "rule": "spec.owner is required.",
+  "error": "spec.owner is required"
+}

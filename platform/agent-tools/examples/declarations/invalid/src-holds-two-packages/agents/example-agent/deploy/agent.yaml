@@ -1,0 +1,17 @@
+# Invalid: src/ holds two package directories instead of one.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: example-agent
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+        budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+    mcp: []
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

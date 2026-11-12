@@ -1,0 +1,11 @@
+# Invalid: spec.capabilities is required.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: example-agent
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

@@ -1,0 +1,4 @@
+{
+  "rule": "the agent has no pyproject.toml.",
+  "error": "example-agent: missing pyproject.toml"
+}

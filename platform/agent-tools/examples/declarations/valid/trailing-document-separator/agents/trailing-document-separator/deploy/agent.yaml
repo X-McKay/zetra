@@ -1,0 +1,18 @@
+# Valid: this file ends with a line of three dashes. That leaves an empty second document, which kubectl, Flux and the release preflight ignore, so it is accepted here. agent.yaml may not end so (see invalid/manifest-ends-with-a-separator). Two documents with content are not accepted in either (see invalid/agent-resource-two-documents).
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: trailing-document-separator
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+        budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+    mcp: []
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}
+---

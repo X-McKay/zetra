@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml lists two tools with the same name.",
+  "error": "agent.yaml lists the tool 'write_report' more than once"
+}

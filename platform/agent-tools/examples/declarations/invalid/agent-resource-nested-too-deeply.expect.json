@@ -1,0 +1,4 @@
+{
+  "rule": "a declaration file is nested no deeper than the YAML parser can read.",
+  "error": "deploy/agent.yaml is nested too deeply to be read"
+}

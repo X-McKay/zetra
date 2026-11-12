@@ -1,0 +1,4 @@
+{
+  "rule": "a tool in agent.yaml has an effect the SDK does not define.",
+  "error": "has effect 'workspace_delete', which is not one of workspace_read, workspace_write, remote_read"
+}

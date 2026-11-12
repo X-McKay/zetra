@@ -1,0 +1,4 @@
+{
+  "rule": "the manifest's model name is not among the models the Agent grants on that backend.",
+  "error": "manifest model is not granted by the Agent"
+}

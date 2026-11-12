@@ -1,0 +1,4 @@
+{
+  "rule": "a tool-backend grant has delegation on-behalf-of while spec.identity.mode is agent and onBehalfOf.fallback is not agent, so calls to it are denied whenever the session carries no person's grant.",
+  "error": "so calls to it are denied whenever the session carries no person's grant"
+}

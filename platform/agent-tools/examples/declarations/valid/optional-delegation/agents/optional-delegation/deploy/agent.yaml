@@ -1,0 +1,22 @@
+# Valid: an agent that acts for the person who started the session when there is one, and as itself when there is not. The identity mode is agent, so a session is never required to carry a person's grant; the tool grant's delegation on-behalf-of is then used when a person's grant is present, and onBehalfOf.fallback: agent lets the call go ahead as the agent when it is not. Without that fallback the declaration is refused (see invalid/grant-delegation-without-a-person).
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: optional-delegation
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+    onBehalfOf: {fallback: agent}
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+        budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+    mcp:
+      - backend: example-tickets
+        effect: remote_read
+        tools: [tickets_search]
+        delegation: on-behalf-of
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

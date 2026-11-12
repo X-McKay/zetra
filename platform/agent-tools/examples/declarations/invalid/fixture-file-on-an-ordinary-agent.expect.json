@@ -1,0 +1,4 @@
+{
+  "rule": "an agent that is not a conformance fixture carries a fixture file.",
+  "error": "verify_image.py belongs to a conformance fixture"
+}

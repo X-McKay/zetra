@@ -1,0 +1,12 @@
+# Invalid: metadata is absent.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+    mcp: []

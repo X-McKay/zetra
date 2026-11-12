@@ -1,0 +1,11 @@
+# Invalid: agent.yaml lists tools as strings where mappings with name and effect are expected.
+schema_version: 1
+name: example-agent
+entrypoint: example_agent.agent:create_agent
+instructions: example_agent/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools: [write_report]

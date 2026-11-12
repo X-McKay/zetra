@@ -1,0 +1,15 @@
+# Invalid: agent.yaml starts with an empty document before the real one. That is two documents, and the SDK's yaml.safe_load refuses them.
+---
+---
+schema_version: 1
+name: example-agent
+entrypoint: example_agent.agent:create_agent
+instructions: example_agent/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write

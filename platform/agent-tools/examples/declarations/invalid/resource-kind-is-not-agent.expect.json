@@ -1,0 +1,4 @@
+{
+  "rule": "deploy/agent.yaml is not an Agent.",
+  "error": "deploy/agent.yaml must be the Agent named example-agent"
+}

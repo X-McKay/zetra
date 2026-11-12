@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml holds exactly one YAML document and nothing else: the SDK reads it with yaml.safe_load, which refuses a second document even when it is empty. (deploy/agent.yaml may end in a separator; agent.yaml may not.)",
+  "error": "agent.yaml must hold exactly one YAML document, and a trailing --- counts as a second one"
+}

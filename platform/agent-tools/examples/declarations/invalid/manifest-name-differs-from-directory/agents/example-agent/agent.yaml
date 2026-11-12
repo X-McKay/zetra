@@ -1,0 +1,13 @@
+# Invalid: agent.yaml names a different agent from its directory.
+schema_version: 1
+name: other-agent
+entrypoint: other_agent.agent:create_agent
+instructions: other_agent/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write

@@ -114,6 +114,13 @@ def compile_problems(agent: AgentDir, mcp_resource_base: str) -> list[str]:
     Catches what the layout checks cannot: an Agent that is inside the CRD and that the
     contracts still cannot compile (a backend declared twice), before a tag is pushed.
     """
+    namespace = (agent.agent_cr().get("metadata") or {}).get("namespace")
+    if not isinstance(namespace, str) or not namespace:
+        if namespace is None or namespace == "":
+            reason = "metadata.namespace is missing; it must be the tenant namespace (tenant-...)"
+        else:
+            reason = "metadata.namespace must be a string naming the tenant namespace (tenant-...)"
+        return [f"{agent.name}: deploy/agent.yaml {reason}"]
     try:
         artifacts = build(
             agent,
@@ -123,7 +130,11 @@ def compile_problems(agent: AgentDir, mcp_resource_base: str) -> list[str]:
             trust_domain="cluster.local",
             date=dt.date(2000, 1, 1),
         )
-    except (ValueError, KeyError, TypeError) as exc:
+    except KeyError as exc:
+        return [
+            f"{agent.name}: release policy does not compile: deploy/agent.yaml is missing the field {exc.args[0]!r}"
+        ]
+    except (ValueError, TypeError) as exc:
         return [f"{agent.name}: release policy does not compile: {exc}"]
     spec = artifacts["release"]["spec"]
     problems = []

@@ -1,0 +1,4 @@
+{
+  "rule": "deploy/agent.yaml is empty.",
+  "error": "deploy/agent.yaml is empty; it must be a mapping"
+}

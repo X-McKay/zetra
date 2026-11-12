@@ -1,0 +1,4 @@
+{
+  "rule": "src/ holds a file beside the package, which would be copied to /app and shadow site-packages.",
+  "error": "src/ holds more than the package: helper.py"
+}

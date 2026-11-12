@@ -1,0 +1,4 @@
+{
+  "rule": "a tool-backend grant lists no tool.",
+  "error": "needs at least 1 item"
+}

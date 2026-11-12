@@ -1,0 +1,17 @@
+# Valid: a session budget above the daily one. Both limits apply and the lower one binds, so this is accepted; the daily-budget conformance agents rely on it.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: session-budget-above-daily
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+        budget: {tokensPerDay: 2000, tokensPerSession: 200000}
+    mcp: []
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

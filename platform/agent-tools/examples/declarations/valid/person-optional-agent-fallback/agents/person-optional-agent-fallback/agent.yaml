@@ -1,0 +1,13 @@
+# Valid: the manifest of an agent whose identity mode is on-behalf-of with onBehalfOf.required false; the identity is declared in deploy/agent.yaml.
+schema_version: 1
+name: person-optional-agent-fallback
+entrypoint: person_optional_agent_fallback.agent:create_agent
+instructions: person_optional_agent_fallback/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write

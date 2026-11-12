@@ -1,0 +1,20 @@
+# Valid: a model-backed agent that may read from one tool backend. The Agent resource lists the backend and each tool by name; the only grant effect admitted is remote_read.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: tool-backend-grants
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: agent
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+        budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+    mcp:
+      - backend: example-cluster
+        effect: remote_read
+        tools: [pods_list, pods_get]
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

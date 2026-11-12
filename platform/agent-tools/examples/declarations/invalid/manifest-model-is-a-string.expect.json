@@ -1,0 +1,4 @@
+{
+  "rule": "the model block in agent.yaml is a string, not a mapping.",
+  "error": "agent.yaml model is malformed: it must be a mapping with a backend and a name"
+}

@@ -1,0 +1,4 @@
+{
+  "rule": "a declaration file holds exactly one YAML document with content; agent.yaml may hold no other document at all, and deploy/agent.yaml may only add an empty one after a trailing separator.",
+  "error": "deploy/agent.yaml must hold exactly one YAML document"
+}

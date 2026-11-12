@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml lists tools as strings where mappings with name and effect are expected.",
+  "error": "agent.yaml tools[0] is a string"
+}

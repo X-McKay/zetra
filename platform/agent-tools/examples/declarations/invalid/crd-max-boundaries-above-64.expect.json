@@ -1,0 +1,4 @@
+{
+  "rule": "runtime.maxBoundaries is above 64.",
+  "error": "is more than 64"
+}

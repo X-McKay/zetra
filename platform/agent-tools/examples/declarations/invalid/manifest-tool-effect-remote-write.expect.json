@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml lists a tool whose effect is remote_write.",
+  "error": "remote_write tools are not admitted"
+}

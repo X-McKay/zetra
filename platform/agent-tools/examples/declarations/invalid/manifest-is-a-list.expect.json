@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml is a list, not a mapping.",
+  "error": "agent.yaml must be a mapping, not a list"
+}

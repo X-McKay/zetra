@@ -1,0 +1,4 @@
+{
+  "rule": "the Agent grants the same model backend in two entries.",
+  "error": "model backend llm-main declared twice"
+}

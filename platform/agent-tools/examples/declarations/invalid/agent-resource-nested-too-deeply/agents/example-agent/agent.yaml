@@ -1,0 +1,13 @@
+# Invalid: deploy/agent.yaml is nested too deeply to be read (generated: 2000 levels of flow sequence).
+schema_version: 1
+name: example-agent
+entrypoint: example_agent.agent:create_agent
+instructions: example_agent/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write

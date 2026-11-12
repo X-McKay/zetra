@@ -1,0 +1,4 @@
+{
+  "rule": "deploy/agent.yaml is a list, not a mapping.",
+  "error": "deploy/agent.yaml must be a mapping, not a list"
+}

@@ -1,0 +1,4 @@
+{
+  "rule": "src/ holds two package directories instead of one.",
+  "error": "src/ must hold exactly one package directory"
+}

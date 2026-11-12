@@ -1,0 +1,4 @@
+{
+  "rule": "the agent's directory name (and so its name) is not a DNS label of at most 32 characters.",
+  "error": "directory name is not a DNS label"
+}

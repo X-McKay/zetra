@@ -1,0 +1,4 @@
+{
+  "rule": "a token budget of zero.",
+  "error": "is less than 1"
+}

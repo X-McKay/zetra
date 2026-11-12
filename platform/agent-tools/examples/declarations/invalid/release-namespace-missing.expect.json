@@ -1,0 +1,4 @@
+{
+  "rule": "metadata.namespace is absent.",
+  "error": "metadata.namespace is missing; it must be the tenant namespace"
+}

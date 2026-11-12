@@ -1,0 +1,13 @@
+# Valid: deploy/agent.yaml ends with a line of three dashes, which leaves an empty second document that kubectl, Flux and the release preflight ignore. agent.yaml may not: the SDK reads it with yaml.safe_load, which refuses any second document (see invalid/manifest-ends-with-a-separator).
+schema_version: 1
+name: trailing-document-separator
+entrypoint: trailing_document_separator.agent:create_agent
+instructions: trailing_document_separator/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write
