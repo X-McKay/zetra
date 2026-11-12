@@ -30,17 +30,17 @@ accepted. Deployment manifests live in Kubani.
 ## Platform images
 
 `platform/images.json` lists every image repository built from `platform/`: its
-Dockerfile, build context, target platform and build arguments. The `images`
-job in `.github/workflows/platform.yml` reads that file and builds each entry
-with `docker buildx build --pull --no-cache`. A passing job means every image
+Dockerfile, build context, target platform and build arguments, and optionally
+`inputs` (see "Releasing platform images"). The `images` job in
+`.github/workflows/platform.yml` reads that file and builds each entry with
+`docker buildx build --pull --no-cache`. A passing job means every image
 builds from that commit. The job does not check the pins: the `contracts` tests
 (`platform/contracts/tests/test_images.py`) fail when a `FROM` in a
 `platform/*/Dockerfile` names an image without a tag and a digest, or when a
 build argument in `images.json` is not declared by its Dockerfile.
 
-The job pushes and signs nothing, and the images Kubani deploys are still built
-and pushed by hand. Builds are not bit-reproducible: netpol-attestor's
-`apt-get install`, for one, takes whatever Debian serves that day. The
+The `images` job pushes and signs nothing. Builds are not bit-reproducible:
+netpol-attestor's `apt-get install`, for one, takes whatever Debian serves that day. The
 `conformance-capture` entry assumes that repository is `platform/capture` built
 for amd64; no build record confirms it.
 
@@ -54,6 +54,52 @@ Dockerfiles outside `platform/` are not pinned this way. `COSIGN_SHA256` in
 `COSIGN_VERSION`; change the two together, hashing the binary you downloaded.
 `platform/controller/Dockerfile` keeps a default for `COSIGN_VERSION`; the same
 tests fail when it differs from `images.json`.
+
+### Releasing platform images
+
+`.github/workflows/platform-release.yml` builds and pushes the images that a
+merge to `main` changed. Until it has run once on the cluster's runner, treat
+every statement here as the design and not as something observed; the images
+Kubani deploys so far were built and pushed by hand.
+
+- **What is released.** On a push to `main`, the `changes` job runs
+  `platform/contracts/agent_platform/images.py changed <before> <after>`. An
+  image is released when the push changed its Dockerfile, a file under its build
+  context, or its entry in `images.json`. An entry may carry `inputs`, a list of
+  repository paths; the build context is then not used for change detection, a
+  file under one of the `inputs` counts instead, and a test requires every
+  source of every `COPY` and `ADD` in the Dockerfile to lie under them, so the
+  list cannot be narrower than what the build reads. `registry-controller` uses
+  it, because its context is `platform`. An image whose inputs did not change is
+  never built; if none changed, the run ends successfully having built nothing.
+  When the push's "before" commit is all zeros or unknown to the checkout the
+  run releases nothing and says why. A release therefore cannot be re-run
+  except by a new merge that changes an input.
+- **How.** The `release` job runs on the self-hosted runner scale set
+  `kubani-zetra`, one image at a time (`max-parallel: 1`; no `concurrency`
+  group, because GitHub keeps one waiting run per group and could drop a
+  release). The composite action `.github/actions/platform-release/` refuses to
+  continue unless the image is an entry in `images.json`, the commit being built
+  is the pushed commit and an ancestor of `origin/main`, and the checkout is
+  clean; it then builds with the flags of the pull request job and pushes.
+- **The tag.** `registry.almckay.io/platform/<image>:<first seven characters of
+  the commit>`; the full reference with its digest goes to the job summary and
+  to the action's `reference` output. An existing tag is never overwritten: if
+  it exists the job fails and names the digest.
+- **The credential.** The workflow handles no password. The cluster mounts a
+  docker client configuration for `registry.almckay.io` into the runner, and the
+  action fails with a message if it is missing.
+- **The guard on the runner.** The runner refuses any job unless the workflow
+  reference is exactly
+  `X-McKay/zetra/.github/workflows/platform-release.yml@refs/heads/main`, the
+  event is `push` and the ref is `refs/heads/main`. That is why the workflow has
+  no other trigger (not even `workflow_dispatch`) and why every job that needs
+  the runner lives in this file.
+- **Nothing is deployed.** A merge builds and pushes; a platform image reaches
+  the cluster only when a pin changes in the infrastructure repository.
+- **Not done yet.** The images are not signed, carry no attestations, and
+  admission does not check them (the plan's Phases 2 and 3). The workflow
+  already requests the identity-token permission that signing will use.
 
 ## Token qualification (T4/T5)
 
