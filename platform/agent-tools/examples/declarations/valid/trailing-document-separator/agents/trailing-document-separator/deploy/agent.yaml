@@ -1,4 +1,4 @@
-# Valid: both files end with a line of three dashes. That leaves an empty second document, which kubectl, Flux and the release preflight ignore, so it is accepted. Two documents with content are not (see invalid/manifest-two-documents).
+# Valid: this file ends with a line of three dashes. That leaves an empty second document, which kubectl, Flux and the release preflight ignore, so it is accepted here. agent.yaml may not end so (see invalid/manifest-ends-with-a-separator). Two documents with content are not accepted in either (see invalid/agent-resource-two-documents).
 apiVersion: agentplatform.io/v1alpha1
 kind: Agent
 metadata:

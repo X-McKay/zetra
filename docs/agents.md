@@ -88,10 +88,14 @@ A declaration that is not the right shape (a file that is empty or not YAML, a l
 a mapping belongs, a `tools` entry that is a string) is reported as a one-line problem
 naming the file, never as a traceback. Among the rules: a tool's `effect` must be one the
 SDK defines (`workspace_read`, `workspace_write`, `remote_read`), tool names are unique,
-a file holds exactly one document (a trailing `---` line is fine), and a tool-backend
-grant may delegate `on-behalf-of` under `spec.identity.mode: agent` only when
-`spec.identity.onBehalfOf.fallback` is `agent`; otherwise its calls are denied for every
-session that carries no person's grant, and an agent-mode session is never required to.
+`agent.yaml` holds exactly one YAML document and a trailing `---` line is refused,
+because the SDK reads it with `yaml.safe_load`, which fails on any second document even
+an empty one; `deploy/agent.yaml` may end in `---`, because kubectl, Flux and the
+release preflight ignore the empty document it leaves, but two documents with content
+are refused in both. A tool-backend grant may delegate `on-behalf-of` when a session is
+not required to carry a person's grant (`spec.identity.mode: agent`, or `on-behalf-of`
+with `onBehalfOf.required: false`) only when `spec.identity.onBehalfOf.fallback` is
+`agent`; otherwise its calls are denied for every session that carries no person's grant.
 
 ### Testing an agent
 

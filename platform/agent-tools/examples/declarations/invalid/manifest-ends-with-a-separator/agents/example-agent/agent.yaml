@@ -1,0 +1,14 @@
+# Invalid: agent.yaml ends with a line of three dashes. The empty document after it is a second document, which the SDK's yaml.safe_load refuses at every boundary.
+schema_version: 1
+name: example-agent
+entrypoint: example_agent.agent:create_agent
+instructions: example_agent/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write
+---

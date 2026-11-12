@@ -18,6 +18,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 from zetra_agents import cli, layout
 
@@ -69,8 +70,25 @@ def test_an_invalid_example_fails_check_as_expected(name, tmp_path, capsys, monk
     code, problems = check(CORPUS / "invalid" / name, tmp_path, capsys, monkeypatch)
     assert code == 1, problems
     assert len(problems) == expect.get("problems", 1), problems
+    # One to one: each expected message is met by a line of its own, so two messages that
+    # overlap cannot both be satisfied by the same line.
+    unmatched = list(problems)
     for error in errors:
-        assert any(error in p for p in problems), (error, problems)
+        line = next((p for p in unmatched if error in p), None)
+        assert line is not None, (error, problems)
+        unmatched.remove(line)
+
+
+@pytest.mark.parametrize("name", VALID)
+def test_the_sdk_reads_every_valid_manifest(name, monkeypatch):
+    """`check` and the SDK must read agent.yaml by one rule: what `check` passes, the SDK's
+    own loader must load, or an agent passes `check` and fails at every boundary."""
+    from agent_runtime import step
+
+    for path in sorted((CORPUS / "valid" / name / "agents").glob("*/agent.yaml")):
+        monkeypatch.setenv("AGENT_APP_DIR", str(path.parent))
+        assert step.load_manifest() == yaml.safe_load(path.read_text())
+        assert layout.AgentDir(path.parent).manifest() == yaml.safe_load(path.read_text())
 
 
 def test_the_effects_check_admits_are_the_ones_the_sdk_defines():
@@ -98,3 +116,18 @@ def test_a_declaration_that_cannot_be_read_is_one_problem_line(tmp_path, capsys,
     assert problems == [
         "minimal-model-agent: deploy/agent.yaml cannot be read: Permission denied"
     ], problems
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a file whatever its mode")
+def test_an_unreadable_source_file_is_one_problem_line(tmp_path):
+    src = tmp_path / "agents" / "a" / "src"
+    (src / "pkg").mkdir(parents=True)
+    (src / "pkg" / "ok.py").write_text("import json\n")
+    unreadable = src / "pkg" / "locked.py"
+    unreadable.write_text("import requests\n")
+    unreadable.chmod(0)
+    try:
+        problems = layout.forbidden_imports(src)
+    finally:
+        unreadable.chmod(0o644)
+    assert problems == ["src/pkg/locked.py cannot be read: Permission denied"], problems

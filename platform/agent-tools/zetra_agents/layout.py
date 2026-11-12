@@ -97,10 +97,10 @@ class AgentDir:
         return packages[0] if len(packages) == 1 else None
 
     def manifest(self) -> dict[str, Any]:
-        return _single_document(self.manifest_path.read_text(encoding="utf-8"))
+        return _single_document(self.manifest_path.read_text(encoding="utf-8"), tolerant=False)
 
     def agent_cr(self) -> dict[str, Any]:
-        return _single_document(self.agent_cr_path.read_text(encoding="utf-8"))
+        return _single_document(self.agent_cr_path.read_text(encoding="utf-8"), tolerant=True)
 
     def fixture_files(self) -> list[Path]:
         """The files that make an image a fixture image, whichever of them are present."""
@@ -115,11 +115,17 @@ class _ManyDocuments(yaml.YAMLError):
     """A file holds more than one YAML document that is not empty."""
 
 
-def _single_document(text: str) -> Any:
-    """The one document in `text`. A trailing `---` leaves an empty document behind, which
-    kubectl, Flux and the release preflight all ignore, so it is ignored here too; two
-    documents with content are refused."""
-    documents = [d for d in yaml.safe_load_all(text) if d is not None]
+def _single_document(text: str, *, tolerant: bool) -> Any:
+    """The one document in `text`.
+
+    `tolerant` is for `deploy/agent.yaml`: a trailing `---` leaves an empty document
+    behind, which kubectl, Flux and the release preflight all ignore, so it is ignored
+    here too. `agent.yaml` is read with `yaml.safe_load` by the SDK, which refuses any
+    second document, empty or not, so it is read strictly: the same rule, not a looser one.
+    In both, two documents with content are refused."""
+    documents = list(yaml.safe_load_all(text))
+    if tolerant:
+        documents = [d for d in documents if d is not None]
     if len(documents) > 1:
         raise _ManyDocuments
     return documents[0] if documents else None
@@ -148,7 +154,15 @@ def forbidden_imports(src: Path) -> list[str]:
     """Imports of network or process modules anywhere under the agent's source."""
     found = []
     for path in sorted(src.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            found.append(
+                f"{path.relative_to(src.parent).as_posix()} cannot be read: "
+                f"{exc.strerror or type(exc).__name__}"
+            )
+            continue
+        tree = ast.parse(text, filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 names = [a.name for a in node.names]
@@ -166,7 +180,9 @@ def check_files(agent: AgentDir) -> list[str]:
     return [f"{agent.name}: missing {f}" for f in REQUIRED if not (agent.root / f).is_file()]
 
 
-def _read(path: Path, label: str, name: str) -> tuple[dict[str, Any] | None, str | None]:
+def _read(
+    path: Path, label: str, name: str, *, tolerant: bool
+) -> tuple[dict[str, Any] | None, str | None]:
     """The YAML mapping in `path`, or the one-line reason it is not one."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -175,9 +191,14 @@ def _read(path: Path, label: str, name: str) -> tuple[dict[str, Any] | None, str
     except OSError as exc:
         return None, f"{name}: {label} cannot be read: {exc.strerror or type(exc).__name__}"
     try:
-        document = _single_document(text)
+        document = _single_document(text, tolerant=tolerant)
     except _ManyDocuments:
-        return None, f"{name}: {label} must hold exactly one YAML document, and it holds more"
+        if tolerant:
+            return None, f"{name}: {label} must hold exactly one YAML document, and it holds more"
+        return None, (
+            f"{name}: {label} must hold exactly one YAML document, and a trailing --- "
+            "counts as a second one"
+        )
     except RecursionError:
         return None, f"{name}: {label} is nested too deeply to be read"
     except yaml.YAMLError as exc:
@@ -283,22 +304,27 @@ def _grant_problems(name: str, spec: dict[str, Any]) -> list[str]:
     problems = []
     caps = spec.get("capabilities") or {}
     identity = spec.get("identity") or {}
-    # The fallback defaults to deny, as `_identity` of agent_platform.bundle compiles it.
-    fallback = (identity.get("onBehalfOf") or {}).get("fallback", "deny")
+    obo = identity.get("onBehalfOf") or {}
+    # As `_identity` and `delegation_required` of agent_platform.bundle compile them: a
+    # session must carry a person's grant only in mode on-behalf-of with required true
+    # (the default), and the fallback defaults to deny.
+    person_required = identity.get("mode") == "on-behalf-of" and bool(obo.get("required", True))
+    fallback = obo.get("fallback", "deny")
     for index, entry in enumerate(caps.get("mcp") or []):
         if (
-            identity.get("mode") == "agent"
+            not person_required
             and fallback != "agent"
             and entry.get("delegation") == "on-behalf-of"
         ):
             problems.append(
                 f"{name}: deploy/agent.yaml spec.capabilities.mcp[{index}] (backend "
                 f"{entry.get('backend')}) has delegation on-behalf-of, so calls to it are "
-                "denied whenever the session carries no person's grant, and a session of an "
-                "agent in mode agent is never required to carry one; set "
-                "spec.identity.onBehalfOf.fallback to agent to act as the agent then, or "
-                "spec.identity.mode to on-behalf-of to require a person, or the grant's "
-                "delegation to agent"
+                "denied whenever the session carries no person's grant, and a session of "
+                "this agent is not required to carry one (spec.identity.mode is agent, or "
+                "onBehalfOf.required is false); set spec.identity.onBehalfOf.fallback to "
+                "agent to act as the agent then, or require a person with "
+                "spec.identity.mode on-behalf-of and onBehalfOf.required true, or set the "
+                "grant's delegation to agent"
             )
     return problems
 
@@ -310,8 +336,8 @@ def check(agent: AgentDir) -> list[str]:
         return problems
     if not NAME.match(agent.name):
         problems.append(f"{agent.name}: directory name is not a DNS label of at most 32")
-    manifest, refused = _read(agent.manifest_path, "agent.yaml", agent.name)
-    cr, cr_refused = _read(agent.agent_cr_path, "deploy/agent.yaml", agent.name)
+    manifest, refused = _read(agent.manifest_path, "agent.yaml", agent.name, tolerant=False)
+    cr, cr_refused = _read(agent.agent_cr_path, "deploy/agent.yaml", agent.name, tolerant=True)
     problems += [p for p in (refused, cr_refused) if p]
     if manifest is None or cr is None:
         return problems

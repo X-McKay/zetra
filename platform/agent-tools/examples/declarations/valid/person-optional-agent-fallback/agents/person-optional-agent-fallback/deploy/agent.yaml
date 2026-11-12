@@ -1,0 +1,22 @@
+# Valid: the identity mode is on-behalf-of but onBehalfOf.required is false, so a session may run with no person's grant. The tool grant's delegation on-behalf-of is used when a person's grant is present, and fallback: agent lets the call go ahead as the agent when it is not. Without that fallback the declaration is refused (see invalid/grant-delegation-person-not-required).
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: person-optional-agent-fallback
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: on-behalf-of
+    onBehalfOf: {required: false, fallback: agent}
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+        budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+    mcp:
+      - backend: example-tickets
+        effect: remote_read
+        tools: [tickets_search]
+        delegation: on-behalf-of
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}

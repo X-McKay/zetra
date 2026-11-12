@@ -1,0 +1,22 @@
+# Invalid: a tool-backend grant has delegation on-behalf-of, the identity mode is on-behalf-of but onBehalfOf.required is false, so a session may run with no person's grant, and onBehalfOf.fallback is not agent (it defaults to deny).
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: example-agent
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  identity:
+    mode: on-behalf-of
+    onBehalfOf: {required: false}
+  capabilities:
+    models:
+      - backend: llm-main
+        models: [example-model]
+        budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+    mcp: 
+      - backend: example-tickets
+        effect: remote_read
+        tools: [tickets_search]
+        delegation: on-behalf-of
+  runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}
