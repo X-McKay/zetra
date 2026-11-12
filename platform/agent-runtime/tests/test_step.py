@@ -9,7 +9,7 @@ import sys
 import pytest
 
 from agent_runtime import step
-from agent_runtime.tools import Tool
+from agent_runtime.tools import Tool, ToolCall
 from tests.fakes import (
     DECIDE_MODULE,
     MANIFEST,
@@ -377,6 +377,64 @@ def test_decide_failures_are_agent_errors_that_do_not_echo_the_task(free, mode, 
     assert rc == 3 and out["done"] is False and message in out["summary"]
     assert out["summary"].startswith("agent error: ")
     assert "task-secret-value-9f3" not in out["summary"] + err
+
+
+@pytest.mark.parametrize(
+    "mode,message",
+    [
+        ("loud-summary", "Done.summary must be a string"),
+        ("loud-done", "decide returned LoudDone, not a ToolCall or a Done"),
+        ("loud-name", "decide named a tool the agent does not have"),
+        ("loud-arguments", "arguments for get_pod are not a JSON object"),
+        ("keyboard-interrupt", "decide raised KeyboardInterrupt"),
+        ("base-exception", "decide raised Weird"),
+        ("system-exit", "decide raised SystemExit"),
+    ],
+)
+def test_hostile_decisions_and_base_exceptions_are_agent_errors(free, mode, message):
+    rc, out, err = free.run(0, {"mode": mode, "secret": "task-secret-value-9f3"})
+    assert rc == 3 and out is not None and message in out["summary"]
+    for text in (json.dumps(out), err, *free.outputs):
+        assert "task-secret-value-9f3" not in text and "hostile-text-4d1" not in text
+
+
+@pytest.mark.parametrize(
+    "mode,message",
+    [
+        ("int-key", "not plain JSON: an object key is not a string"),
+        ("nested-int-key", "not plain JSON: an object key is not a string"),
+        ("nan", "are not a JSON object"),
+        ("infinity", "are not a JSON object"),
+        ("huge", "arguments for get_pod are 30000012 bytes as JSON; the limit is 65536"),
+    ],
+)
+def test_arguments_are_strict_json_within_the_tool_result_bound(free, mode, message):
+    rc, out, _ = free.run(0, {"mode": mode, "secret": "s"})
+    assert rc == 3 and message in out["summary"]
+    assert all(not m.get("tool_calls") for m in free.saved()["messages"])
+
+
+def test_arguments_at_the_bound_are_accepted_and_one_over_is_not():
+    for extra, expected in ((0, 0), (1, 3)):
+        overhead = len(json.dumps({"name": ""}))
+        arguments = {"name": "x" * (step.MAX_TOOL_RESULT - overhead + extra)}
+        state, out = {"messages": []}, {"boundary": 0}
+        decide = lambda task, results, a=arguments: ToolCall("get_pod", a)
+        tools = {"get_pod": object()}
+        assert step.run_decide(state, {}, tools, decide, out) == expected
+
+
+def test_build_agent_accepts_a_model_free_manifest_without_decide(sandbox, monkeypatch):
+    """Conformance fixtures call build_agent from their own drivers and image checks."""
+    module = DECIDE_MODULE.replace('"decide": decide', '"extra": 1')
+    make_decide_app(sandbox.root / "app", module=module)
+    monkeypatch.setenv("AGENT_APP_DIR", str(sandbox.root / "app"))
+    monkeypatch.setenv("AGENT_SANDBOX_DIR", str(sandbox.root / "sandbox"))
+    monkeypatch.syspath_prepend(str(sandbox.root / "app"))
+    built = step.build_agent(step.load_manifest())
+    assert len(built) == 2 and set(built[1]) == {"get_pod", "write_report"}
+    with pytest.raises(ValueError, match="must also return a decide"):
+        step.create(step.load_manifest())
 
 
 def test_async_decide_is_an_agent_error(sandbox):

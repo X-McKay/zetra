@@ -261,6 +261,27 @@ DECIDE_MODULE = '''
 from agent_runtime.tools import Done, Tool, ToolCall
 
 SECRET = "task-secret-value-9f3"
+HOSTILE = "hostile-text-4d1"
+
+class Loud(str):
+    def __str__(self):
+        raise RuntimeError(HOSTILE)
+    def __format__(self, spec):
+        return HOSTILE
+
+class LoudDone(Done):
+    def __init__(self):
+        pass
+    @property
+    def summary(self):
+        raise RuntimeError(HOSTILE)
+
+class LoudDict(dict):
+    def items(self):
+        raise RuntimeError(HOSTILE)
+
+class Weird(BaseException):
+    pass
 
 def create_agent(ctx):
     async def get_pod(name):
@@ -285,6 +306,30 @@ def create_agent(ctx):
             return ToolCall("get_pod", {"name": {1, 2}})
         if mode == "bad-summary":
             return Done(7)
+        if mode == "loud-summary":
+            return Done(Loud(HOSTILE))
+        if mode == "loud-done":
+            return LoudDone()
+        if mode == "loud-name":
+            return ToolCall(Loud("get_pod"), {"name": "p"})
+        if mode == "loud-arguments":
+            return ToolCall("get_pod", LoudDict(name="p"))
+        if mode == "keyboard-interrupt":
+            raise KeyboardInterrupt(HOSTILE + task["secret"])
+        if mode == "base-exception":
+            raise Weird(HOSTILE + task["secret"])
+        if mode == "system-exit":
+            raise SystemExit(7)
+        if mode == "int-key":
+            return ToolCall("get_pod", {1: "a"})
+        if mode == "nested-int-key":
+            return ToolCall("get_pod", {"name": {2: "a"}})
+        if mode == "nan":
+            return ToolCall("get_pod", {"name": float("nan")})
+        if mode == "infinity":
+            return ToolCall("get_pod", {"name": [float("inf")]})
+        if mode == "huge":
+            return ToolCall("get_pod", {"name": "x" * 30_000_000})
         if len(results) == 0:
             return ToolCall("get_pod", {"name": task["pod"]})
         if len(results) == 1:
