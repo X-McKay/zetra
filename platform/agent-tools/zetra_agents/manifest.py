@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,7 +34,7 @@ EFFECT = re.compile(r"^[a-z_]{1,32}$")
 TOOLS_KEY = re.compile(r"tools:(\s|$)")
 # The SDK's build_agent without the manifest comparison, which is the thing being derived.
 READER = """
-import importlib, json, os, pathlib, sys, types
+import importlib, inspect, json, os, pathlib, sys, types
 app = pathlib.Path(os.environ["AGENT_APP_DIR"])
 entrypoint, instructions, out = sys.argv[1:4]
 async def mcp(*args, **kwargs):
@@ -45,9 +46,19 @@ ctx = types.SimpleNamespace(
     instructions=(app / instructions).read_text(encoding="utf-8"),
     mcp=mcp,
 )
-listed = getattr(importlib.import_module(module), factory)(ctx)["tools"]
-tools = [{"name": t.fn.__name__, "effect": t.effect} for t in listed]
-pathlib.Path(out).write_text(json.dumps(tools), encoding="utf-8")
+agent = getattr(importlib.import_module(module), factory)(ctx)
+tools = [{"name": t.fn.__name__, "effect": t.effect} for t in agent["tools"]]
+decide = agent.get("decide")
+document = {
+    "tools": tools,
+    "decide": {
+        "present": decide is not None,
+        "callable": callable(decide),
+        "async": inspect.iscoroutinefunction(decide)
+        or inspect.iscoroutinefunction(getattr(type(decide), "__call__", None)),
+    },
+}
+pathlib.Path(out).write_text(json.dumps(document), encoding="utf-8")
 """
 
 
@@ -68,10 +79,80 @@ def declared(agent: AgentDir) -> dict:
 
 def code_tools(agent: AgentDir) -> list[dict[str, str]]:
     """The tools `create_agent` returns, in its order, as the manifest lists them."""
+    return read_code(agent)[0]
+
+
+def decide_problems(agent: AgentDir) -> list[str]:
+    """Where the manifest and the code disagree about a model: `model: null` needs a plain
+    function `decide` in what `create_agent` returns, and a model forbids one. Code that
+    cannot be read has nothing to compare for an agent that declares a model, since nothing
+    about a model depends on it (`render --check` says why); for `model: null` the
+    declaration is exactly what the code must confirm, so that is reported."""
+    try:
+        manifest = declared(agent)
+    except ToolsError:
+        return []
+    model_free = "model" in manifest and manifest["model"] is None
+    try:
+        _, decide = read_code(agent)
+    except ToolsError as e:
+        if not model_free:
+            return []
+        return [
+            (
+                f"{agent.name}: agent.yaml declares model: null, but the code could not be "
+                f"read ({e}), so the decide function it requires could not be confirmed"
+            )
+        ]
+    if model_free and not decide["present"]:
+        return [
+            (
+                f"{agent.name}: agent.yaml declares model: null but create_agent returns no "
+                'decide function; add `"decide": decide` to what it returns, or declare a '
+                "model in agent.yaml and grant it under capabilities.models in deploy/agent.yaml"
+            )
+        ]
+    if model_free and not decide["callable"]:
+        return [
+            (
+                f"{agent.name}: the decide create_agent returns is not callable; it must be a "
+                "plain function taking (task, results)"
+            )
+        ]
+    if model_free and decide["async"]:
+        return [
+            (
+                f"{agent.name}: the decide create_agent returns is an async function; it must "
+                "be a plain `def decide(task, results)`, which the SDK calls and does not await"
+            )
+        ]
+    if not model_free and "model" in manifest and decide["present"]:
+        return [
+            (
+                f"{agent.name}: create_agent returns a decide function but agent.yaml declares "
+                "a model; remove `decide` from what it returns, or set model: null in agent.yaml "
+                "and capabilities.models: [] in deploy/agent.yaml"
+            )
+        ]
+    return []
+
+
+def read_code(agent: AgentDir) -> tuple[list[dict[str, str]], dict[str, bool]]:
+    """What `create_agent` returns: its tools as the manifest lists them, and what it
+    returns for `decide`: whether it is present, callable and an async function."""
     manifest = declared(agent)
+    if not agent.src.is_dir():
+        raise ToolsError("the agent has no src/ directory, so there is no code to read")
     with tempfile.TemporaryDirectory(prefix="zetra-agents-tools-") as tmp:
         root = Path(tmp)
-        testing.lay_out(agent, root / "app")
+        try:
+            testing.lay_out(agent, root / "app")
+        except (OSError, shutil.Error) as e:
+            first = e.args[0][0] if isinstance(e, shutil.Error) and e.args[0] else None
+            reason = first[2] if first else str(e) or type(e).__name__
+            raise ToolsError(
+                f"cannot copy src/ to read the code: {' '.join(reason.split())[:300]}"
+            ) from None
         (root / "sandbox" / "workspace").mkdir(parents=True)
         out = root / "tools.json"
         environment = testing.child_environment(root / "app", root / "sandbox")
@@ -102,14 +183,15 @@ def code_tools(agent: AgentDir) -> list[dict[str, str]]:
                 else ""
             )
             raise ToolsError(f"cannot read the tools from the code: {last[:300]}{hint}")
-        tools = json.loads(out.read_text(encoding="utf-8"))
+        document = json.loads(out.read_text(encoding="utf-8"))
+    tools = document["tools"]
     names = [t["name"] for t in tools]
     if len(set(names)) != len(names):
         raise ToolsError("create_agent returns two tools with the same name")
     for tool in tools:
         if not TOOL_NAME.match(tool["name"]) or not EFFECT.match(tool["effect"]):
             raise ToolsError(f"tool {tool['name']!r} has a name or effect that cannot be listed")
-    return tools
+    return tools, document["decide"]
 
 
 def block(tools: list[dict[str, str]]) -> str:

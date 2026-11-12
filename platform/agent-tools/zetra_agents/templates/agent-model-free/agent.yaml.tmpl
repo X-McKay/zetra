@@ -1,0 +1,8 @@
+schema_version: 1
+name: @@AGENT@@
+entrypoint: @@PACKAGE@@.agent:create_agent
+instructions: @@PACKAGE@@/instructions/base.md
+model: null
+tools:
+  - name: write_report
+    effect: workspace_write

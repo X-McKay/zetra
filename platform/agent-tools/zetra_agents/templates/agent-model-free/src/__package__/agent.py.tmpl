@@ -1,0 +1,24 @@
+"""@@DESCRIPTION@@
+
+This agent declares `model: null`, so no model is called: `create_agent` returns `decide`
+beside the tools, and the SDK calls it at each boundary where a model would be asked. It
+gets the task and the results of the tool calls made so far, and returns the next
+`ToolCall(name, arguments)` or `Done(summary)`. A tool runs exactly as it does for a model:
+the effect checks, the result bounds and the session state are the SDK's. `decide` is a
+plain function; it must not read the network or the environment, and anything it raises is
+reported as an agent error that names the problem and leaves the task out.
+
+After changing the tools, `just render` rewrites the `tools:` list in agent.yaml.
+"""
+
+from agent_runtime.report import report_tool
+from agent_runtime.tools import Done, ToolCall
+
+
+def create_agent(ctx) -> dict:
+    def decide(task, results):
+        if not results:
+            return ToolCall("write_report", {"content": "The starter agent ran without a model."})
+        return Done("Report ready.")
+
+    return {"tools": [report_tool(ctx.workspace)], "decide": decide}

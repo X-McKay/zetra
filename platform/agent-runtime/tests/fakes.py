@@ -255,3 +255,145 @@ def make_app(directory: Path, manifest: dict = MANIFEST) -> Path:
     (directory / "instructions" / "base.md").write_text("You are a test agent.")
     (directory / "fakeagent.py").write_text(AGENT_MODULE)
     return directory
+
+
+DECIDE_MODULE = '''
+from agent_runtime.tools import Done, Tool, ToolCall
+
+SECRET = "task-secret-value-9f3"
+HOSTILE = "hostile-text-4d1"
+
+class Loud(str):
+    def __str__(self):
+        raise RuntimeError(HOSTILE)
+    def __format__(self, spec):
+        return HOSTILE
+
+class LoudDone(Done):
+    def __init__(self):
+        pass
+    @property
+    def summary(self):
+        raise RuntimeError(HOSTILE)
+
+class LoudDict(dict):
+    def items(self):
+        raise RuntimeError(HOSTILE)
+
+class Weird(BaseException):
+    pass
+
+class RaisingName(type):
+    @property
+    def __name__(cls):
+        raise RuntimeError(HOSTILE)
+
+class OddName(type):
+    @property
+    def __name__(cls):
+        return 7
+
+class SubDict(dict):
+    pass
+
+class SubList(list):
+    pass
+
+class SubStr(str):
+    pass
+
+def create_agent(ctx):
+    async def get_pod(name):
+        """Get a pod."""
+        (ctx.workspace / ("pod-" + name)).write_text("x")
+        return {"pod": name}
+
+    async def write_report(text):
+        """Write the report into the workspace."""
+        (ctx.workspace / "report.md").write_text(text)
+        return {"written": len(text)}
+
+    def decide(task, results):
+        mode = task.get("mode")
+        if mode == "raise":
+            raise RuntimeError("boom " + task["secret"])
+        if mode == "wrong-type":
+            return {"call": "get_pod"}
+        if mode == "unknown-tool":
+            return ToolCall("delete_everything", {})
+        if mode == "bad-arguments":
+            return ToolCall("get_pod", {"name": {1, 2}})
+        if mode == "bad-summary":
+            return Done(7)
+        if mode == "loud-summary":
+            return Done(Loud(HOSTILE))
+        if mode == "loud-done":
+            return LoudDone()
+        if mode == "loud-name":
+            return ToolCall(Loud("get_pod"), {"name": "p"})
+        if mode == "loud-arguments":
+            return ToolCall("get_pod", LoudDict(name="p"))
+        if mode == "keyboard-interrupt":
+            raise KeyboardInterrupt(HOSTILE + task["secret"])
+        if mode == "base-exception":
+            raise Weird(HOSTILE + task["secret"])
+        if mode == "raising-name-exception":
+            raise RaisingName("E", (Exception,), {})(HOSTILE)
+        if mode == "odd-name-exception":
+            raise OddName("E", (BaseException,), {})(HOSTILE)
+        if mode == "raising-name-return":
+            return RaisingName("R", (), {})()
+        if mode == "odd-name-return":
+            return OddName("R", (), {})()
+        if mode == "odd-name-tool":
+            return ToolCall(OddName("N", (), {})(), {})
+        if mode == "sub-dict":
+            return ToolCall("get_pod", {"name": SubDict({1: "x"})})
+        if mode == "sub-list":
+            return ToolCall("get_pod", {"name": SubList([{1: "x"}])})
+        if mode == "sub-str":
+            return ToolCall("get_pod", {"name": SubStr("x")})
+        if mode == "prints":
+            print("noise from decide", HOSTILE)
+            return Done("quiet")
+        if mode == "system-exit":
+            raise SystemExit(7)
+        if mode == "int-key":
+            return ToolCall("get_pod", {1: "a"})
+        if mode == "nested-int-key":
+            return ToolCall("get_pod", {"name": {2: "a"}})
+        if mode == "nan":
+            return ToolCall("get_pod", {"name": float("nan")})
+        if mode == "infinity":
+            return ToolCall("get_pod", {"name": [float("inf")]})
+        if mode == "huge":
+            return ToolCall("get_pod", {"name": "x" * 30_000_000})
+        if len(results) == 0:
+            return ToolCall("get_pod", {"name": task["pod"]})
+        if len(results) == 1:
+            return ToolCall("write_report", {"text": "saw " + results[0].result["pod"]})
+        return Done("reported on " + results[0].arguments["name"])
+
+    return {"tools": [Tool(get_pod, "remote_read"), Tool(write_report, "workspace_write")],
+            "decide": decide}
+'''
+
+MODEL_FREE_MANIFEST = {
+    "schema_version": 1,
+    "name": "conformance",
+    "entrypoint": "fakeagent:create_agent",
+    "instructions": "instructions/base.md",
+    "model": None,
+    "tools": [
+        {"name": "get_pod", "effect": "remote_read"},
+        {"name": "write_report", "effect": "workspace_write"},
+    ],
+}
+
+
+def make_decide_app(
+    directory: Path, manifest: dict = MODEL_FREE_MANIFEST, module: str = DECIDE_MODULE
+) -> Path:
+    make_app(directory, manifest)
+    (directory / "fakeagent.py").write_text(module)
+    return directory

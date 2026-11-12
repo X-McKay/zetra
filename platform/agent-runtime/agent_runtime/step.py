@@ -1,12 +1,17 @@
 """One boundary: load state, call the model or one tool, persist state, print the result
 (spec 10.4, 11.8).
 
+A model-free agent (manifest `model: null`) returns a `decide` function from `create_agent`; at
+each boundary where a model would be called, `decide(task, results)` is called instead and
+returns a ToolCall or a Done. Everything after that is shared: the tool runs on the next boundary.
+
 Exit codes: 0 success; 2 completion (done: true); 3 agent error (terminal); 4 budget
 (advisory counter, or a 429 from the gateway); 5 protocol error. Anything else, such as an
 uncaught exception (1), is an unknown outcome for the runner.
 """
 
 import asyncio
+import contextlib
 import importlib
 import inspect
 import json
@@ -22,7 +27,7 @@ import yaml
 
 from agent_runtime import confine
 from agent_runtime.identity import sandbox_dir, state_dir, write_private
-from agent_runtime.tools import EFFECTS, Tool
+from agent_runtime.tools import EFFECTS, Done, Tool, ToolCall, ToolResult
 
 MAX_INPUT = 65536
 MAX_OUTPUT = 65536
@@ -118,7 +123,15 @@ def load_manifest() -> dict:
 
 
 def build_agent(manifest: dict):
-    """Import the agent and check its tools match the manifest exactly. Errors are agent errors."""
+    """Import the agent and check its tools match the manifest exactly. Errors are agent
+    errors. Returns (instructions, tools). This is the contract conformance fixtures call
+    from their own step drivers and image checks: it knows nothing about `decide`."""
+    return load_agent(manifest)[:2]
+
+
+def load_agent(manifest: dict):
+    """`build_agent`, also returning what `create_agent` gave for `decide` (None when it
+    gave none), with no opinion on whether the manifest and the code agree about it."""
     app = app_dir().resolve()
     module, _, factory = manifest["entrypoint"].partition(":")
     path = (app / manifest["instructions"]).resolve()
@@ -142,7 +155,28 @@ def build_agent(manifest: dict):
     tools = {t.fn.__name__: t for t in listed}
     if len(tools) != len(listed) or {n: t.effect for n, t in tools.items()} != declared:
         raise ValueError("the image's tools do not match its manifest")
-    return instructions, tools
+    decide = agent.get("decide")
+    return instructions, tools, decide
+
+
+def create(manifest: dict):
+    """`load_agent` for the path that runs an ordinary agent's boundary: the agent must
+    have a `decide` exactly when the manifest declares no model. Returns (instructions,
+    tools, decide), decide being None for a model-backed agent. Errors are agent errors."""
+    instructions, tools, decide = load_agent(manifest)
+    if manifest.get("model") is None and decide is None:
+        raise ValueError(
+            "agent.yaml declares model: null, so create_agent must also return a decide "
+            'function; add `"decide": decide` to what it returns, or declare a model'
+        )
+    if manifest.get("model") is not None and decide is not None:
+        raise ValueError(
+            "create_agent returns a decide function but agent.yaml declares a model; remove "
+            "`decide` from what it returns, or declare model: null (and capabilities.models: [])"
+        )
+    if decide is not None and not callable(decide):
+        raise ValueError("decide must be callable")
+    return instructions, tools, decide
 
 
 def schema(tool: Tool) -> dict:
@@ -263,6 +297,144 @@ def run_model(state: dict, manifest: dict, tools: dict, out: dict) -> int:
     return 0
 
 
+def tool_history(messages: list) -> list[ToolResult]:
+    """The tool calls made so far, in order, read back from the session state."""
+    history, pending = [], None
+    for m in messages:
+        if m["role"] == "assistant" and m.get("tool_calls"):
+            pending = m["tool_calls"][0]["function"]
+        elif m["role"] == "tool" and pending is not None:
+            history.append(
+                ToolResult(
+                    pending["name"],
+                    json.loads(pending["arguments"] or "{}"),
+                    json.loads(m["content"]),
+                )
+            )
+            pending = None
+    return history
+
+
+class Refused(Exception):
+    """`decide` answered with something the SDK will not run; the message is the agent error."""
+
+
+_TYPE_NAME = type.__dict__["__name__"]
+
+
+def class_name(obj) -> str:
+    """The name of `obj`'s class for a message, read from the type object itself, so no
+    metaclass attribute lookup and no agent code runs. Only an exact `str` is used, clipped;
+    anything else, or any failure, gives a fixed word. It cannot raise."""
+    try:
+        name = _TYPE_NAME.__get__(type(obj))
+        return short(name, 64) if type(name) is str else "object"
+    except BaseException:  # noqa: BLE001 - naming a class must never be what fails
+        return "object"
+
+
+def strict_keys(value, depth: int = 0) -> None:
+    """Raise unless `value` is plain JSON as the SDK defines it: exactly dict (with `str`
+    keys only), list or tuple containers, and exactly str, int, float, bool or None leaves.
+    Subclasses are refused at every depth, since they are not inspected by what they claim."""
+    if depth > 64:
+        raise Refused("nested too deeply")
+    kind = type(value)
+    if kind is dict:
+        for k, v in value.items():
+            if type(k) is not str:
+                raise Refused("an object key is not a string")
+            strict_keys(v, depth + 1)
+    elif kind in (list, tuple):
+        for v in value:
+            strict_keys(v, depth + 1)
+    elif kind not in (str, int, float, bool, type(None)):
+        raise Refused("a value is not a plain JSON type")
+
+
+def decision_of(decision, tools: dict) -> tuple:
+    """Read what `decide` returned, once: ("done", summary) or ("call", name, arguments as
+    JSON). Only the exact classes and built-in types are used, so nothing of the agent's own
+    runs while its answer is read. Raises Refused with the agent error's message."""
+    if type(decision) is Done:
+        summary = decision.summary
+        if type(summary) is not str:
+            raise Refused("Done.summary must be a string")
+        return ("done", summary)
+    if type(decision) is not ToolCall:
+        raise Refused(f"decide returned {class_name(decision)}, not a ToolCall or a Done")
+    name, arguments = decision.name, decision.arguments
+    if type(name) is not str or name not in tools:
+        raise Refused(
+            "decide named a tool the agent does not have "
+            f"({short(name, 64) if type(name) is str else class_name(name)}); "
+            f"its tools are {', '.join(sorted(tools))}"
+        )
+    try:
+        if type(arguments) is not dict:
+            raise TypeError
+        strict_keys(arguments)
+        data = json.dumps(arguments, allow_nan=False)
+    except Refused as e:
+        raise Refused(f"the arguments for {name} are not plain JSON: {e}") from None
+    except Exception:  # noqa: BLE001 - nothing in the arguments is trusted, even to fail well
+        raise Refused(f"the arguments for {name} are not a JSON object") from None
+    if len(data) > MAX_TOOL_RESULT:  # ASCII-only, so characters are bytes
+        raise Refused(
+            f"the arguments for {name} are {len(data)} bytes as JSON; the limit is "
+            f"{MAX_TOOL_RESULT}"
+        )
+    return ("call", name, data)
+
+
+def run_decide(state: dict, task, tools: dict, decide, out: dict) -> int:
+    """The boundary where a model-backed agent would call the model: ask `decide` instead and
+    record its answer in the shape the model's reply takes, so the next boundary runs the
+    tool through `run_tool` and completion is the same exit 2. No model call, so no usage;
+    the record is a `tool` boundary with no tool, which the runner already accepts. Anything
+    that goes wrong with `decide` or its answer, SystemExit and KeyboardInterrupt from agent
+    code included, is an agent error naming the problem and never the task or the exception's
+    text, which may hold either. The SDK's own exit is `emit`, which the caller makes."""
+    out.update(kind="tool", usage=None)
+    try:
+        results = tool_history(state["messages"])
+        with contextlib.redirect_stdout(sys.stderr):  # stdout carries the one record, only
+            decision = decide(task, results)
+        if inspect.isawaitable(decision):
+            if inspect.iscoroutine(decision):
+                decision.close()
+            out["summary"] = "agent error: decide must be a plain function, not async"
+            return 3
+    except BaseException as e:  # noqa: BLE001 - whatever decide raises is an agent error
+        out["summary"] = f"agent error: decide raised {class_name(e)}"
+        return 3
+    try:
+        kind, *rest = decision_of(decision, tools)
+    except Refused as e:
+        out["summary"] = f"agent error: {e}"
+        return 3
+    except BaseException as e:  # noqa: BLE001 - reading the answer ran agent code and failed
+        out["summary"] = f"agent error: decide's answer could not be read ({class_name(e)})"
+        return 3
+    if kind == "done":
+        state["messages"].append({"role": "assistant", "content": rest[0]})
+        out["summary"] = rest[0]
+        return 2
+    name, arguments = rest
+    call = {"name": name, "arguments": arguments}
+    state["messages"].append(
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": f"decide_{out['boundary']}", "type": "function", "function": call}
+            ],
+        }
+    )
+    out["summary"] = f"decided to call {name}"
+    return 0
+
+
 def main() -> None:
     confine.apply()
     try:
@@ -291,7 +463,7 @@ def main() -> None:
         emit({**out, "summary": "boundary mismatch"}, 5)
     try:
         manifest = load_manifest()
-        instructions, tools = build_agent(manifest)
+        instructions, tools, decide = create(manifest)
     except Exception as e:  # noqa: BLE001 - any failure to build the agent is an agent error
         emit({**out, "summary": f"agent error: {type(e).__name__}: {short(e, 200)}"}, 3)
     if not state["messages"]:
@@ -311,6 +483,8 @@ def main() -> None:
         )
         keys = list(result)[:3] if isinstance(result, dict) else "ok"
         out.update(kind="tool", tool=name, summary=f"{name} -> {keys}")
+    elif decide is not None:
+        rc = run_decide(state, req["task"], tools, decide, out)
     else:
         rc = run_model(state, manifest, tools, out)
 

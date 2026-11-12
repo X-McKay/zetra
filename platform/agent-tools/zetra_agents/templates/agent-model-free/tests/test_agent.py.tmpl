@@ -1,0 +1,33 @@
+"""`agent` is this agent, built by the SDK as its image builds it (zetra-agents provides
+the fixture). It declares no model, so `agent.session(task)` drives it through `decide`
+and the tools, as the boundaries would, and returns the calls made and the summary.
+`agent.mcp` stands in for the gateway: script what a granted MCP tool returns with
+`agent.mcp.reply(tool, text)`. The last test runs scenarios/smoke.yaml, as `just run` does.
+"""
+
+from zetra_agents import local
+
+
+def test_the_agent_has_a_decide_and_the_report_tool(agent):
+    assert agent.decide is not None
+    assert set(agent.tools) == {"write_report"}
+
+
+async def test_report_is_bounded(agent):
+    assert "error" in await agent.call("write_report", content="")
+    assert "error" in await agent.call("write_report", content="word " * 151)
+    assert await agent.call("write_report", content="All good.") == {"path": "report.md"}
+    assert (agent.workspace / "report.md").read_text() == "All good.\n"
+
+
+async def test_a_session_writes_the_report_and_completes(agent):
+    session = await agent.session({"request": "Say that you are running."})
+    assert [c.name for c in session.calls] == ["write_report"]
+    assert session.summary == "Report ready."
+    assert (agent.workspace / "report.md").read_text() == "The starter agent ran without a model.\n"
+
+
+def test_the_smoke_scenario_ends_with_a_report(agent_dir, tmp_path):
+    result = local.run(agent_dir, "smoke", out=tmp_path / "run")
+    assert result.ok, (result.outcome, result.detail, result.problems)
+    assert result.report.read_text() == "The starter agent ran without a model.\n"

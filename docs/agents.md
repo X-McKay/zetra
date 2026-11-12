@@ -236,6 +236,57 @@ private Sigstore as the repository's own workflow identity, verifies, and publis
 release assets. Kubani registers the repository for a tenant once (`just agent
 register`), then stages and approves each release in separate reviewed changes.
 
+### An agent without a model
+
+Choose one when the steps are known in advance and a model would only add cost and
+variance: collecting the same evidence and writing the same kind of report, a scheduled
+check, a data transformation. If the next step depends on reading free text, use a model.
+Start it with `zetra-agents init my-agent --name my-agent --owner you@example.com --model-free`;
+the default scaffold stays model-backed.
+
+The agent declares `model: null` in `agent.yaml` and `models: []` under
+`capabilities` in `deploy/agent.yaml`, and `create_agent` returns `decide` beside the
+tools:
+
+```python
+from agent_runtime.report import report_tool
+from agent_runtime.tools import Done, ToolCall
+
+
+def create_agent(ctx) -> dict:
+    def decide(task, results):
+        if not results:
+            return ToolCall("write_report", {"content": "Nothing to report."})
+        return Done("Report ready.")
+
+    return {"tools": [report_tool(ctx.workspace)], "decide": decide}
+```
+
+At each boundary where a model-backed agent would call the model, the SDK calls
+`decide(task, results)`. `task` is the session's task; `results` is the list of
+`ToolResult(name, arguments, result)` for the tool calls made so far, in order, each
+result as bounded in the session state (a tool's exception is `{"error": <type>}`).
+`decide` is a plain synchronous function and returns either `ToolCall(name, arguments)`,
+which the next boundary runs through the same path a model's tool call takes (effect
+checks, result bounds, state), or `Done(summary)`, which completes the session. A session
+therefore uses two boundaries per tool call, as a model-backed one does. A decide
+boundary reports `kind: "tool"`, no tool and no usage, since no model was called and no
+tokens were used; the Session Runner accepts that record unchanged. `decide` raising,
+returning anything else, or naming a tool the agent does not have is an agent error (exit
+3) whose message names the problem and not the task.
+
+`zetra-agents check` fails when the two disagree: `model: null` without `decide` in what
+`create_agent` returns, or `decide` with a model declared, and when `decide` is not a plain
+function (a non-callable, `async def`, or an object whose `__call__` is `async def`; a
+synchronous callable that merely returns an awaitable cannot be told apart without calling it,
+so `check` does not catch that and the SDK refuses it at the first boundary). If the code cannot be read, `check` says so for a
+`model: null` agent, because it could not confirm the `decide` the declaration requires.
+`agent.session(task)` in a test and `just run` drive the agent through `decide`;
+`session` runs each tool through the SDK's `run_tool`, so a tool that raises reaches
+`decide` as the result `{"error": <type>}` and the session continues, as in a sandbox. A
+scenario for it has no `model:` script and `--live` does not apply. An image that replaces the SDK's `step.py` is a conformance
+fixture, not a way to run an ordinary agent without a model.
+
 ## Local harness projects (OpenShell)
 
 Start with `zetra init --harness ./my-agent --name my-agent`, then `cd my-agent` and

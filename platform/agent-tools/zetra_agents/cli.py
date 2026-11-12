@@ -76,6 +76,12 @@ def main(argv: list[str] | None = None) -> int:
     ini.add_argument("--owner", required=True, help="Agent spec.owner (an email address)")
     ini.add_argument("--description", default="", help="Agent spec.description")
     ini.add_argument(
+        "--model-free",
+        action="store_true",
+        help="start an agent that declares no model and decides each step in code "
+        "(default: a model-backed agent)",
+    )
+    ini.add_argument(
         "--zetra-rev",
         help="40-hex zetra commit to pin (default: the one this tooling was installed from)",
     )
@@ -191,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
         problems = [] if selected else layout.check_repository(repo)
         problems += [p for a in agents for p in layout.check(a)]
         if not problems:
+            problems += [p for a in agents for p in code_problems(a)]
+        if not problems:
             problems += [
                 p for a in agents for p in release.compile_problems(a, args.mcp_resource_base)
             ]
@@ -215,6 +223,12 @@ def main(argv: list[str] | None = None) -> int:
     for path in release.write(artifacts, args.out):
         print(path)
     return 0
+
+
+def code_problems(agent: layout.AgentDir) -> list[str]:
+    """What only the agent's code can show, once its files are in order. A conformance
+    fixture's factory refuses to run outside its image, so a fixture is not read."""
+    return manifest.decide_problems(agent) if layout.image_target(agent) == "runtime" else []
 
 
 def render_command(repo: Path, args: argparse.Namespace) -> int:
@@ -261,7 +275,13 @@ def run_command(repo: Path, args: argparse.Namespace) -> int:
                 raise local.ScenarioError("--task-json is not JSON") from None
         elif args.task is not None:
             scenario = dataclasses.replace(scenario, task={"request": args.task})
-        mode = "live model" if args.live else "scripted model"
+        mode = (
+            "no model (decide)"
+            if local.model_free(agent)
+            else "live model"
+            if args.live
+            else "scripted model"
+        )
         print(f"{agent.name}: {mode}, {scenario.source or 'no scenario'}", file=sys.stderr)
         result = local.run(
             agent,
@@ -298,6 +318,7 @@ def init(args: argparse.Namespace) -> int:
             tenant=args.tenant,
             owner=args.owner,
             description=args.description or f"{args.agent} agent",
+            model_free=args.model_free,
         )
     except render.RenderError as exc:
         print(exc, file=sys.stderr)
