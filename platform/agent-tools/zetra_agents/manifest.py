@@ -54,7 +54,8 @@ document = {
     "decide": {
         "present": decide is not None,
         "callable": callable(decide),
-        "async": inspect.iscoroutinefunction(decide),
+        "async": inspect.iscoroutinefunction(decide)
+        or inspect.iscoroutinefunction(getattr(type(decide), "__call__", None)),
     },
 }
 pathlib.Path(out).write_text(json.dumps(document), encoding="utf-8")

@@ -249,7 +249,9 @@ returning anything else, or naming a tool the agent does not have is an agent er
 
 `zetra-agents check` fails when the two disagree: `model: null` without `decide` in what
 `create_agent` returns, or `decide` with a model declared, and when `decide` is not a plain
-function (a non-callable, or `async def`). If the code cannot be read, `check` says so for a
+function (a non-callable, `async def`, or an object whose `__call__` is `async def`; a
+synchronous callable that merely returns an awaitable cannot be told apart without calling it,
+so `check` does not catch that and the SDK refuses it at the first boundary). If the code cannot be read, `check` says so for a
 `model: null` agent, because it could not confirm the `decide` the declaration requires.
 `agent.session(task)` in a test and `just run` drive the agent through `decide`;
 `session` runs each tool through the SDK's `run_tool`, so a tool that raises reaches

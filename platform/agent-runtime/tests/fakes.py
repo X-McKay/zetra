@@ -283,6 +283,25 @@ class LoudDict(dict):
 class Weird(BaseException):
     pass
 
+class RaisingName(type):
+    @property
+    def __name__(cls):
+        raise RuntimeError(HOSTILE)
+
+class OddName(type):
+    @property
+    def __name__(cls):
+        return 7
+
+class SubDict(dict):
+    pass
+
+class SubList(list):
+    pass
+
+class SubStr(str):
+    pass
+
 def create_agent(ctx):
     async def get_pod(name):
         """Get a pod."""
@@ -318,6 +337,25 @@ def create_agent(ctx):
             raise KeyboardInterrupt(HOSTILE + task["secret"])
         if mode == "base-exception":
             raise Weird(HOSTILE + task["secret"])
+        if mode == "raising-name-exception":
+            raise RaisingName("E", (Exception,), {})(HOSTILE)
+        if mode == "odd-name-exception":
+            raise OddName("E", (BaseException,), {})(HOSTILE)
+        if mode == "raising-name-return":
+            return RaisingName("R", (), {})()
+        if mode == "odd-name-return":
+            return OddName("R", (), {})()
+        if mode == "odd-name-tool":
+            return ToolCall(OddName("N", (), {})(), {})
+        if mode == "sub-dict":
+            return ToolCall("get_pod", {"name": SubDict({1: "x"})})
+        if mode == "sub-list":
+            return ToolCall("get_pod", {"name": SubList([{1: "x"}])})
+        if mode == "sub-str":
+            return ToolCall("get_pod", {"name": SubStr("x")})
+        if mode == "prints":
+            print("noise from decide", HOSTILE)
+            return Done("quiet")
         if mode == "system-exit":
             raise SystemExit(7)
         if mode == "int-key":

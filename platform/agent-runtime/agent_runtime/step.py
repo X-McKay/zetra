@@ -11,6 +11,7 @@ uncaught exception (1), is an unknown outcome for the runner.
 """
 
 import asyncio
+import contextlib
 import importlib
 import inspect
 import json
@@ -318,18 +319,37 @@ class Refused(Exception):
     """`decide` answered with something the SDK will not run; the message is the agent error."""
 
 
+_TYPE_NAME = type.__dict__["__name__"]
+
+
+def class_name(obj) -> str:
+    """The name of `obj`'s class for a message, read from the type object itself, so no
+    metaclass attribute lookup and no agent code runs. Only an exact `str` is used, clipped;
+    anything else, or any failure, gives a fixed word. It cannot raise."""
+    try:
+        name = _TYPE_NAME.__get__(type(obj))
+        return short(name, 64) if type(name) is str else "object"
+    except BaseException:  # noqa: BLE001 - naming a class must never be what fails
+        return "object"
+
+
 def strict_keys(value, depth: int = 0) -> None:
-    """Raise unless every mapping inside `value` has only `str` keys, as JSON does."""
+    """Raise unless `value` is plain JSON as the SDK defines it: exactly dict (with `str`
+    keys only), list or tuple containers, and exactly str, int, float, bool or None leaves.
+    Subclasses are refused at every depth, since they are not inspected by what they claim."""
     if depth > 64:
         raise Refused("nested too deeply")
-    if type(value) is dict:
+    kind = type(value)
+    if kind is dict:
         for k, v in value.items():
             if type(k) is not str:
                 raise Refused("an object key is not a string")
             strict_keys(v, depth + 1)
-    elif type(value) in (list, tuple):
+    elif kind in (list, tuple):
         for v in value:
             strict_keys(v, depth + 1)
+    elif kind not in (str, int, float, bool, type(None)):
+        raise Refused("a value is not a plain JSON type")
 
 
 def decision_of(decision, tools: dict) -> tuple:
@@ -342,12 +362,12 @@ def decision_of(decision, tools: dict) -> tuple:
             raise Refused("Done.summary must be a string")
         return ("done", summary)
     if type(decision) is not ToolCall:
-        raise Refused(f"decide returned {type(decision).__name__}, not a ToolCall or a Done")
+        raise Refused(f"decide returned {class_name(decision)}, not a ToolCall or a Done")
     name, arguments = decision.name, decision.arguments
     if type(name) is not str or name not in tools:
         raise Refused(
             "decide named a tool the agent does not have "
-            f"({short(name, 64) if type(name) is str else type(name).__name__}); "
+            f"({short(name, 64) if type(name) is str else class_name(name)}); "
             f"its tools are {', '.join(sorted(tools))}"
         )
     try:
@@ -377,14 +397,16 @@ def run_decide(state: dict, task, tools: dict, decide, out: dict) -> int:
     text, which may hold either. The SDK's own exit is `emit`, which the caller makes."""
     out.update(kind="tool", usage=None)
     try:
-        decision = decide(task, tool_history(state["messages"]))
+        results = tool_history(state["messages"])
+        with contextlib.redirect_stdout(sys.stderr):  # stdout carries the one record, only
+            decision = decide(task, results)
         if inspect.isawaitable(decision):
             if inspect.iscoroutine(decision):
                 decision.close()
             out["summary"] = "agent error: decide must be a plain function, not async"
             return 3
     except BaseException as e:  # noqa: BLE001 - whatever decide raises is an agent error
-        out["summary"] = f"agent error: decide raised {type(e).__name__}"
+        out["summary"] = f"agent error: decide raised {class_name(e)}"
         return 3
     try:
         kind, *rest = decision_of(decision, tools)
@@ -392,7 +414,7 @@ def run_decide(state: dict, task, tools: dict, decide, out: dict) -> int:
         out["summary"] = f"agent error: {e}"
         return 3
     except BaseException as e:  # noqa: BLE001 - reading the answer ran agent code and failed
-        out["summary"] = f"agent error: decide's answer could not be read ({type(e).__name__})"
+        out["summary"] = f"agent error: decide's answer could not be read ({class_name(e)})"
         return 3
     if kind == "done":
         state["messages"].append({"role": "assistant", "content": rest[0]})

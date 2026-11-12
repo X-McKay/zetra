@@ -368,7 +368,7 @@ def test_model_free_session_two_tool_calls_then_completion(free):
         ("raise", "decide raised RuntimeError"),
         ("wrong-type", "decide returned dict, not a ToolCall or a Done"),
         ("unknown-tool", "named a tool the agent does not have (delete_everything)"),
-        ("bad-arguments", "arguments for get_pod are not a JSON object"),
+        ("bad-arguments", "arguments for get_pod are not plain JSON: a value is not a plain"),
         ("bad-summary", "Done.summary must be a string"),
     ],
 )
@@ -396,6 +396,42 @@ def test_hostile_decisions_and_base_exceptions_are_agent_errors(free, mode, mess
     assert rc == 3 and out is not None and message in out["summary"]
     for text in (json.dumps(out), err, *free.outputs):
         assert "task-secret-value-9f3" not in text and "hostile-text-4d1" not in text
+
+
+@pytest.mark.parametrize(
+    "mode,message",
+    [
+        ("raising-name-exception", "decide raised E"),
+        ("odd-name-exception", "decide raised E"),
+        ("raising-name-return", "decide returned R, not a ToolCall or a Done"),
+        ("odd-name-return", "decide returned R, not a ToolCall or a Done"),
+        ("odd-name-tool", "decide named a tool the agent does not have (N)"),
+    ],
+)
+def test_a_class_whose_name_cannot_be_read_still_ends_in_exit_3(free, mode, message):
+    rc, out, err = free.run(0, {"mode": mode})
+    assert rc == 3 and out is not None and message in out["summary"]
+    assert "hostile-text-4d1" not in json.dumps(out) + err
+
+
+def test_output_printed_by_decide_goes_to_stderr_not_the_record(free):
+    rc, text, err = free.raw(
+        b"%d\n%s"
+        % (len(body := json.dumps({"boundary": 0, "task": {"mode": "prints"}}).encode()), body)
+    )
+    assert rc == 2
+    assert json.loads(text)["summary"] == "quiet"  # the whole of stdout is one record
+    assert "noise from decide" in err
+
+
+@pytest.mark.parametrize(
+    "mode",
+    ["sub-dict", "sub-list", "sub-str"],
+)
+def test_container_and_leaf_subclasses_in_arguments_are_refused(free, mode):
+    rc, out, _ = free.run(0, {"mode": mode})
+    assert rc == 3 and "not plain JSON" in out["summary"]
+    assert all(not m.get("tool_calls") for m in free.saved()["messages"])
 
 
 @pytest.mark.parametrize(

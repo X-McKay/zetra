@@ -239,6 +239,18 @@ def test_check_refuses_an_async_decide(free, capsys):
     assert "is an async function" in err and "plain `def decide(task, results)`" in err
 
 
+def test_check_refuses_a_decide_object_with_an_async_call(free, capsys):
+    path = module(free)
+    text = path.read_text().replace('"decide": decide', '"decide": AsyncDecide()')
+    path.write_text(
+        "class AsyncDecide:\n    async def __call__(self, task, results):\n        return None\n\n"
+        + text
+    )
+    code, err = check(free, capsys)
+    assert code == 1
+    assert "is an async function" in err and "plain `def decide(task, results)`" in err
+
+
 def unreadable_file(agent):
     import os
 
