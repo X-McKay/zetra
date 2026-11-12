@@ -336,3 +336,44 @@ def test_registry_auth_present(config, present):
 
 def test_registry_auth_present_rejects_unparsable_text():
     assert tool.registry_auth_present("not json", "registry.almckay.io") is False
+
+
+def test_declared_inputs_replace_the_context_for_change_detection(repo):
+    narrow = [dict(i) for i in DEFAULT]
+    narrow[4]["inputs"] = ["platform/wide/src", "platform/alpha/main.go"]
+    repo.set_images(narrow)
+    repo.write("platform/wide/src/a.py")
+    base = repo.commit()
+    repo.write("platform/beta/other.txt")  # inside context `platform`, outside the inputs
+    assert repo.released(base, repo.commit()) == ["beta"]
+    repo.write("platform/wide/src/a.py", "changed")
+    assert repo.released(base, repo.commit()) == ["beta", "wide"]
+
+
+def test_declared_inputs_still_release_on_dockerfile_and_entry_changes(repo):
+    narrow = [dict(i) for i in DEFAULT]
+    narrow[4]["inputs"] = ["platform/wide/src"]
+    repo.set_images(narrow)
+    base = repo.commit()
+    repo.write("platform/wide/Dockerfile", "changed")
+    mid = repo.commit()
+    assert repo.released(base, mid) == ["wide"]
+    narrow[4]["inputs"] = ["platform/wide/src", "platform/alpha"]
+    repo.set_images(narrow)
+    assert repo.released(mid, repo.commit()) == ["wide"]
+
+
+def test_a_deleted_input_counts(repo):
+    narrow = [dict(i) for i in DEFAULT]
+    narrow[4]["inputs"] = ["platform/wide/src"]
+    repo.set_images(narrow)
+    repo.write("platform/wide/src/a.py")
+    base = repo.commit()
+    (repo.path / "platform/wide/src/a.py").unlink()
+    assert repo.released(base, repo.commit()) == ["wide"]
+
+
+def test_malformed_inputs_are_rejected():
+    for bad in ([], "platform/a", [""], ["../x"], [1]):
+        with pytest.raises(ImagesError):
+            tool.parse_images(json.dumps([entry("a", "x", inputs=bad)]))

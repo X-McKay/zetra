@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 from pathlib import Path
 
@@ -63,3 +64,44 @@ def test_build_arguments_are_declared_and_agree_with_dockerfile_defaults():
             assert name in declared, (image["repository"], name)
             # A default left in the Dockerfile is a second copy of the value CI passes.
             assert declared[name] in ("", value), (image["repository"], name, declared[name])
+
+
+def copy_sources(dockerfile: Path) -> list[str]:
+    """Every source of each COPY and ADD that reads the build context (not `--from=` stages)."""
+    sources = []
+    for line in dockerfile.read_text().splitlines():
+        words = line.split()
+        if not words or words[0].upper() not in ("COPY", "ADD"):
+            continue
+        if any(w.startswith("--from=") for w in words[1:]):
+            continue
+        args = [w for w in words[1:] if not w.startswith("--")]
+        assert not args[0].startswith("["), f"{dockerfile}: JSON form COPY is not supported"
+        sources += [a for a in args[:-1] if "://" not in a]
+    return sources
+
+
+def test_declared_inputs_cover_everything_the_dockerfile_copies():
+    declared = [image for image in IMAGES if "inputs" in image]
+    assert declared, "no entry declares inputs"
+    for image in declared:
+        sources = copy_sources(REPO / image["dockerfile"])
+        assert sources, image["repository"]
+        for source in sources:
+            path = posixpath.normpath(posixpath.join(image["context"], source))
+            assert any(
+                path == root or path.startswith(root.rstrip("/") + "/") for root in image["inputs"]
+            ), (image["repository"], path, image["inputs"])
+
+
+def test_declared_inputs_exist_and_are_not_the_whole_context():
+    for image in IMAGES:
+        for root in image.get("inputs", []):
+            assert (REPO / root).exists(), (image["repository"], root)
+            assert posixpath.normpath(root) != posixpath.normpath(image["context"])
+
+
+def test_only_known_keys_in_images_json():
+    allowed = {"repository", "dockerfile", "context", "inputs", "platform", "buildArgs"}
+    for image in IMAGES:
+        assert set(image) <= allowed, (image["repository"], set(image) - allowed)

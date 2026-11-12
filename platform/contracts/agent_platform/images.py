@@ -11,10 +11,12 @@ before any dependency is installed, so it uses only the standard library:
     python3 -I images.py registry-auth FILE HOST
 
 An image is released when the push changed its Dockerfile, a file under its build context, or
-its own entry in images.json. `platform/images.json` is the one file under a context that is
-not a build input of its own accord: no Dockerfile copies it, so it counts only through the
-entry comparison (otherwise every edit to the list would rebuild `registry-controller`, whose
-context is `platform`).
+its own entry in images.json. An entry may carry `inputs`, a list of repository paths; the
+build context is then not used for change detection and a file under one of the `inputs` counts
+instead (a context such as `platform` is much wider than what its Dockerfile copies). A test
+holds every `inputs` list to cover everything its Dockerfile copies. `platform/images.json` is
+never a build input of its own accord: no Dockerfile copies it, so it counts only through the
+entry comparison.
 """
 
 from __future__ import annotations
@@ -58,6 +60,13 @@ def parse_images(text: str, source: str = IMAGES_FILE) -> list[dict[str, Any]]:
         if name in seen:
             raise ImagesError(f"{source}: repository {name!r} listed twice")
         seen.add(name)
+        inputs = image.get("inputs")
+        if inputs is not None and (
+            not isinstance(inputs, list)
+            or not inputs
+            or not all(isinstance(p, str) and p and ".." not in p.split("/") for p in inputs)
+        ):
+            raise ImagesError(f"{source}: {name}: inputs must be a non-empty list of paths")
     return images
 
 
@@ -103,8 +112,13 @@ def under(path: str, directory: str) -> bool:
 
 
 def inputs_changed(image: dict[str, Any], paths: list[str]) -> bool:
+    """The Dockerfile, plus the declared `inputs` or, without them, the whole build context."""
     dockerfile = posixpath.normpath(image["dockerfile"])
-    return any(p == dockerfile or (p != IMAGES_FILE and under(p, image["context"])) for p in paths)
+    roots = image.get("inputs") or [image["context"]]
+    return any(
+        p == dockerfile or (p != IMAGES_FILE and any(under(p, root) for root in roots))
+        for p in paths
+    )
 
 
 @dataclass
