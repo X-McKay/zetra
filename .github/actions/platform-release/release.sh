@@ -26,6 +26,12 @@ read -r -a py <<<"${PLATFORM_PYTHON:-python3}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
+# Scratch files (the build's metadata, a captured error) live here and go when the script ends.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+check_name() { [[ $1 =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "bad image name: $1"; }
+
 images_py() {
   local script=${IMAGES_PY:-$(git rev-parse --show-toplevel)/platform/contracts/agent_platform/images.py}
   PYTHONDONTWRITEBYTECODE=1 "${py[@]}" -I "$script" "$@"
@@ -51,7 +57,7 @@ tag_for() { # <commit>
 
 preflight() { # <image>
   local image=${1:?usage: release.sh preflight <image>}
-  [[ $image =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "bad image name: $image"
+  check_name "$image"
   images_py entry "$image" >/dev/null || die "$image is not an entry in platform/images.json"
 
   [[ ${GITHUB_EVENT_NAME:-} == push ]] || die "releases run only for a push, not '${GITHUB_EVENT_NAME:-}'"
@@ -71,28 +77,39 @@ preflight() { # <image>
   git merge-base --is-ancestor "$pushed" refs/remotes/origin/main \
     || die "commit $pushed is not an ancestor of origin/main"
 
-  [[ -z $(git status --porcelain --untracked-files=all) ]] \
-    || die "the checkout has uncommitted or untracked files; a release must be a commit"
+  # Ignored files count too: the build context is the directory, whatever .gitignore says.
+  [[ -z $(git status --porcelain --untracked-files=all --ignored) ]] \
+    || die "the checkout has uncommitted, untracked or ignored files; a release must be a commit"
 }
 
-# Prints the digest of a reference, or nothing when the tag does not exist. Any other
-# failure (authentication, network) stops the release rather than reading as "absent".
+# Prints the digest of a reference, or nothing when the tag does not exist. "Does not exist"
+# is exactly the line buildx prints for a reference the registry answers 404 for. Any other
+# failure stops the release rather than reading as "absent": authentication, the network, a
+# missing credential helper, or a part of an existing image that cannot be found.
 registry_digest() { # <reference>
-  local out err status=0
-  err=$(mktemp)
+  local out err=$work/inspect.err status=0
   out=$(docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}' 2>"$err") || status=$?
   if ((status != 0)); then
-    if grep -qi 'not found' "$err"; then rm -f "$err"; return 0; fi
-    cat "$err" >&2; rm -f "$err"
+    if grep -qxF "ERROR: $1: not found" "$err"; then return 0; fi
+    cat "$err" >&2
     die "could not inspect $1"
   fi
-  rm -f "$err"
   echo "$out"
+}
+
+# The Dockerfile and the context must be inside the checkout once links are followed, so a
+# build cannot be pointed at a directory of the runner (its docker configuration, say).
+inside_checkout() { # <what> <path as the build will read it>
+  local top real
+  top=$(realpath -e -- "$(git rev-parse --show-toplevel)")
+  real=$(realpath -e -- "$2") || die "$1 $2 does not exist in the checkout"
+  [[ $real == "$top" || $real == "$top"/* ]] || die "$1 $2 leads outside the checkout"
 }
 
 push() { # <image>
   local image=${1:?usage: release.sh push <image>}
   local sha=${GITHUB_SHA:?GITHUB_SHA is not set} tag ref existing
+  check_name "$image"
   tag=$(tag_for "$sha")
   ref=$registry/$image:$tag
 
@@ -104,24 +121,28 @@ the image."
   fi
 
   local -a fields
-  mapfile -d '' -t fields < <(images_py entry "$image")
+  images_py entry "$image" >"$work/entry" || die "$image is not a usable entry in platform/images.json"
+  mapfile -d '' -t fields <"$work/entry"
+  ((${#fields[@]} >= 3)) || die "the entry for $image is incomplete"
   local dockerfile=${fields[0]} context=${fields[1]} platform=${fields[2]}
+  inside_checkout "the Dockerfile" "$dockerfile"
+  inside_checkout "the build context" "$context"
   local -a args=()
   local arg
   for arg in "${fields[@]:3}"; do args+=(--build-arg "$arg"); done
 
-  local meta
-  meta=$(mktemp)
-  # The same flags as the `images` job in .github/workflows/platform.yml, plus the push.
+  local meta=$work/metadata.json
+  # The same flags as the `images` job in .github/workflows/platform.yml, plus the push. The
+  # context follows `--` so it can never be read as an option.
   docker buildx build --pull --no-cache --platform "$platform" ${args[@]+"${args[@]}"} \
-    -f "$dockerfile" -t "$ref" --push --metadata-file "$meta" "$context"
+    -f "$dockerfile" -t "$ref" --push --metadata-file "$meta" -- "$context"
 
   local digest readback
   digest=$(images_py metadata-digest "$meta")
-  rm -f "$meta"
   readback=$(registry_digest "$ref")
   if [[ $readback != "$digest" ]]; then
-    die "$ref now resolves to '${readback:-nothing}' but this build pushed $digest; the tag changed during the push"
+    die "$ref now resolves to '${readback:-nothing}' but this build reported $digest. The image
+was pushed, so a re-run of this job will refuse; look at the tag before anything pins it."
   fi
 
   local full=$ref@$digest

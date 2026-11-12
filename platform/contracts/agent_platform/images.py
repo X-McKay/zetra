@@ -14,9 +14,14 @@ An image is released when the push changed its Dockerfile, a file under its buil
 its own entry in images.json. An entry may carry `inputs`, a list of repository paths; the
 build context is then not used for change detection and a file under one of the `inputs` counts
 instead (a context such as `platform` is much wider than what its Dockerfile copies). A test
-holds every `inputs` list to cover everything its Dockerfile copies. `platform/images.json` is
-never a build input of its own accord: no Dockerfile copies it, so it counts only through the
-entry comparison.
+holds every `inputs` list to cover the sources its Dockerfile copies, as far as the test can
+read them. The two ignore files BuildKit consults (`<Dockerfile>.dockerignore` and
+`<context>/.dockerignore`) always count. `platform/images.json` is never a build input of its own
+accord: no Dockerfile copies it, so it counts only through the entry comparison.
+
+Every field of an entry reaches a `docker buildx build` command line on a runner that holds a
+registry login, so `parse_images` refuses anything but paths inside the repository, the two
+platforms the cluster runs and plain build arguments.
 """
 
 from __future__ import annotations
@@ -35,11 +40,35 @@ IMAGES_FILE = "platform/images.json"
 ZEROS = re.compile(r"0+")
 NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+ARG_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+PLATFORMS = ("linux/amd64", "linux/arm64")
 FIELDS = ("repository", "dockerfile", "context", "platform", "buildArgs")
 
 
 class ImagesError(Exception):
     """images.json or a commit could not be read; the caller must stop, not guess."""
+
+
+def _printable(value: str) -> bool:
+    return not any(ord(c) < 32 or ord(c) == 127 for c in value)
+
+
+def repo_path(value: Any) -> bool:
+    """A path inside the repository as written: relative, no `..`, nothing a command reads as an option."""
+    return (
+        isinstance(value, str)
+        and value != ""
+        and not value.startswith(("/", "-"))
+        and ".." not in value.split("/")
+        and _printable(value)
+    )
+
+
+def build_args_ok(value: Any) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(k, str) and ARG_NAME.fullmatch(k) and isinstance(v, str) and _printable(v)
+        for k, v in value.items()
+    )
 
 
 def parse_images(text: str, source: str = IMAGES_FILE) -> list[dict[str, Any]]:
@@ -60,13 +89,28 @@ def parse_images(text: str, source: str = IMAGES_FILE) -> list[dict[str, Any]]:
         if name in seen:
             raise ImagesError(f"{source}: repository {name!r} listed twice")
         seen.add(name)
+        for key in ("dockerfile", "context"):
+            if not repo_path(image[key]):
+                raise ImagesError(
+                    f"{source}: {name}: {key} must be a path inside the repository, "
+                    f"not {image[key]!r}"
+                )
+        if image["platform"] not in PLATFORMS:
+            raise ImagesError(
+                f"{source}: {name}: platform must be one of {', '.join(PLATFORMS)}, "
+                f"not {image['platform']!r}"
+            )
+        if not build_args_ok(image["buildArgs"]):
+            raise ImagesError(
+                f"{source}: {name}: buildArgs must map argument names to single-line strings"
+            )
         inputs = image.get("inputs")
         if inputs is not None and (
-            not isinstance(inputs, list)
-            or not inputs
-            or not all(isinstance(p, str) and p and ".." not in p.split("/") for p in inputs)
+            not isinstance(inputs, list) or not inputs or not all(repo_path(p) for p in inputs)
         ):
-            raise ImagesError(f"{source}: {name}: inputs must be a non-empty list of paths")
+            raise ImagesError(
+                f"{source}: {name}: inputs must be a non-empty list of paths inside the repository"
+            )
     return images
 
 
@@ -92,7 +136,11 @@ def images_at(repo: Path, rev: str) -> list[dict[str, Any]]:
         if _git(repo, "cat-file", "-e", f"{rev}:{IMAGES_FILE}", check=False).returncode != 0:
             return []
         raise ImagesError(f"cannot read {IMAGES_FILE} at {rev}")
-    return parse_images(result.stdout.decode(), f"{IMAGES_FILE} at {rev}")
+    try:
+        text = result.stdout.decode()
+    except UnicodeDecodeError as exc:
+        raise ImagesError(f"{IMAGES_FILE} at {rev} is not UTF-8") from exc
+    return parse_images(text, f"{IMAGES_FILE} at {rev}")
 
 
 def changed_paths(repo: Path, before: str, after: str) -> list[str]:
@@ -100,10 +148,11 @@ def changed_paths(repo: Path, before: str, after: str) -> list[str]:
 
     A tree comparison, not a walk of the commits between them, so a merge commit, a squash
     and a push of several commits all give the push's net effect. Renames are reported as a
-    deletion and an addition so that the old location counts as changed too.
+    deletion and an addition so that the old location counts as changed too. A file name
+    that is not UTF-8 is kept (its odd bytes escaped), so it still counts under its directory.
     """
     out = _git(repo, "diff", "--name-only", "--no-renames", "-z", before, after).stdout
-    return [p.decode() for p in out.split(b"\0") if p]
+    return [p.decode(errors="surrogateescape") for p in out.split(b"\0") if p]
 
 
 def under(path: str, directory: str) -> bool:
@@ -112,12 +161,18 @@ def under(path: str, directory: str) -> bool:
 
 
 def inputs_changed(image: dict[str, Any], paths: list[str]) -> bool:
-    """The Dockerfile, plus the declared `inputs` or, without them, the whole build context."""
+    """The Dockerfile and its ignore files, plus the declared `inputs` or, without them, the
+    whole build context."""
     dockerfile = posixpath.normpath(image["dockerfile"])
+    # BuildKit reads <Dockerfile>.dockerignore if it exists, else .dockerignore in the context.
+    always = {
+        dockerfile,
+        dockerfile + ".dockerignore",
+        posixpath.normpath(posixpath.join(image["context"], ".dockerignore")),
+    }
     roots = image.get("inputs") or [image["context"]]
     return any(
-        p == dockerfile or (p != IMAGES_FILE and any(under(p, root) for root in roots))
-        for p in paths
+        p in always or (p != IMAGES_FILE and any(under(p, root) for root in roots)) for p in paths
     )
 
 

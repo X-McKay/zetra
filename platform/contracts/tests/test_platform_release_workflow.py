@@ -34,8 +34,10 @@ def test_the_only_trigger_is_a_push_to_main():
     assert triggers(RELEASE) == {"push": {"branches": ["main"]}}
 
 
-def test_permissions_are_read_only_plus_the_identity_token():
-    assert RELEASE["permissions"] == {"contents": "read", "id-token": "write"}
+def test_permissions_are_read_only():
+    # Nothing signs yet, so no job may ask for an identity token. The phase that signs gives
+    # `id-token: write` to the `release` job alone: `changes` runs outside the runner's guard.
+    assert RELEASE["permissions"] == {"contents": "read"}
     for job in RELEASE["jobs"].values():
         assert "permissions" not in job  # no job widens them
 
@@ -80,19 +82,18 @@ def test_no_registry_secret_or_login_anywhere():
         assert "--password" not in code, path
 
 
-def step_named(action: dict, prefix: str) -> dict:
-    (step,) = [s for s in action["runs"]["steps"] if s.get("name", "").startswith(prefix)]
-    return step
-
-
-def test_tool_install_step_is_a_copy_of_the_agent_release_step():
-    ours = step_named(ACTION, "Install cosign")
-    theirs = step_named(AGENT_ACTION, "Install cosign")
-    assert ours["run"] == theirs["run"]
-    # DOCKER_CONFIG differs on purpose: the agent action logs in under runner.temp, here the
-    # cluster mounts the configuration in the runner's default location.
-    assert {k: v for k, v in theirs["env"].items() if k != "DOCKER_CONFIG"} == ours["env"]
-    assert ours["shell"] == theirs["shell"]
+def test_the_action_runs_only_setup_uv_and_the_release_script():
+    # Every step runs beside the registry login, so the list is closed: setup-uv, then
+    # release.sh and nothing else. No tool is pulled or run before the phase that needs it.
+    first, *rest = ACTION["runs"]["steps"]
+    assert first["uses"].startswith("astral-sh/setup-uv@")
+    script = '"${{ github.action_path }}/release.sh"'
+    assert [s["run"].strip() for s in rest] == [
+        f"{script} config",
+        f'{script} preflight "$IMAGE"',
+        f'{script} push "$IMAGE"',
+    ]
+    assert all("uses" not in step for step in rest)
 
 
 def test_setup_uv_pin_matches_the_agent_action():
@@ -114,5 +115,5 @@ def test_release_build_keeps_the_flags_of_the_pull_request_job():
         '"$platform"', "P"
     )
     assert '-f "$DOCKERFILE" "$CONTEXT"' in pr
-    assert '-f "$dockerfile"' in script and '"$context"' in script
+    assert '-f "$dockerfile"' in script and '-- "$context"' in script
     assert "--build-arg" in pr and "--build-arg" in script

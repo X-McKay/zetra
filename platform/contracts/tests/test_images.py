@@ -7,6 +7,8 @@ import posixpath
 import re
 from pathlib import Path
 
+import pytest
+
 PLATFORM = Path(__file__).parents[2]
 REPO = PLATFORM.parent
 IMAGES = json.loads((PLATFORM / "images.json").read_text())
@@ -66,26 +68,72 @@ def test_build_arguments_are_declared_and_agree_with_dockerfile_defaults():
             assert declared[name] in ("", value), (image["repository"], name, declared[name])
 
 
-def copy_sources(dockerfile: Path) -> list[str]:
-    """Every source of each COPY and ADD that reads the build context (not `--from=` stages)."""
+def copy_sources(text: str, where: str = "Dockerfile") -> list[str]:
+    """Every source of each COPY and ADD that reads the build context (not `--from=` stages).
+
+    It reads the plain forms only and fails on what it cannot follow, so that an unusual
+    Dockerfile is looked at by a person: a bind mount of the context, a source built from a
+    variable, the JSON form. A line continued with a backslash is joined first.
+    """
     sources = []
-    for line in dockerfile.read_text().splitlines():
+    for line in re.sub(r"\\[ \t]*\n", " ", text).splitlines():
         words = line.split()
-        if not words or words[0].upper() not in ("COPY", "ADD"):
+        if not words:
+            continue
+        keyword = words[0].upper()
+        if keyword == "RUN":
+            for mount in (w for w in words[1:] if w.startswith("--mount=")):
+                options = mount.removeprefix("--mount=").split(",")
+                # The type defaults to bind, and a bind mount without from= reads the context.
+                kind = next((o.split("=", 1)[1] for o in options if o.startswith("type=")), "bind")
+                from_stage = any(o.startswith("from=") for o in options)
+                assert kind != "bind" or from_stage, f"{where}: a bind mount of the build context"
+            continue
+        if keyword not in ("COPY", "ADD"):
             continue
         if any(w.startswith("--from=") for w in words[1:]):
             continue
         args = [w for w in words[1:] if not w.startswith("--")]
-        assert not args[0].startswith("["), f"{dockerfile}: JSON form COPY is not supported"
-        sources += [a for a in args[:-1] if "://" not in a]
+        assert not args[0].startswith("["), f"{where}: JSON form COPY is not supported"
+        local = [a for a in args[:-1] if "://" not in a]
+        assert not any("$" in a for a in local), f"{where}: a COPY source built from a variable"
+        sources += local
     return sources
+
+
+def test_copy_sources_reads_the_plain_forms():
+    text = (
+        "FROM base\n"
+        "COPY a b/c /dest/\n"
+        "COPY --chmod=0555 d \\\n    e \\\n    /dest/\n"
+        "COPY --from=build /out /out\n"
+        "ADD https://example.invalid/x /x\n"
+        "RUN --mount=type=cache,target=/root/.cache true\n"
+        "RUN --mount=type=bind,from=build,source=/out,target=/in true\n"
+    )
+    assert copy_sources(text) == ["a", "b/c", "d", "e"]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "RUN --mount=type=bind,source=controller/tests,target=/t true",
+        "RUN --mount=source=controller/tests,target=/t true",
+        "COPY contracts/${X} /dest/",
+        "COPY $X /dest/",
+        'COPY ["a", "/dest/"]',
+    ],
+)
+def test_copy_sources_fails_on_what_it_cannot_follow(line):
+    with pytest.raises(AssertionError):
+        copy_sources(f"FROM base\n{line}\n")
 
 
 def test_declared_inputs_cover_everything_the_dockerfile_copies():
     declared = [image for image in IMAGES if "inputs" in image]
     assert declared, "no entry declares inputs"
     for image in declared:
-        sources = copy_sources(REPO / image["dockerfile"])
+        sources = copy_sources((REPO / image["dockerfile"]).read_text(), image["dockerfile"])
         assert sources, image["repository"]
         for source in sources:
             path = posixpath.normpath(posixpath.join(image["context"], source))

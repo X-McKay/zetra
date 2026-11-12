@@ -374,6 +374,69 @@ def test_a_deleted_input_counts(repo):
 
 
 def test_malformed_inputs_are_rejected():
-    for bad in ([], "platform/a", [""], ["../x"], [1]):
+    for bad in ([], "platform/a", [""], ["../x"], [1], ["/abs"], ["-x"], ["a\nb"]):
         with pytest.raises(ImagesError):
             tool.parse_images(json.dumps([entry("a", "x", inputs=bad)]))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("dockerfile", "/abs/Dockerfile"),
+        ("dockerfile", "-"),
+        ("dockerfile", "a/../../Dockerfile"),
+        ("dockerfile", 7),
+        ("context", "/home/runner/.docker"),
+        ("context", "--push"),
+        ("context", ""),
+        ("context", ".."),
+        ("context", "a\x00b"),
+        ("platform", "linux/s390x"),
+        ("platform", "linux/amd64,linux/arm64"),
+        ("platform", 5),
+        ("buildArgs", ["A=1"]),
+        ("buildArgs", {"A=B": "1"}),
+        ("buildArgs", {"": "1"}),
+        ("buildArgs", {"A": 1}),
+        ("buildArgs", {"A": "one\ntwo"}),
+    ],
+)
+def test_an_entry_is_only_plain_build_facts(field, value):
+    # Each of these would otherwise reach `docker buildx build` on a runner with a login.
+    with pytest.raises(ImagesError) as caught:
+        tool.parse_images(json.dumps([entry("a", "x") | {field: value}]))
+    assert field in str(caught.value)
+
+
+def test_an_entry_may_use_the_repository_root_and_values_with_spaces():
+    (image,) = tool.parse_images(
+        json.dumps([entry("a", ".", "Dockerfile", buildArgs={"NOTE": "two words", "_X1": ""})])
+    )
+    assert image["context"] == "."
+
+
+@pytest.mark.parametrize(
+    "ignore_file", ["platform/wide/Dockerfile.dockerignore", "platform/.dockerignore"]
+)
+def test_an_ignore_file_counts_even_outside_the_declared_inputs(repo, ignore_file):
+    narrow = [dict(i) for i in DEFAULT]
+    narrow[4]["inputs"] = ["platform/wide/src"]
+    repo.set_images(narrow)
+    base = repo.commit()
+    repo.write(ignore_file, "tests\n")
+    assert repo.released(base, repo.commit()) == ["wide"]
+
+
+def test_a_file_name_that_is_not_utf8_still_counts(repo):
+    base = head(repo)
+    odd = repo.path.as_posix().encode() + b"/platform/alpha/caf\xe9.txt"
+    with open(odd, "wb") as handle:
+        handle.write(b"x")
+    assert repo.released(base, repo.commit()) == ["alpha", "wide"]
+
+
+def test_an_images_file_that_is_not_utf8_stops_the_run(repo):
+    base = head(repo)
+    (repo.path / "platform/images.json").write_bytes(b"[\xff]")
+    with pytest.raises(ImagesError):
+        tool.changed(repo.path, base, repo.commit())

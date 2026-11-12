@@ -66,22 +66,40 @@ Kubani deploys so far were built and pushed by hand.
   `platform/contracts/agent_platform/images.py changed <before> <after>`. An
   image is released when the push changed its Dockerfile, a file under its build
   context, or its entry in `images.json`. An entry may carry `inputs`, a list of
-  repository paths; the build context is then not used for change detection, a
-  file under one of the `inputs` counts instead, and a test requires every
-  source of every `COPY` and `ADD` in the Dockerfile to lie under them, so the
-  list cannot be narrower than what the build reads. `registry-controller` uses
-  it, because its context is `platform`. An image whose inputs did not change is
-  never built; if none changed, the run ends successfully having built nothing.
-  When the push's "before" commit is all zeros or unknown to the checkout the
-  run releases nothing and says why. A release therefore cannot be re-run
-  except by a new merge that changes an input.
+  repository paths; the build context is then not used for change detection and
+  a file under one of the `inputs` counts instead. `registry-controller` uses
+  it, because its context is `platform`. A test requires every source of every
+  `COPY` and `ADD` in such a Dockerfile to lie under the `inputs`. The test
+  reads the plain forms only and fails on what it cannot follow (a bind mount
+  of the context, a source built from a variable, the JSON form), so it is a
+  check on the list and not a proof; a person still reads the Dockerfile. The
+  two ignore files BuildKit consults, `<Dockerfile>.dockerignore` and
+  `<context>/.dockerignore`, always count. An image whose inputs did not change
+  is never built; if none changed, the run ends successfully having built
+  nothing. When the push's "before" commit is all zeros or unknown to the
+  checkout the run releases nothing and says why.
+- **What an entry may hold.** Every field of an entry reaches a build command
+  on a runner that holds a registry login, so `images.py` refuses an entry
+  unless `dockerfile`, `context` and `inputs` are paths inside the repository
+  (relative, no `..`, no leading `-`), `platform` is `linux/amd64` or
+  `linux/arm64`, and `buildArgs` maps argument names to single-line strings.
+  The release script also refuses a Dockerfile or context that a link leads
+  out of the checkout.
+- **Re-running.** A failed job can be re-run and will build if it pushed
+  nothing. If the push succeeded and a later step failed, the tag exists, a
+  re-run refuses, and that commit's image has no recorded digest from the
+  workflow; the next merge that changes an input releases a new tag. A push
+  whose "before" could not be read (see above) is likewise not released later
+  on its own. There is no manual trigger.
 - **How.** The `release` job runs on the self-hosted runner scale set
   `kubani-zetra`, one image at a time (`max-parallel: 1`; no `concurrency`
-  group, because GitHub keeps one waiting run per group and could drop a
-  release). The composite action `.github/actions/platform-release/` refuses to
-  continue unless the image is an entry in `images.json`, the commit being built
-  is the pushed commit and an ancestor of `origin/main`, and the checkout is
-  clean; it then builds with the flags of the pull request job and pushes.
+  group, because by default GitHub keeps one waiting run per group and could
+  drop a release, and the single runner already serialises jobs). The composite
+  action `.github/actions/platform-release/` refuses to continue unless the
+  image is an entry in `images.json`, the commit being built is the pushed
+  commit and an ancestor of `origin/main`, and the checkout is clean (ignored
+  files count); it then builds with the flags of the pull request job and
+  pushes.
 - **The tag.** `registry.almckay.io/platform/<image>:<first seven characters of
   the commit>`; the full reference with its digest goes to the job summary and
   to the action's `reference` output. An existing tag is never overwritten: if
@@ -99,7 +117,8 @@ Kubani deploys so far were built and pushed by hand.
   the cluster only when a pin changes in the infrastructure repository.
 - **Not done yet.** The images are not signed, carry no attestations, and
   admission does not check them (the plan's Phases 2 and 3). The workflow
-  already requests the identity-token permission that signing will use.
+  requests no identity token and installs no signing tool until then; when it
+  signs, the `release` job alone gets `id-token: write`.
 
 ## Token qualification (T4/T5)
 

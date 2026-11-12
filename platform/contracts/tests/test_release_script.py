@@ -46,7 +46,7 @@ if [[ $1 == buildx && $2 == imagetools ]]; then
   if [[ -n ${FAKE_INSPECT_ERROR:-} ]]; then echo "$FAKE_INSPECT_ERROR" >&2; exit 1; fi
   if [[ -e $state/built ]]; then echo "${FAKE_READBACK:-$FAKE_DIGEST}"; exit 0; fi
   if [[ -n ${FAKE_EXISTING:-} ]]; then echo "$FAKE_EXISTING"; exit 0; fi
-  echo "ERROR: $3: not found" >&2; exit 1
+  echo "ERROR: $4: not found" >&2; exit 1
 fi
 if [[ $1 == buildx && $2 == build ]]; then
   while (($#)); do
@@ -75,7 +75,8 @@ class Rig:
         self.state = root / "state"
         self.log = root / "docker.log"
         self.config = root / "dockerconfig"
-        for d in (self.bin, self.state, self.config):
+        self.scratch = root / "scratch"
+        for d in (self.bin, self.state, self.config, self.scratch):
             d.mkdir()
         fake = self.bin / "docker"
         fake.write_text(FAKE_DOCKER)
@@ -84,7 +85,9 @@ class Rig:
         self.git("init", "-q", "-b", "main")
         for k, v in (("user.email", "t@example.invalid"), ("user.name", "t")):
             self.git("config", k, v)
-        (self.work / "platform").mkdir()
+        for name in ("plain", "withargs"):
+            (self.work / "platform" / name).mkdir(parents=True)
+            (self.work / "platform" / name / "Dockerfile").write_text("FROM scratch\n")
         (self.work / "platform" / "images.json").write_text(json.dumps(ENTRIES))
         self.commit("base")
         subprocess.run(
@@ -113,6 +116,7 @@ class Rig:
         env = {
             "PATH": f"{self.bin}:{os.environ['PATH']}",
             "HOME": str(self.root),
+            "TMPDIR": str(self.scratch),
             "GITHUB_SHA": sha,
             "GITHUB_EVENT_NAME": "push",
             "GITHUB_REF": "refs/heads/main",
@@ -229,7 +233,18 @@ def test_preflight_refuses_untracked_files(rig, name):
     rig.push_main()
     (rig.work / name).write_text("x")
     done = rig.script("preflight", "plain")
-    assert done.returncode != 0 and "uncommitted or untracked" in done.stderr
+    assert done.returncode != 0 and "untracked or ignored" in done.stderr
+
+
+def test_preflight_refuses_ignored_files(rig):
+    # The build context is the directory, so a file .gitignore hides from git still reaches it.
+    (rig.work / ".gitignore").write_text("*.local\n")
+    rig.commit("ignore")
+    rig.push_main()
+    assert rig.script("preflight", "plain").returncode == 0
+    (rig.work / "platform" / "plain" / "settings.local").write_text("x")
+    done = rig.script("preflight", "plain")
+    assert done.returncode != 0 and "untracked or ignored" in done.stderr
 
 
 def test_preflight_refuses_modified_tracked_files(rig):
@@ -256,7 +271,7 @@ def test_push_builds_with_the_entry_and_reports_the_digest(rig):
     assert "--build-arg A=1 --build-arg B=two words" in build[0]
     assert "-f platform/withargs/Dockerfile" in build[0]
     assert f"-t {ref} --push --metadata-file " in build[0]
-    assert build[0].endswith(" platform")
+    assert build[0].endswith(" -- platform")
     full = f"{ref}@{DIGEST}"
     assert full in done.stdout
     assert f"reference={full}" in (rig.root / "output").read_text()
@@ -268,7 +283,7 @@ def test_push_builds_with_the_entry_and_reports_the_digest(rig):
 def test_push_builds_an_image_without_build_arguments(rig):
     assert rig.script("push", "plain").returncode == 0
     (build,) = [c for c in rig.docker_calls() if c.startswith("buildx build")]
-    assert "--build-arg" not in build and build.endswith(" platform/plain")
+    assert "--build-arg" not in build and build.endswith(" -- platform/plain")
 
 
 def test_push_refuses_to_overwrite_an_existing_tag_and_builds_nothing(rig):
@@ -285,9 +300,26 @@ def test_push_stops_when_the_registry_cannot_be_asked(rig):
     assert not any(c.startswith("buildx build") for c in rig.docker_calls())
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        # Each mentions "not found" and none says the tag is absent.
+        'error getting credentials - err: exec: "docker-credential-pass": executable file '
+        "not found in $PATH",
+        "ERROR: unexpected status from HEAD request: 404 page not found",
+        "ERROR: registry.almckay.io/platform/plain@sha256:" + "ef" * 32 + ": not found",
+        "ERROR: registry.almckay.io/platform/other:0000000: not found",
+    ],
+)
+def test_push_reads_only_the_exact_absent_tag_line_as_absent(rig, message):
+    done = rig.script("push", "plain", FAKE_INSPECT_ERROR=message)
+    assert done.returncode != 0 and "could not inspect" in done.stderr
+    assert not any(c.startswith("buildx build") for c in rig.docker_calls())
+
+
 def test_push_fails_if_the_tag_resolves_to_another_digest_afterwards(rig):
     done = rig.script("push", "plain", FAKE_READBACK=OTHER)
-    assert done.returncode != 0 and "tag changed during the push" in done.stderr
+    assert done.returncode != 0 and f"this build reported {DIGEST}" in done.stderr
     assert not (rig.root / "output").exists()
 
 
@@ -301,6 +333,72 @@ def test_push_refuses_an_unknown_image(rig):
     done = rig.script("push", "nope")
     assert done.returncode != 0
     assert not any(c.startswith("buildx build") for c in rig.docker_calls())
+
+
+@pytest.mark.parametrize("name", ["Plain", "-plain", "plain/x", "plain ", ""])
+def test_push_checks_the_image_name_itself(rig, name):
+    done = rig.script("push", name)
+    assert done.returncode != 0
+    assert rig.docker_calls() == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("context", "/home/runner/.docker"),
+        ("context", "--output=type=local,dest=/tmp/x"),
+        ("context", "platform/../.."),
+        ("dockerfile", "-"),
+        ("dockerfile", "/home/runner/.docker/config.json"),
+        ("platform", "linux/amd64 --secret id=x"),
+        ("buildArgs", ["A=1"]),
+        ("buildArgs", {"A=B": "1"}),
+        ("buildArgs", {"A": "one\ntwo"}),
+    ],
+)
+def test_push_refuses_an_entry_that_is_not_plain_build_facts(rig, field, value):
+    entries = [dict(e) for e in ENTRIES]
+    entries[0][field] = value
+    (rig.work / "platform" / "images.json").write_text(json.dumps(entries))
+    done = rig.script("push", "plain")
+    assert done.returncode != 0 and "not a usable entry" in done.stderr
+    assert "unbound variable" not in done.stderr
+    assert not any(c.startswith("buildx build") for c in rig.docker_calls())
+
+
+@pytest.mark.parametrize("what", ["context", "dockerfile"])
+def test_push_refuses_a_build_that_a_link_leads_out_of_the_checkout(rig, what):
+    outside = rig.root / "outside"
+    outside.mkdir()
+    (outside / "Dockerfile").write_text("FROM scratch\n")
+    plain = rig.work / "platform" / "plain"
+    if what == "context":
+        # The Dockerfile stays where it is; only the context is a link out.
+        (rig.work / "platform" / "ctx").symlink_to(outside)
+        entries = [dict(e) for e in ENTRIES]
+        entries[0]["context"] = "platform/ctx"
+        (rig.work / "platform" / "images.json").write_text(json.dumps(entries))
+        named = "the build context platform/ctx"
+    else:
+        (plain / "Dockerfile").unlink()
+        (plain / "Dockerfile").symlink_to(outside / "Dockerfile")
+        named = "the Dockerfile platform/plain/Dockerfile"
+    done = rig.script("push", "plain")
+    assert done.returncode != 0 and f"{named} leads outside the checkout" in done.stderr
+    assert not any(c.startswith("buildx build") for c in rig.docker_calls())
+
+
+def test_push_refuses_an_entry_whose_files_are_missing(rig):
+    (rig.work / "platform" / "plain" / "Dockerfile").unlink()
+    done = rig.script("push", "plain")
+    assert done.returncode != 0 and "does not exist in the checkout" in done.stderr
+    assert not any(c.startswith("buildx build") for c in rig.docker_calls())
+
+
+@pytest.mark.parametrize("extra", [{}, {"FAKE_BUILD_FAILS": "1"}, {"FAKE_EXISTING": OTHER}])
+def test_no_scratch_file_is_left_behind(rig, extra):
+    rig.script("push", "plain", **extra)
+    assert list(rig.scratch.iterdir()) == []
 
 
 def test_all_runs_every_refusal_before_building(rig):

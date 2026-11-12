@@ -12,12 +12,8 @@
 # `docker login`, reads no secret and uses no `secrets.*`. Only that one file is read-only:
 # the docker client and buildx write their own state under the same configuration directory.
 #
-# The tool-install step below is a copy of the one in ../agent-release/action.yml, not a
-# shared step: a composite action cannot use a sibling local action (`./...` resolves against
-# the caller's workspace, which for an agent repository is not zetra), and editing the agent
-# action would change a file other repositories pin. tests/test_platform_release_workflow.py
-# fails if the copy drifts. The one difference is DOCKER_CONFIG, left at the runner's default
-# here because the mounted configuration lives there.
+# Nothing else runs beside that login: no signing or scanning tool is installed until the
+# phase that uses it.
 name: Release platform image
 description: Build and push one platform image as registry.almckay.io/platform/<image>:<short commit>, refusing to overwrite.
 inputs:
@@ -58,31 +54,6 @@ runs:
         IMAGE: ${{ inputs.image }}
       run: |
         "${{ github.action_path }}/release.sh" preflight "$IMAGE"
-    - name: Install cosign, syft and grype from the registry mirror
-      shell: bash
-      env:
-        # Signing and SBOM tools, as byte-identical copies of the upstream images in the
-        # local registry (registry.almckay.io/mirror/<host>/<path>, same digest). To bump,
-        # mirror the new upstream digest first, then change the reference here.
-        COSIGN_IMAGE: registry.almckay.io/mirror/ghcr.io/sigstore/cosign/cosign:v2.4.1@sha256:b03690aa52bfe94054187142fba24dc54137650682810633901767d8a3e15b31
-        SYFT_IMAGE: registry.almckay.io/mirror/docker.io/anchore/syft:v1.54.1@sha256:3eb5379ba7b409c3f4069b686110527af0c47df993fa5c10d13e7cf34f49b1aa
-        GRYPE_IMAGE: registry.almckay.io/mirror/docker.io/anchore/grype:v0.120.1@sha256:e4a44ef45d285b829ce6efe2642980329661bd2d18eab5fc539138d4adaebbbe
-      run: |
-        bin="$RUNNER_TEMP/bin"
-        mkdir -p "$bin"
-        extract() { # <image@digest> <path in image> <name>
-          docker pull -q --platform linux/amd64 "$1" >/dev/null
-          id=$(docker create --platform linux/amd64 "$1")
-          docker cp "$id:$2" "$bin/$3"
-          docker rm "$id" >/dev/null
-        }
-        extract "$COSIGN_IMAGE" /ko-app/cosign cosign
-        extract "$SYFT_IMAGE" /syft syft
-        extract "$GRYPE_IMAGE" /grype grype
-        echo "$bin" >> "$GITHUB_PATH"
-        "$bin/cosign" version
-        "$bin/syft" version
-        "$bin/grype" version
     - name: Build and push
       id: push
       shell: bash
