@@ -7,11 +7,13 @@ changes in the checking code changes what these examples do.
 
 `valid/<example>/` must pass. `invalid/<example>/` must fail, and `invalid/<example>.expect.json`
 says how: `error` is a substring of the one problem `check` prints (`problems` gives another
-count when a rule cannot be broken in a single line), and `rule` is the sentence a reader sees.
+count when a rule cannot be broken in a single line, and `error` is then a list holding a
+substring for each of those lines), and `rule` is the sentence a reader sees.
 The repository's own concerns (workspace, lock, rendered files) are not in the corpus.
 """
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -40,7 +42,7 @@ def check(example: Path, tmp_path: Path, capsys, monkeypatch) -> tuple[int, list
 
 
 def test_the_corpus_is_not_empty():
-    assert len(VALID) >= 3
+    assert len(VALID) >= 5
     assert INVALID
 
 
@@ -61,14 +63,38 @@ def test_a_valid_example_passes_check(name, tmp_path, capsys, monkeypatch):
 def test_an_invalid_example_fails_check_as_expected(name, tmp_path, capsys, monkeypatch):
     expect = json.loads((CORPUS / "invalid" / f"{name}.expect.json").read_text())
     assert set(expect) <= {"rule", "error", "problems"}
-    assert expect["rule"].strip() and expect["error"].strip()
+    errors = [expect["error"]] if isinstance(expect["error"], str) else expect["error"]
+    assert expect["rule"].strip() and errors and all(e.strip() for e in errors)
+    assert len(errors) == expect.get("problems", 1)
     code, problems = check(CORPUS / "invalid" / name, tmp_path, capsys, monkeypatch)
     assert code == 1, problems
     assert len(problems) == expect.get("problems", 1), problems
-    assert any(expect["error"] in p for p in problems), problems
+    for error in errors:
+        assert any(error in p for p in problems), (error, problems)
 
 
 def test_the_effects_check_admits_are_the_ones_the_sdk_defines():
     from agent_runtime import tools
 
     assert set(layout.EFFECTS) == set(tools.EFFECTS)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a file whatever its mode")
+def test_a_declaration_that_cannot_be_read_is_one_problem_line(tmp_path, capsys, monkeypatch):
+    example = CORPUS / "valid" / "minimal-model-agent"
+    repo = tmp_path / "repo"
+    shutil.copytree(example, repo)
+    (repo / "pyproject.toml").write_text('[project]\nname = "corpus"\nversion = "0"\n')
+    (repo / "uv.lock").write_text("version = 1\n")
+    unreadable = repo / "agents" / "minimal-model-agent" / "deploy" / "agent.yaml"
+    unreadable.chmod(0)
+    capsys.readouterr()
+    try:
+        code = cli.main(["--repo", str(repo), "check"])
+    finally:
+        unreadable.chmod(0o644)
+    problems = capsys.readouterr().err.splitlines()
+    assert code == 1
+    assert problems == [
+        "minimal-model-agent: deploy/agent.yaml cannot be read: Permission denied"
+    ], problems

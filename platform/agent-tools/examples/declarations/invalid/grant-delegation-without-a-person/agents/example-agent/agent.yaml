@@ -1,4 +1,4 @@
-# Invalid: a tool-backend grant has delegation on-behalf-of while spec.identity.mode is agent.
+# Invalid: a tool-backend grant has delegation on-behalf-of, the identity mode is agent and onBehalfOf.fallback is not agent (it defaults to deny).
 schema_version: 1
 name: example-agent
 entrypoint: example_agent.agent:create_agent

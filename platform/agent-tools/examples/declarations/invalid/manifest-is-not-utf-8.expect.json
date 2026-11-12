@@ -1,0 +1,4 @@
+{
+  "rule": "a declaration file is UTF-8 text.",
+  "error": "agent.yaml is not UTF-8 text"
+}

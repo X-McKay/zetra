@@ -1,0 +1,4 @@
+{
+  "rule": "a declaration file holds exactly one YAML document; an empty one after a trailing separator does not count.",
+  "error": "agent.yaml must hold exactly one YAML document"
+}

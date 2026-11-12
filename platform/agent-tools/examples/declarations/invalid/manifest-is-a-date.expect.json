@@ -1,0 +1,4 @@
+{
+  "rule": "agent.yaml is a mapping, not a date or another scalar.",
+  "error": "agent.yaml must be a mapping, not a value of another type"
+}

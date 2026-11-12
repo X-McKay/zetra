@@ -116,8 +116,11 @@ def compile_problems(agent: AgentDir, mcp_resource_base: str) -> list[str]:
     """
     namespace = (agent.agent_cr().get("metadata") or {}).get("namespace")
     if not isinstance(namespace, str) or not namespace:
-        missing = "metadata.namespace is missing; it must be the tenant namespace (tenant-...)"
-        return [f"{agent.name}: deploy/agent.yaml {missing}"]
+        if namespace is None or namespace == "":
+            reason = "metadata.namespace is missing; it must be the tenant namespace (tenant-...)"
+        else:
+            reason = "metadata.namespace must be a string naming the tenant namespace (tenant-...)"
+        return [f"{agent.name}: deploy/agent.yaml {reason}"]
     try:
         artifacts = build(
             agent,

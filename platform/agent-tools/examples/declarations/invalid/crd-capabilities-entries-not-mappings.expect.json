@@ -1,5 +1,8 @@
 {
   "rule": "entries of capabilities.models and capabilities.mcp are strings, not mappings.",
-  "error": "spec.capabilities.mcp[0]: \"example-cluster\" is not an object",
+  "error": [
+    "spec.capabilities.models[0]: \"example-model\" is not an object",
+    "spec.capabilities.mcp[0]: \"example-cluster\" is not an object"
+  ],
   "problems": 2
 }

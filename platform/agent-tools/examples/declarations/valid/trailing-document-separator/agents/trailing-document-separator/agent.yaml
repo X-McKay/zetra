@@ -1,0 +1,14 @@
+# Valid: both files end with a line of three dashes. That leaves an empty second document, which kubectl, Flux and the release preflight ignore, so it is accepted. Two documents with content are not (see invalid/manifest-two-documents).
+schema_version: 1
+name: trailing-document-separator
+entrypoint: trailing_document_separator.agent:create_agent
+instructions: trailing_document_separator/instructions/base.md
+model:
+  backend: llm-main
+  name: example-model
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write
+---

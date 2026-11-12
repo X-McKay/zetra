@@ -97,10 +97,10 @@ class AgentDir:
         return packages[0] if len(packages) == 1 else None
 
     def manifest(self) -> dict[str, Any]:
-        return yaml.safe_load(self.manifest_path.read_text(encoding="utf-8"))
+        return _single_document(self.manifest_path.read_text(encoding="utf-8"))
 
     def agent_cr(self) -> dict[str, Any]:
-        return yaml.safe_load(self.agent_cr_path.read_text(encoding="utf-8"))
+        return _single_document(self.agent_cr_path.read_text(encoding="utf-8"))
 
     def fixture_files(self) -> list[Path]:
         """The files that make an image a fixture image, whichever of them are present."""
@@ -109,6 +109,20 @@ class AgentDir:
         if package is not None and (package / "step.py").is_file():
             found.append(package / "step.py")
         return found
+
+
+class _ManyDocuments(yaml.YAMLError):
+    """A file holds more than one YAML document that is not empty."""
+
+
+def _single_document(text: str) -> Any:
+    """The one document in `text`. A trailing `---` leaves an empty document behind, which
+    kubectl, Flux and the release preflight all ignore, so it is ignored here too; two
+    documents with content are refused."""
+    documents = [d for d in yaml.safe_load_all(text) if d is not None]
+    if len(documents) > 1:
+        raise _ManyDocuments
+    return documents[0] if documents else None
 
 
 def find(repo: Path, name: str) -> AgentDir:
@@ -155,14 +169,22 @@ def check_files(agent: AgentDir) -> list[str]:
 def _read(path: Path, label: str, name: str) -> tuple[dict[str, Any] | None, str | None]:
     """The YAML mapping in `path`, or the one-line reason it is not one."""
     try:
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None, f"{name}: {label} is not UTF-8 text"
+    except OSError as exc:
+        return None, f"{name}: {label} cannot be read: {exc.strerror or type(exc).__name__}"
+    try:
+        document = _single_document(text)
+    except _ManyDocuments:
+        return None, f"{name}: {label} must hold exactly one YAML document, and it holds more"
+    except RecursionError:
+        return None, f"{name}: {label} is nested too deeply to be read"
     except yaml.YAMLError as exc:
         mark = getattr(exc, "problem_mark", None)
         where = f" at line {mark.line + 1}" if mark is not None else ""
         reason = str(getattr(exc, "problem", None) or "cannot be parsed").splitlines()[0]
         return None, f"{name}: {label} is malformed YAML{where}: {reason}"
-    except UnicodeDecodeError:
-        return None, f"{name}: {label} is not UTF-8 text"
     if document is None:
         return None, f"{name}: {label} is empty; it must be a mapping"
     if not isinstance(document, dict):
@@ -182,7 +204,9 @@ def _kind(value: Any) -> str:
         return "a number"
     if isinstance(value, str):
         return "a string"
-    return "null"
+    if value is None:
+        return "null"
+    return "a value of another type"
 
 
 def _manifest_shape(name: str, manifest: dict[str, Any]) -> list[str]:
@@ -258,14 +282,23 @@ def _grant_problems(name: str, spec: dict[str, Any]) -> list[str]:
     """Rules about the tool-backend grants that hold once the spec is inside the CRD."""
     problems = []
     caps = spec.get("capabilities") or {}
-    mode = (spec.get("identity") or {}).get("mode")
+    identity = spec.get("identity") or {}
+    # The fallback defaults to deny, as `_identity` of agent_platform.bundle compiles it.
+    fallback = (identity.get("onBehalfOf") or {}).get("fallback", "deny")
     for index, entry in enumerate(caps.get("mcp") or []):
-        if mode == "agent" and entry.get("delegation") == "on-behalf-of":
+        if (
+            identity.get("mode") == "agent"
+            and fallback != "agent"
+            and entry.get("delegation") == "on-behalf-of"
+        ):
             problems.append(
                 f"{name}: deploy/agent.yaml spec.capabilities.mcp[{index}] (backend "
-                f"{entry.get('backend')}) has delegation on-behalf-of, but spec.identity.mode "
-                "is agent, so there is no person to act for; set spec.identity.mode to "
-                "on-behalf-of or the grant's delegation to agent"
+                f"{entry.get('backend')}) has delegation on-behalf-of, so calls to it are "
+                "denied whenever the session carries no person's grant, and a session of an "
+                "agent in mode agent is never required to carry one; set "
+                "spec.identity.onBehalfOf.fallback to agent to act as the agent then, or "
+                "spec.identity.mode to on-behalf-of to require a person, or the grant's "
+                "delegation to agent"
             )
     return problems
 

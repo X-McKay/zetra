@@ -74,7 +74,9 @@ cite only what was observed.
 The reference for what `agent.yaml` and `deploy/agent.yaml` may and may not say is the
 corpus in [`platform/agent-tools/examples/declarations/`](../platform/agent-tools/examples/declarations):
 `valid/` holds declarations `zetra-agents check` accepts (a minimal model-backed agent,
-one with tool-backend grants, one that acts on a person's behalf), and `invalid/` holds
+one with tool-backend grants, one that acts on a person's behalf, one that does so only
+when there is a person and otherwise acts as itself, one whose session budget is above
+the daily one, one whose files end with a `---` line), and `invalid/` holds
 one example per refusal, each breaking exactly one rule and named for it, beside a
 `<name>.expect.json` giving the error it must produce. One test
 (`platform/agent-tools/tests/test_declaration_examples.py`) runs every example through
@@ -86,8 +88,10 @@ A declaration that is not the right shape (a file that is empty or not YAML, a l
 a mapping belongs, a `tools` entry that is a string) is reported as a one-line problem
 naming the file, never as a traceback. Among the rules: a tool's `effect` must be one the
 SDK defines (`workspace_read`, `workspace_write`, `remote_read`), tool names are unique,
-and a tool-backend grant may delegate `on-behalf-of` only when `spec.identity.mode` is
-`on-behalf-of`.
+a file holds exactly one document (a trailing `---` line is fine), and a tool-backend
+grant may delegate `on-behalf-of` under `spec.identity.mode: agent` only when
+`spec.identity.onBehalfOf.fallback` is `agent`; otherwise its calls are denied for every
+session that carries no person's grant, and an agent-mode session is never required to.
 
 ### Testing an agent
 
