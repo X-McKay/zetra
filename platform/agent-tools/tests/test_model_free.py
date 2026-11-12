@@ -91,6 +91,14 @@ def test_check_refuses_a_decide_beside_a_model(backed, capsys):
     assert "remove `decide`" in err
 
 
+def test_check_reads_no_decide_from_an_agent_without_code(backed, capsys):
+    shutil.rmtree(backed.src)
+    assert manifest_tools.decide_problems(backed) == []
+    code, err = check(backed, capsys)  # `check` itself must end, not raise
+    assert code in (0, 1)
+    assert "Traceback" not in err
+
+
 def test_a_fixture_is_not_read_for_its_decide(free):
     copy = free.repo / "agents" / "conformance-checkpoint"
     shutil.copytree(free.root, copy)

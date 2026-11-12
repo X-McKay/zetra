@@ -104,6 +104,8 @@ def read_code(agent: AgentDir) -> tuple[list[dict[str, str]], bool]:
     """What `create_agent` returns: its tools as the manifest lists them, and whether it
     returns a `decide` function."""
     manifest = declared(agent)
+    if not agent.src.is_dir():
+        raise ToolsError("the agent has no src/ directory, so there is no code to read")
     with tempfile.TemporaryDirectory(prefix="zetra-agents-tools-") as tmp:
         root = Path(tmp)
         testing.lay_out(agent, root / "app")
