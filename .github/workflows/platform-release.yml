@@ -1,0 +1,70 @@
+# Release the platform images whose build inputs a push to `main` changed.
+#
+# The only trigger is a push to main, and there must never be another (no workflow_dispatch,
+# no schedule, no pull_request): the self-hosted runner's job guard admits a job only when the
+# repository is X-McKay/zetra, the event is `push`, the ref is `refs/heads/main` and the
+# workflow reference is exactly
+#   X-McKay/zetra/.github/workflows/platform-release.yml@refs/heads/main
+# so a job on that runner started any other way is refused at its start. Keep every job that
+# needs the runner in this file.
+#
+# Nothing is deployed. A platform image reaches the cluster only through a reviewed change of
+# a pin in the infrastructure repository.
+name: Platform release
+on:
+  push:
+    branches: [main]
+    # No `paths` filter: which images changed is decided exactly by `changes`, and a filter
+    # would miss an image whose build context lies outside the paths it lists. A push that
+    # changes no image's inputs ends successfully having built nothing.
+# Phase 2 signs each pushed digest keylessly with this workflow's identity token. When it
+# does, `id-token: write` belongs on the `release` job alone, never here: the `changes` job
+# runs outside the runner's guard and must not be able to obtain that identity.
+permissions:
+  contents: read
+jobs:
+  # Decides which images to release. It needs no registry and no secret, so it runs on a
+  # GitHub-hosted runner and never takes the one slot of the self-hosted scale set.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      names: ${{ steps.select.outputs.names }}
+      count: ${{ steps.select.outputs.count }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the "before" commit of the push must be in the checkout
+      - id: select
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          images=$(python3 -I platform/contracts/agent_platform/images.py changed "$BEFORE" "$AFTER")
+          echo "names=$(jq -c 'map(.repository)' <<<"$images")" >> "$GITHUB_OUTPUT"
+          echo "count=$(jq length <<<"$images")" >> "$GITHUB_OUTPUT"
+          jq -r 'if length == 0 then "No image has changed build inputs; nothing to release."
+            else "Releasing: " + (map(.repository) | join(", ")) end' <<<"$images" >> "$GITHUB_STEP_SUMMARY"
+  # One image at a time: the scale set has one runner, and a build sidecar has been killed
+  # for exceeding its memory limit. A workflow `concurrency` group is deliberately not used:
+  # by default GitHub keeps one waiting run per group and cancels an older waiting one, which
+  # could drop the release of a merge when two merges land close together. It is not needed
+  # either: the scale set has one runner, so queued jobs wait there.
+  release:
+    needs: changes
+    if: needs.changes.outputs.count != '0'
+    name: release (${{ matrix.image }})
+    runs-on: kubani-zetra
+    timeout-minutes: 60
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.changes.outputs.names) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/platform-release
+        with:
+          image: ${{ matrix.image }}

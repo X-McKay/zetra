@@ -45,6 +45,12 @@
     "repository": "registry-controller",
     "dockerfile": "platform/controller/Dockerfile",
     "context": "platform",
+    "inputs": [
+      "platform/contracts",
+      "platform/controller/pyproject.toml",
+      "platform/controller/uv.lock",
+      "platform/controller/registry_controller"
+    ],
     "platform": "linux/amd64",
     "buildArgs": {
       "COSIGN_VERSION": "v2.6.1",

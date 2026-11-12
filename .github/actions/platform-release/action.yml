@@ -1,0 +1,64 @@
+# Release one platform image from a push to zetra `main`: refuse unless the build is safe,
+# build it exactly as the pull request job does, push it to registry.almckay.io/platform/
+# <image>:<first seven characters of the commit>, and report the reference with its digest.
+#
+# Run it only from .github/workflows/platform-release.yml; the runner's job guard refuses any
+# other workflow. Nothing here signs: Phase 2 of the platform image plan signs the digest this
+# action outputs, from the same workflow, which is why it is a composite action (its steps run
+# inside the caller's workflow and Fulcio will certify that workflow's identity).
+#
+# The registry credential is not handled here. The cluster mounts a docker client
+# configuration for registry.almckay.io into the runner container; this action runs no
+# `docker login`, reads no secret and uses no `secrets.*`. Only that one file is read-only:
+# the docker client and buildx write their own state under the same configuration directory.
+#
+# Nothing else runs beside that login: no signing or scanning tool is installed until the
+# phase that uses it.
+name: Release platform image
+description: Build and push one platform image as registry.almckay.io/platform/<image>:<short commit>, refusing to overwrite.
+inputs:
+  image:
+    description: repository name of an entry in platform/images.json
+    required: true
+  uv-version:
+    default: "0.13.1"
+  python-version:
+    default: "3.12.14"
+outputs:
+  reference:
+    description: the full image reference with its digest, <registry>/platform/<image>:<tag>@sha256:...
+    value: ${{ steps.push.outputs.reference }}
+  digest:
+    description: the pushed manifest digest
+    value: ${{ steps.push.outputs.digest }}
+  tag:
+    description: the first seven characters of the commit hash
+    value: ${{ steps.push.outputs.tag }}
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+      with:
+        version: ${{ inputs.uv-version }}
+        python-version: ${{ inputs.python-version }}
+    - name: Check the registry client configuration
+      shell: bash
+      env:
+        PLATFORM_PYTHON: uv run --no-project python
+      run: |
+        "${{ github.action_path }}/release.sh" config
+    - name: Refuse unless the build is safe
+      shell: bash
+      env:
+        PLATFORM_PYTHON: uv run --no-project python
+        IMAGE: ${{ inputs.image }}
+      run: |
+        "${{ github.action_path }}/release.sh" preflight "$IMAGE"
+    - name: Build and push
+      id: push
+      shell: bash
+      env:
+        PLATFORM_PYTHON: uv run --no-project python
+        IMAGE: ${{ inputs.image }}
+      run: |
+        "${{ github.action_path }}/release.sh" push "$IMAGE"
