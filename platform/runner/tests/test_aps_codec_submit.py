@@ -142,7 +142,10 @@ async def test_codec_round_trip_and_tenant_binding():
     assert (await a.decode([sealed]))[0] == plain
     with pytest.raises(Exception):
         await b.decode([sealed])  # another tenant's AAD does not open it
-    tampered = Payload(metadata=sealed.metadata, data=sealed.data[:-1] + b"\0")
+    # Flip a bit of the last byte. Writing a fixed byte there left the payload unchanged
+    # whenever the random tag already ended in it, one run in 256.
+    last = bytes([sealed.data[-1] ^ 1])
+    tampered = Payload(metadata=sealed.metadata, data=sealed.data[:-1] + last)
     with pytest.raises(Exception):
         await a.decode([tampered])
 

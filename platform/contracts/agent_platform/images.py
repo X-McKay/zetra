@@ -19,6 +19,10 @@ read them. The two ignore files BuildKit consults (`<Dockerfile>.dockerignore` a
 `<context>/.dockerignore`) always count. `platform/images.json` is never a build input of its own
 accord: no Dockerfile copies it, so it counts only through the entry comparison.
 
+An entry may also carry `rebuild`, a one-line note that no build reads. Changing it is the way
+to release an image whose inputs have not changed (there is no manual trigger): the entry
+differs, so the image is released, and the note says why.
+
 Every field of an entry reaches a `docker buildx build` command line on a runner that holds a
 registry login, so `parse_images` refuses anything but paths inside the repository, the two
 platforms the cluster runs and plain build arguments.
@@ -111,6 +115,9 @@ def parse_images(text: str, source: str = IMAGES_FILE) -> list[dict[str, Any]]:
             raise ImagesError(
                 f"{source}: {name}: inputs must be a non-empty list of paths inside the repository"
             )
+        note = image.get("rebuild")
+        if note is not None and not (isinstance(note, str) and note.strip() and _printable(note)):
+            raise ImagesError(f"{source}: {name}: rebuild must be a one-line note")
     return images
 
 
