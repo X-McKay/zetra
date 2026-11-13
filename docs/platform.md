@@ -58,9 +58,14 @@ tests fail when it differs from `images.json`.
 ### Releasing platform images
 
 `.github/workflows/platform-release.yml` builds and pushes the images that a
-merge to `main` changed. Until it has run once on the cluster's runner, treat
-every statement here as the design and not as something observed; the images
-Kubani deploys so far were built and pushed by hand.
+merge to `main` changed. It first ran on 2026-11-12 (commit `4657884`): the
+runner's guard admitted the job, `registry-controller` was built and pushed as
+`registry.almckay.io/platform/registry-controller:4657884`, and the digest
+read back from the registry equalled the one the build reported. The guard
+also refused two test workflows pushed to another branch, one of them using
+this workflow's file name. Not yet observed on the runner: a Go image build,
+the arm64 `capture` build, and a run that releases more than one image. The
+images Kubani deploys so far were built and pushed by hand.
 
 - **What is released.** On a push to `main`, the `changes` job runs
   `platform/contracts/agent_platform/images.py changed <before> <after>`. An
