@@ -150,6 +150,6 @@ def test_declared_inputs_exist_and_are_not_the_whole_context():
 
 
 def test_only_known_keys_in_images_json():
-    allowed = {"repository", "dockerfile", "context", "inputs", "platform", "buildArgs"}
+    allowed = {"repository", "dockerfile", "context", "inputs", "platform", "buildArgs", "rebuild"}
     for image in IMAGES:
         assert set(image) <= allowed, (image["repository"], set(image) - allowed)

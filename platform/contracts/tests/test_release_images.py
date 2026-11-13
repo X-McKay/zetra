@@ -440,3 +440,35 @@ def test_an_images_file_that_is_not_utf8_stops_the_run(repo):
     (repo.path / "platform/images.json").write_bytes(b"[\xff]")
     with pytest.raises(ImagesError):
         tool.changed(repo.path, base, repo.commit())
+
+
+def test_a_changed_rebuild_note_releases_that_image_and_no_other(repo):
+    base = head(repo)
+    noted = [dict(i) for i in DEFAULT]
+    noted[1]["rebuild"] = "2026-11-12: first build by the pipeline"
+    repo.set_images(noted)
+    first = repo.commit()
+    assert repo.released(base, first) == ["beta"]
+    assert repo.released(first, first) == []
+    noted[1]["rebuild"] = "2026-12-01: base image republished"
+    repo.set_images(noted)
+    assert repo.released(first, repo.commit()) == ["beta"]
+
+
+def test_the_rebuild_note_is_not_a_build_fact(repo):
+    noted = [dict(i) for i in DEFAULT]
+    noted[0]["rebuild"] = "--push"
+    repo.set_images(noted)
+    repo.commit()
+    assert tool.entry_fields(repo.path, "alpha") == [
+        "platform/alpha/Dockerfile",
+        "platform/alpha",
+        "linux/amd64",
+    ]
+
+
+@pytest.mark.parametrize("bad", ["", "  ", 3, ["note"], "two\nlines"])
+def test_a_malformed_rebuild_note_is_rejected(bad):
+    with pytest.raises(ImagesError) as caught:
+        tool.parse_images(json.dumps([entry("a", "x", rebuild=bad)]))
+    assert "rebuild" in str(caught.value)

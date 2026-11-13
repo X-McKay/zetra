@@ -96,6 +96,10 @@ images Kubani deploys so far were built and pushed by hand.
   workflow; the next merge that changes an input releases a new tag. A push
   whose "before" could not be read (see above) is likewise not released later
   on its own. There is no manual trigger.
+- **Releasing an image whose inputs did not change.** Give its entry a
+  `rebuild` note, or change the one it has, in a pull request: a one-line
+  string saying why (`"2026-12-01: base image republished"`). No build reads
+  it; the entry differs, so the merge releases that image.
 - **How.** The `release` job runs on the self-hosted runner scale set
   `kubani-zetra`, one image at a time (`max-parallel: 1`; no `concurrency`
   group, because by default GitHub keeps one waiting run per group and could
