@@ -16,7 +16,8 @@ RUN cd / && /app/.venv/bin/python -I -c \
 FROM python:3.12.14-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
 RUN groupadd --gid 65532 nonroot && useradd --uid 65532 --gid nonroot --no-create-home nonroot
 COPY --from=build /app/.venv /app/.venv
-# The liveness probe runs `python` from PATH.
+# No liveness probe: one pass lasts as long as a suite does. The registry's status names an
+# evaluation left pending for ten minutes (contract/delivery.md section 10).
 ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 USER 65532:65532
 ENTRYPOINT ["/app/.venv/bin/registry-evaluator"]
