@@ -312,3 +312,31 @@ def test_return_races_recovery_being_entered():
     refused(world.post(RETURN), "in-recovery")
 
     assert world.store.deployment(DEP).authority == "registry"
+
+
+def test_an_agent_taken_while_disabled_can_be_enabled_by_the_registry():
+    world = World()
+    world.seed()
+    deployment = world.store.deployment(DEP)
+    agent = copy.deepcopy(deployment.document["agent"])
+    agent["spec"]["enabled"] = False
+    with world.store.transaction("test") as tx:  # as the importer records a disabled manifest
+        tx.put_deployment(
+            deployment.model_copy(update={"enabled": False, "document": {"agent": agent}})
+        )
+        tx.event("test-setup")
+    world.cluster_shows_everything()
+    enabled = f"/v1/deployments/{DEP}/enabled"
+
+    assert world.post(TAKE).status_code == 200
+    taken = world.store.deployment(DEP)
+    assert taken.enabled is False and taken.document["agent"]["spec"]["enabled"] is True
+    projected = world.get(f"/v1/clusters/{CLUSTER}/desired", token="provisioner").json()
+    assert projected["deployments"][0]["objects"][0]["document"]["spec"]["enabled"] is False
+
+    assert world.post(enabled, {"enabled": True}).status_code == 200
+    projected = world.get(f"/v1/clusters/{CLUSTER}/desired", token="provisioner").json()
+    assert projected["deployments"][0]["objects"][0]["document"]["spec"]["enabled"] is True
+
+    assert world.post(enabled, {"enabled": False, "reason": "back as found"}).status_code == 200
+    assert world.post(RETURN).json()["agent"]["spec"]["enabled"] is False

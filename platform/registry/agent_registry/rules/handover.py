@@ -3,6 +3,7 @@ section 7). Each is a function of the transaction the route opened."""
 
 from __future__ import annotations
 
+import copy
 from datetime import datetime
 from typing import Any
 
@@ -100,7 +101,15 @@ def take(tx: Tx, deployment_id: str, *, now: datetime, max_age_seconds: int) -> 
             + "; ".join(reasons),
         )
     seq = tx.event("authority-taken", deployment_id=deployment.id).seq
-    tx.put_deployment(deployment.model_copy(update={"authority": "registry", "generation": seq}))
+    # `deployment.enabled` already holds the live value. From here on it alone turns this
+    # document off or on, so a document taken while disabled can be enabled again.
+    document = copy.deepcopy(deployment.document)
+    document["agent"].setdefault("spec", {})["enabled"] = True
+    tx.put_deployment(
+        deployment.model_copy(
+            update={"authority": "registry", "generation": seq, "document": document}
+        )
+    )
     for revision in tx.revisions(deployment.id):
         tx.set_revision_progress(deployment.id, revision.number, generation=seq)
     return True

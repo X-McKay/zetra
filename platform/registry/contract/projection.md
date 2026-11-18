@@ -175,8 +175,10 @@ Being in the Flux inventory is not a refusal: the provisioner reports
 status shows it as a blocker.
 
 Then, in one transaction with event `authority-taken` (sequence number `seq`): authority
-`registry`; the deployment's `generation = seq`; every revision's `generation = seq`. From
-then on the importer skips the deployment.
+`registry`; the deployment's `generation = seq`; every revision's `generation = seq`; and
+`deployment.document["agent"]["spec"]["enabled"]` becomes true. `deployment.enabled` already
+holds the live value, so what is projected does not change, and an agent taken while disabled
+can be enabled with the registry's own switch. From then on the importer skips the deployment.
 
 `POST /v1/deployments/{id}/authority/return`. Checks: `in-recovery`; `not-found`. Sets
 authority `pull-request` with event `authority-returned`; already so: `changed: false`. The
@@ -224,7 +226,9 @@ Otherwise, in one transaction:
    `seq`.
 3. For each registry-owned agent, adopt:
    - `agent`, `enabled`: `deployment.document["agent"]["spec"]` becomes the live `spec`, and
-     `deployment.enabled` the live `spec.enabled` (true when absent).
+     `deployment.enabled` the live `spec.enabled` (true when absent). When `enabled` is
+     adopted, the document's own `spec.enabled` becomes true, as it does when authority is
+     taken (section 7).
    - `release`, in order of name: a `Release` (`derive.agent_release_record`), its
      requirements, and a `Revision` with the next number, origin `recovered`, the live Agent
      as its `agent_document`. Approved on the cluster: phase `activated`, and an approval as
