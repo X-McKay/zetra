@@ -360,6 +360,31 @@ class StoreSuite:
             tx.add_release(release(document={"spec": {"image": "other"}}))
         assert store.release(REL1) == release()
 
+    def test_a_release_adopted_with_only_a_served_name_is_completed_once(self, store: Store):
+        rid = release_id("model", "fast", "Qwen-fast")
+        adopted = release(rid, digest="", origin="adopted", document={"servedName": "Qwen/fast"})
+        full = adopted.model_copy(
+            update={
+                "digest": "sha256:" + "3" * 64,
+                "document": {"servedName": "Qwen/fast", "engine": "fast"},
+                "recorded_at": T0 + timedelta(days=1),
+            }
+        )
+        with store.transaction("test") as tx:
+            tx.put_item(Item(kind="model", name="fast", owner="p", source="s", description="d"))
+            tx.add_release(adopted)
+            tx.event("adopted")
+        with store.transaction("test") as tx:
+            tx.complete_release(full)
+            tx.event("completed")
+        assert store.release(rid) == full.model_copy(update={"recorded_at": T0})
+        with store.transaction("test") as tx:
+            tx.complete_release(full)  # the same content is not a change
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.complete_release(full.model_copy(update={"document": {"servedName": "Qwen/fast"}}))
+        with pytest.raises(Missing), store.transaction("test") as tx:
+            tx.complete_release(full.model_copy(update={"id": "model:fast:none", "name": "none"}))
+
     def test_release_needs_its_item(self, store: Store):
         with pytest.raises(Missing), store.transaction("test") as tx:
             tx.add_release(release())

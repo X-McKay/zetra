@@ -38,7 +38,14 @@ from agent_registry.models import (
     Tenant,
     TrustedRepository,
 )
-from agent_registry.store import Conflict, Missing, StoreError, Unavailable, Unevented
+from agent_registry.store import (
+    Conflict,
+    Missing,
+    StoreError,
+    Unavailable,
+    Unevented,
+    completion_is_new,
+)
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
@@ -402,6 +409,17 @@ class _Tx(_Reads):
             self.changed = True
         elif not _same_release(have, release):
             raise Conflict(f"release {release.id} exists with other content")
+
+    def complete_release(self, release: Release) -> None:
+        have = self.release(release.id)
+        if have is None:
+            raise Missing(f"release {release.id} does not exist")
+        if completion_is_new(have, release):
+            self._conn.execute(
+                "UPDATE releases SET digest = %s, document = %s WHERE id = %s",
+                (release.digest, Jsonb(release.document), release.id),
+            )
+            self.changed = True
 
     def _add_rows(
         self, table: str, what: str, release_id: str, rows: list[Any], have: list[Any]

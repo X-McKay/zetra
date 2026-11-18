@@ -32,7 +32,7 @@ from agent_registry.models import (
     Tenant,
     TrustedRepository,
 )
-from agent_registry.store import Conflict, Missing, StoreError, Unevented
+from agent_registry.store import Conflict, Missing, StoreError, Unevented, completion_is_new
 
 
 def _now() -> datetime:
@@ -305,6 +305,16 @@ class _Tx(_Reads):
             self.changed = True
         elif not _same_release(have, release):
             raise Conflict(f"release {release.id} exists with other content")
+
+    def complete_release(self, release: Release) -> None:
+        have = self._s.releases.get(release.id)
+        if have is None:
+            raise Missing(f"release {release.id} does not exist")
+        if completion_is_new(have, release):
+            self._s.releases[release.id] = release.model_copy(
+                update={"recorded_at": have.recorded_at}
+            )
+            self.changed = True
 
     def _add_rows(self, table: dict[str, list], key: str, rows: list, what: str) -> None:
         have = table.get(key)

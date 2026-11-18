@@ -67,10 +67,21 @@ class ItemsOut(Record):
     items: list[Item]
 
 
+class ContractStatus(Record):
+    """The tool contract recorded for a tool server (`contract/dependencies.md` section 2.3)."""
+
+    state: Literal["recorded", "none"]
+    digest: str | None = None
+    tools: int | None = None
+
+
 class ItemOut(Record):
     item: Item
     releases: list[Release]
     deployments: list[Deployment]
+    # By deployment id: a tool server's contract, or the release a model engine serves.
+    contracts: dict[str, ContractStatus] | None = None
+    served_releases: dict[str, str | None] | None = None
 
 
 class ReleaseOut(Record):
@@ -192,6 +203,7 @@ class ToolServerStatus(Record):
     ready_replicas: int | None
     observation: Observed
     dependants: list[str]  # agent names
+    contract: ContractStatus
 
 
 class ModelStatus(Record):
@@ -205,6 +217,7 @@ class ModelStatus(Record):
     observed_image: str | None
     observation: Observed
     dependants: list[str]
+    release: str | None  # the release the document names; None when the feed names none
 
 
 class StatusOut(Record):

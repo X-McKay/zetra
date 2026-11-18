@@ -643,6 +643,47 @@
         "title": "ClaimedEvaluation",
         "type": "object"
       },
+      "ContractStatus": {
+        "additionalProperties": false,
+        "description": "The tool contract recorded for a tool server (`contract/dependencies.md` section 2.3).",
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "state": {
+            "enum": [
+              "recorded",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ContractStatus",
+        "type": "object"
+      },
       "CurrentStatus": {
         "additionalProperties": false,
         "properties": {
@@ -1448,6 +1489,20 @@
       "ItemOut": {
         "additionalProperties": false,
         "properties": {
+          "contracts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/ContractStatus"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contracts"
+          },
           "deployments": {
             "items": {
               "$ref": "#/components/schemas/Deployment"
@@ -1464,6 +1519,27 @@
             },
             "title": "Releases",
             "type": "array"
+          },
+          "servedReleases": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servedreleases"
           }
         },
         "required": [
@@ -1645,6 +1721,17 @@
               }
             ],
             "title": "Observedservedname"
+          },
+          "release": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release"
           }
         },
         "required": [
@@ -1657,7 +1744,8 @@
           "observedServedName",
           "observedImage",
           "observation",
-          "dependants"
+          "dependants",
+          "release"
         ],
         "title": "ModelStatus",
         "type": "object"
@@ -2992,6 +3080,9 @@
             ],
             "title": "Backend"
           },
+          "contract": {
+            "$ref": "#/components/schemas/ContractStatus"
+          },
           "declaredImage": {
             "title": "Declaredimage",
             "type": "string"
@@ -3056,7 +3147,8 @@
           "observedImages",
           "readyReplicas",
           "observation",
-          "dependants"
+          "dependants",
+          "contract"
         ],
         "title": "ToolServerStatus",
         "type": "object"

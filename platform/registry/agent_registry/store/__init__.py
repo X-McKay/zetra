@@ -68,6 +68,22 @@ class Unevented(StoreError):
     """A transaction changed state without an event, or recorded an event without a change."""
 
 
+def completion_is_new(have: Release, release: Release) -> bool:
+    """Whether `release` completes the stored `have` (True), is the same content (False), or
+    cannot replace it (`Conflict`). Only a release adopted with just a served name is completed."""
+    if have.model_dump(exclude={"recorded_at"}) == release.model_dump(exclude={"recorded_at"}):
+        return False
+    served = release.document.get("servedName")
+    if (
+        have.origin != "adopted"
+        or have.document != {"servedName": served}
+        or (have.kind, have.item, have.name) != (release.kind, release.item, release.name)
+        or release.origin != "adopted"
+    ):
+        raise Conflict(f"release {release.id} exists with other content")
+    return True
+
+
 class Reads(Protocol):
     def meta(self) -> Meta: ...
     def generation(self) -> int: ...
@@ -150,6 +166,13 @@ class Tx(Reads, Protocol):
 
     def add_release(self, release: Release) -> None:
         """Write once. `recorded_at` is not compared when deciding whether content is the same."""
+        ...
+
+    def complete_release(self, release: Release) -> None:
+        """Give an adopted release that was recorded with only `{"servedName": ...}` its full
+        document and digest, once (`contract/dependencies.md` section 4.3). `Conflict` when the
+        stored release is anything else or has another served name; `Missing` when none is
+        stored. The same content again is not a change."""
         ...
 
     def add_requirements(self, release_id: str, rows: list[Requirement]) -> None:
