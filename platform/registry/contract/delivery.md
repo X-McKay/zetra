@@ -57,8 +57,8 @@ which command wrote it and that it is not edited by hand. The mapping:
 | `metadata.name` | `name` |
 | `metadata.namespace` | `requires.tenant` |
 | `spec.owner`, `spec.description`, `spec.identity`, `spec.runtime` | the same keys of `requires` |
-| `spec.models` | one entry: `backend` and `models: [name]` from `model`, `budget` from `requires.budget`. Empty list when `model` is null. |
-| `spec.mcp` | `requires.tools`, unchanged |
+| `spec.capabilities.models` | one entry: `backend` and `models: [name]` from `model`, `budget` from `requires.budget`. Empty list when `model` is null. |
+| `spec.capabilities.mcp` | `requires.tools`, unchanged |
 
 Keys of `requires` are checked: an unknown key is an error that names it. The generated Agent
 is checked against the Agent schema as today.
@@ -417,11 +417,12 @@ sleep.
 - A case passes when the session ends `completed` and every check of `expect` holds on its
   report.
 - A session still running after `timeout_seconds` is cancelled, and the verdict is `error`.
-- A start refused `not-ready`, or a session interface that cannot be reached after 5 tries
-  over about a minute, makes the verdict `error`.
+- A start the session interface refuses (any 4xx answer; the release is not Ready, for
+  one), or a session interface that cannot be reached after 5 tries over about a minute,
+  makes the verdict `error`. The summary carries the interface's code and message.
 - The lease asked for is `timeout_seconds` times the number of cases, plus 120, at most 3600.
 - It never handles a grant handle and never starts a session for a release whose identity
-  mode is not `agent`; the session interface refuses those (`needs-consent`), which is `error`.
+  mode is not `agent`; the session interface refuses those, which is `error`.
 
 ## 7. Rollback, pin, unpin, disable
 
@@ -583,15 +584,17 @@ Not part of this repository; listed so that nothing is assumed.
 | 2.2 Controller | `platform/controller/`, `deploy/platform/crds/` | 2, and the rate limit from `current-release` |
 | 2.1 Session interface | `platform/session-api/`, and the `memo` argument in `platform/runner/runner/submit.py` | `platform/session-api/contract/sessions.md` |
 | 2.3 Report | `agent_registry/api/intake.py`, `agent_registry/api/github.py`, `agent_registry/rules/report.py` (the suite and declaration checks, which 2.4 then also calls), `agent_registry/config.py`, the wiring in `api/app.py`, `.github/actions/agent-release/` | 1.3 (the registry's check), 3.1 to 3.3 |
-| 2.4 Activation | `rules/activation.py`, `rules/revisions.py`, `rules/lifecycle.py`, `rules/approval.py`, `rules/projection.py`, `api/write.py`, `api/evaluations.py`, `queries.py`, `api/schemas.py`, `contract/lifecycle.md`, `contract/projection.md`, `contract/openapi.json` | 4, 5, 6.1, 6.2, 7, 9, 10, 11 |
+| 2.4 Activation | `rules/activation.py`, `rules/revisions.py`, `rules/lifecycle.py`, `rules/approval.py`, `rules/projection.py`, `api/write.py`, `api/read.py`, `api/evaluations.py`, `api/auth.py`, `api/deps.py`, `api/app.py`, `config.py`, `queries.py`, `api/schemas.py`, `tests/world.py`, `contract/lifecycle.md`, `contract/projection.md`, `contract/openapi.json` | 4, 5, 6.1, 6.2, 7, 8.2 (what the AgentRelease object says of a revoked release), 9, 10, 11 |
 | 2.5 Evaluator | `platform/evaluator/` | 6.3 |
 | 2.6 Provisioner | `platform/provisioner/` | 2 (the object is written whole), 8.3, 9 |
 | 2.7 Tooling | `platform/agent-tools/` | 1, 2 (the tooling row), 3.4 |
-| 2.8 Revocation | `rules/revocation.py`, `importer/feed.py`, `api/cluster.py` | 8 |
+| 2.8 Revocation | `rules/revocation.py`, `importer/feed.py`, `api/cluster.py`, `api/intake.py` (the refusal of a revoked release's report) | 3.2 (that refusal), 8 except the object's content |
 
 2.4 and 2.8 run together. 2.8 calls nothing of 2.4 except
 `revisions.settle_agent(tx, deployment_id, seq)` and
 `revisions.cancel_open_evaluations(tx, deployment_id, number, *, now)`; 2.4 calls nothing of
 2.8 except `revocation.revoked(reads, release) -> Revocation | None`. These three functions
 are written, with tests, before either package starts, and neither package changes their
-signatures.
+signatures. `schemas.DesiredRevocation` and `DesiredOut.revocations` are written before too;
+2.8 fills the list and does not change `api/schemas.py`. The call of `revisions.re_resolve`
+after a feed is applied (section 5.1) is added when the two packages are joined.

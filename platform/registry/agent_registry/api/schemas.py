@@ -316,6 +316,18 @@ class ObserveSubject(Record):
     served_name_from: dict[str, str] | None = None  # {kind: ConfigMap, name, key}
 
 
+class DesiredRevocation(Record):
+    """A revoked release whose running sessions the provisioner cancels, after it has written
+    the release's AgentRelease (`contract/delivery.md` section 8.3)."""
+
+    id: str
+    tenant: str
+    namespace: str
+    agent: str
+    release: str
+    sessions: Literal["cancel"]
+
+
 class DesiredOut(Record):
     cluster: str
     mode: Mode
@@ -325,6 +337,7 @@ class DesiredOut(Record):
     flux_inventories: list[dict[str, str]]
     deployments: list[DesiredDeployment]  # registry-owned agents only; empty in recovery
     observe: list[ObserveSubject]
+    revocations: list[DesiredRevocation] = Field(default_factory=list)  # empty in recovery
 
 
 class ObservedObject(Record):

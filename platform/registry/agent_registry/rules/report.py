@@ -10,7 +10,8 @@ from typing import Any
 
 from agent_registry.rules import Refusal
 
-CASE_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*\Z")
+# The same rule as `zetra_agents.suite` checks before a release is built.
+CASE_ID = re.compile(r"^[a-z0-9-]+\Z")
 MAX_CASES, MAX_TASK, MAX_LIST, MAX_ENTRY = 20, 4000, 20, 500
 CHECKS = ("report_contains", "report_matches", "report_excludes")
 

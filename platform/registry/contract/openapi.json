@@ -748,6 +748,13 @@
             },
             "title": "Observe",
             "type": "array"
+          },
+          "revocations": {
+            "items": {
+              "$ref": "#/components/schemas/DesiredRevocation"
+            },
+            "title": "Revocations",
+            "type": "array"
           }
         },
         "required": [
@@ -761,6 +768,47 @@
           "observe"
         ],
         "title": "DesiredOut",
+        "type": "object"
+      },
+      "DesiredRevocation": {
+        "additionalProperties": false,
+        "description": "A revoked release whose running sessions the provisioner cancels, after it has written\nthe release's AgentRelease (`contract/delivery.md` section 8.3).",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "sessions": {
+            "const": "cancel",
+            "title": "Sessions",
+            "type": "string"
+          },
+          "tenant": {
+            "title": "Tenant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant",
+          "namespace",
+          "agent",
+          "release",
+          "sessions"
+        ],
+        "title": "DesiredRevocation",
         "type": "object"
       },
       "Difference": {
