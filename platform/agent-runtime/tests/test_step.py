@@ -1,5 +1,6 @@
 """The one-boundary protocol (10.4, 11.8), driven as the runner drives it: a subprocess."""
 
+import hashlib
 import json
 import os
 import stat
@@ -236,6 +237,20 @@ def test_manifest_declaring_remote_write_exits_3(sandbox):
     make_app(sandbox.root / "app", manifest)
     rc, out, _ = sandbox.run(0)
     assert rc == 3 and "not admitted" in out["summary"]
+
+
+@pytest.mark.parametrize(
+    ("tool", "says"),
+    [
+        ({"name": "run_it", "effect": "sandbox_execute"}, "not admitted"),
+        ({"name": "skill_run", "effect": "workspace_read"}, "keeps for skills"),
+    ],
+)
+def test_manifest_tool_with_the_launchers_effect_or_name_exits_3(sandbox, tool, says):
+    # skills.md 7.1 and 8.3: the effect and the three names belong to the runtime
+    make_app(sandbox.root / "app", {**MANIFEST, "tools": [*MANIFEST["tools"], tool]})
+    rc, out, _ = sandbox.run(0)
+    assert rc == 3 and says in out["summary"]
 
 
 @pytest.mark.parametrize("status,rc", [(403, 3), (429, 4)])
@@ -496,3 +511,106 @@ def test_model_backed_manifest_with_decide_exits_3(sandbox):
     rc, out, _ = sandbox.run(0)
     assert rc == 3 and "declares a model" in out["summary"] and "remove" in out["summary"]
     assert sandbox.gw.chat_requests == []
+
+
+def test_listed_skills_reach_the_model_as_descriptions_and_two_tools(sandbox):
+    """skills.md 8.2 and 8.3 through the real process: the prompt and the tool list."""
+    from tests.test_skill_tools import write_lock, write_skill
+
+    app = sandbox.root / "app"
+    write_skill(app, "notes", "Takes notes.", "NOTES-BODY")
+    write_lock(app, ["notes"])
+    make_app(app, {**MANIFEST, "skills": ["notes"]})
+    sandbox.gw.chat_replies = [(200, chat_response("done"))]
+    rc, out, _ = sandbox.run(0)
+    assert rc == 2
+    body = sandbox.gw.chat_requests[0]["body"]
+    names = [t["function"]["name"] for t in body["tools"]]
+    assert names == [t["name"] for t in MANIFEST["tools"]] + ["skill_use", "skill_file"]
+    assert body["messages"][0]["content"].endswith("\n- notes: Takes notes.")
+    assert "NOTES-BODY" not in json.dumps(body)
+    assert "script_run" not in out
+
+
+def test_an_agent_without_skills_gets_no_skill_tools_or_prompt(sandbox):
+    sandbox.gw.chat_replies = [(200, chat_response("done"))]
+    sandbox.run(0)
+    body = sandbox.gw.chat_requests[0]["body"]
+    assert [t["function"]["name"] for t in body["tools"]] == [t["name"] for t in MANIFEST["tools"]]
+    assert body["messages"][0]["content"] == "You are a test agent."
+
+
+@pytest.mark.parametrize("skills", [[], ["notes"]])
+def test_a_call_of_skill_run_where_it_is_not_offered_is_recorded_as_refused(sandbox, skills):
+    """skills.md 10: every skill_run boundary carries a record, so the runner can read it."""
+    from tests.test_skill_tools import write_lock, write_skill
+
+    app = sandbox.root / "app"
+    if skills:
+        write_skill(app, "notes", "Takes notes.", "NOTES-BODY")
+        write_lock(app, skills)
+        make_app(app, {**MANIFEST, "skills": skills})
+    sandbox.seed(tool_call_state("skill_run", {"skill": "notes", "script": "scripts/x.py"}))
+    rc, out, _ = sandbox.run(0)
+    assert rc == 3 and out["tool"] == "skill_run"
+    record = out["script_run"]
+    assert record["refused"] == "not_offered" and record["argument_count"] == 0
+    assert (record["skill"], record["script"], record["digest"]) == (None, None, None)
+
+
+SHOW = "import os, sys\nprint(sys.argv[1:], sorted(os.environ), os.getcwd())\n"
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="the launcher needs /proc")
+def test_a_granted_step_runs_a_skill_script_and_records_it(sandbox):
+    """skills.md 8 to 10 in one real step: the tool, the launcher, its supervisor, a script."""
+    from tests.test_skill_tools import write_lock, write_skill
+
+    app = sandbox.root / "app"
+    write_skill(app, "row-count", "Counts rows.", "BODY", scripts=True)
+    (app / "skills" / "row-count" / "scripts" / "count.py").write_text(SHOW)
+    write_lock(app, ["row-count"])
+    make_app(app, {**MANIFEST, "skills": ["row-count"]})
+    sandbox.workspace.mkdir(parents=True, exist_ok=True)
+    sandbox.env["AGENT_EFFECTS"] = "sandbox_execute"
+    arguments = ["a b", "$(id)"]
+    call = {"skill": "row-count", "script": "scripts/count.py", "arguments": arguments}
+    sandbox.seed(tool_call_state("skill_run", call))
+    rc, out, err = sandbox.run(0)
+    assert rc == 0, err
+    record = out["script_run"]
+    assert record.pop("duration_ms") >= 0
+    assert record == {
+        "skill": "row-count",
+        "script": "scripts/count.py",
+        "digest": json.loads((app / "skills.lock").read_text())["skills"][0]["digest"],
+        "argument_count": 2,
+        "arguments_sha256": hashlib.sha256(
+            json.dumps(arguments, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "exit_status": 0,
+        "limits_hit": [],
+        "refused": None,
+    }
+    result = json.loads(sandbox.saved()["messages"][-1]["content"])
+    environment = ["HOME", "LANG", "PATH", "PYTHONDONTWRITEBYTECODE"]
+    assert result["stdout"] == f"{arguments} {environment} {sandbox.workspace}\n"
+    assert result["exit_status"] == 0 and result["stderr"] == ""
+
+
+def test_a_step_without_the_effect_does_not_run_a_declared_script(sandbox):
+    from tests.test_skill_tools import write_lock, write_skill
+
+    app = sandbox.root / "app"
+    write_skill(app, "row-count", "Counts rows.", "BODY", scripts=True)
+    marker = sandbox.root / "ran"
+    script = f"open({str(marker)!r}, 'w').close()\n"
+    (app / "skills" / "row-count" / "scripts" / "count.py").write_text(script)
+    write_lock(app, ["row-count"])
+    make_app(app, {**MANIFEST, "skills": ["row-count"]})
+    sandbox.workspace.mkdir(parents=True, exist_ok=True)
+    call = {"skill": "row-count", "script": "scripts/count.py", "arguments": []}
+    sandbox.seed(tool_call_state("skill_run", call))
+    rc, out, _ = sandbox.run(0)
+    assert rc == 3 and out["script_run"]["refused"] == "not_offered"
+    assert not marker.exists()

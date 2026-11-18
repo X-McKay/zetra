@@ -59,6 +59,7 @@ which command wrote it and that it is not edited by hand. The mapping:
 | `spec.owner`, `spec.description`, `spec.identity`, `spec.runtime` | the same keys of `requires` |
 | `spec.capabilities.models` | one entry: `backend` and `models: [name]` from `model`, `budget` from `requires.budget`. Empty list when `model` is null. |
 | `spec.capabilities.mcp` | `requires.tools`, unchanged |
+| `spec.capabilities.effects` | `requires.effects`; left out when it is absent or empty (`skills.md` section 7.1) |
 
 Keys of `requires` are checked: an unknown key is an error that names it. The generated Agent
 is checked against the Agent schema as today.
@@ -286,7 +287,7 @@ The newest revision N, on a usable observation:
 
 | # | N is | And | Then |
 | --- | --- | --- | --- |
-| D1 | `awaiting-runtime`, no approval | A gate fails | Stays. Reason is the first failure. Event `runtime-verdict`, once per reason. |
+| D1 | `awaiting-runtime`, no approval | A gate fails | Stays. Reason is the first failure; when that is "release is not waiting solely on approval" and the object's Ready condition gives a reason other than `NotApproved`, that reason and its message follow in brackets, as in "… (EffectNotGranted: effects not granted: sandbox_execute)". Event `runtime-verdict`, once per reason. |
 | D2 | `awaiting-runtime`, no approval | Gates pass; an approval covers it (`lifecycle.md` section 7) | Approval carried forward. Stays `awaiting-runtime`, reason "approved; waiting for Ready". The Agent in force becomes N's. |
 | D3 | `awaiting-runtime`, no approval | Gates pass; no approval covers it | `pending-approval` with the reason. Event `approval-needed`. |
 | D4 | `pending-approval` or `awaiting-runtime` | A person approves (`lifecycle.md` section 8) | `awaiting-runtime` with the approval. The Agent in force becomes N's. |

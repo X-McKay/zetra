@@ -74,7 +74,7 @@ def revision(store: StoreDep, deployment_id: str, number: int) -> s.RevisionOut:
 def dependants(
     store: StoreDep,
     cluster: str,
-    type: Literal["tool", "model"],
+    type: Literal["tool", "model", "skill"],
     name: str,
 ) -> s.DependantsOut:
     """The agents that depend on a tool server backend (`type=tool`, `name` a backend name) or

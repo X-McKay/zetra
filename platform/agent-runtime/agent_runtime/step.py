@@ -27,7 +27,16 @@ import yaml
 
 from agent_runtime import confine
 from agent_runtime.identity import sandbox_dir, state_dir, write_private
-from agent_runtime.tools import EFFECTS, Done, Tool, ToolCall, ToolResult
+from agent_runtime.skills import launcher
+from agent_runtime.skills import tools as skill_tools
+from agent_runtime.tools import (
+    AUTHOR_EFFECTS,
+    RESERVED_NAMES,
+    Done,
+    Tool,
+    ToolCall,
+    ToolResult,
+)
 
 MAX_INPUT = 65536
 MAX_OUTPUT = 65536
@@ -103,9 +112,10 @@ def clip(value, limit: int, items: int | None = None, depth: int = 0):
     return clip(str(value), limit)
 
 
-def bounded(value, max_bytes: int):
-    """The least-truncated form of `value` whose JSON fits in `max_bytes`."""
-    for limit, items in ((16384, None), (4096, 256), (1024, 64), (256, 16), (64, 4)):
+def bounded(value, max_bytes: int, widest: int = 16384):
+    """The least-truncated form of `value` whose JSON fits in `max_bytes`. `widest` is the
+    longest string kept at the first try."""
+    for limit, items in ((widest, None), (4096, 256), (1024, 64), (256, 16), (64, 4)):
         v = clip(value, limit, items)
         if len(json.dumps(v)) <= max_bytes:
             return v
@@ -139,8 +149,10 @@ def load_agent(manifest: dict):
         raise ValueError("instructions outside the app directory")
     instructions = path.read_text(encoding="utf-8")
     declared = {t["name"]: t["effect"] for t in manifest["tools"]}
-    if len(declared) != len(manifest["tools"]) or not set(declared.values()) <= EFFECTS:
+    if len(declared) != len(manifest["tools"]) or not set(declared.values()) <= AUTHOR_EFFECTS:
         raise ValueError("manifest tools are duplicated or not admitted")
+    if set(declared) & set(RESERVED_NAMES):
+        raise ValueError("a manifest tool has a name the runtime keeps for skills")
     from agent_runtime.mcp import call_tool
 
     if str(app) not in sys.path:
@@ -180,6 +192,8 @@ def create(manifest: dict):
 
 
 def schema(tool: Tool) -> dict:
+    if tool.fn.__name__ in skill_tools.SCHEMAS:  # the runtime's own tools state their schemas
+        return skill_tools.SCHEMAS[tool.fn.__name__]
     sig = inspect.signature(tool.fn)
     props = {n: {"type": "string"} for n in sig.parameters}  # string-typed in this profile
     required = [n for n, p in sig.parameters.items() if p.default is p.empty]
@@ -233,10 +247,14 @@ def run_tool(call: dict, tools: dict) -> tuple[str, object, int]:
         args = json.loads(fn.get("arguments") or "{}")
     except (TypeError, ValueError):
         args = None
+    if name == "skill_run" and name in tools and not isinstance(args, dict):
+        args = {}  # still a recorded call, refused by the launcher
     if name not in tools or not isinstance(args, dict):
         return name, {"error": "unknown tool or bad arguments"}, 3
     try:
         return name, asyncio.run(tools[name].fn(**args)), 0
+    except launcher.LauncherFailure:  # a script's processes may remain: the sandbox is replaced
+        return name, {"error": "launcher_failure"}, 6
     except BudgetExhausted:
         return name, {"error": "budget_exhausted"}, 4
     except PolicyDenied:  # a policy decision: terminal for this call, reported to the model
@@ -464,6 +482,17 @@ def main() -> None:
     try:
         manifest = load_manifest()
         instructions, tools, decide = create(manifest)
+        skills = skill_tools.load(app_dir(), manifest)
+        builtin = None
+        if skills:
+            builtin = skill_tools.SkillTools(
+                app_dir(),
+                sandbox_dir() / "workspace",
+                skills,
+                os.environ.get("AGENT_EFFECTS", ""),
+            )
+            tools = {**tools, **builtin.tools()}
+            instructions = instructions.rstrip("\n") + skill_tools.prompt_section(skills)
     except Exception as e:  # noqa: BLE001 - any failure to build the agent is an agent error
         emit({**out, "summary": f"agent error: {type(e).__name__}: {short(e, 200)}"}, 3)
     if not state["messages"]:
@@ -477,12 +506,19 @@ def main() -> None:
     if last["role"] == "assistant" and last.get("tool_calls"):
         call = last["tool_calls"][0]
         name, result, rc = run_tool(call, tools)
-        content = json.dumps(bounded(result, MAX_TOOL_RESULT))  # valid JSON after truncation
+        if rc == 6:  # nothing is kept: the runner replaces the sandbox and replays the boundary
+            emit({**out, "kind": "tool", "tool": name, "summary": "launcher failure"}, 6)
+        widest = MAX_TOOL_RESULT if name in skill_tools.SCHEMAS else 16384
+        content = json.dumps(bounded(result, MAX_TOOL_RESULT, widest))  # valid JSON after cuts
         state["messages"].append(
             {"role": "tool", "tool_call_id": call.get("id"), "content": content}
         )
         keys = list(result)[:3] if isinstance(result, dict) else "ok"
         out.update(kind="tool", tool=name, summary=f"{name} -> {keys}")
+        if name == "skill_run":  # every call is recorded, a call where it is not offered too
+            record = builtin.script_run if name in tools else skill_tools.not_offered_record()
+            if record is not None:  # None: the launcher raised, and the runner will say so
+                out["script_run"] = record
     elif decide is not None:
         rc = run_decide(state, req["task"], tools, decide, out)
     else:

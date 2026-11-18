@@ -1,0 +1,9 @@
+{
+  "about": "The effects a release may request beyond its tools (skills.md section 7). `statement` is what an approval that covers the effect shows, after `effect <name>: `. Every package that prints it holds its copy equal to this file with a test.",
+  "annotation": "agentplatform.io/granted-effects",
+  "effects": {
+    "sandbox_execute": {
+      "statement": "skill scripts run inside the agent's container and can read the session's identity token"
+    }
+  }
+}

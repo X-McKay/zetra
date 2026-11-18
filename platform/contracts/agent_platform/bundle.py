@@ -11,7 +11,7 @@ import hashlib
 import json
 from typing import Any
 
-from agent_platform import naming
+from agent_platform import effects as effects_mod, naming
 from agent_platform.constants import (
     INFERENCE_HOST,
     MAX_BOUNDARIES,
@@ -119,7 +119,7 @@ def compile_bundle(
         routes[MCP_HOST] = sorted(f"/{b}/mcp" for b in mcp)
 
     runtime = spec.get("runtime") or {}
-    return {
+    bundle = {
         "version": BUNDLE_VERSION,
         "tenant": tenant,
         "agent": name,
@@ -137,6 +137,10 @@ def compile_bundle(
             "max_boundaries": int(runtime.get("maxBoundaries", MAX_BOUNDARIES)),
         },
     }
+    # Only when requested, so a bundle without effects keeps the bytes (and digest) it had.
+    if requested := effects_mod.requested(spec):
+        bundle["effects"] = requested
+    return bundle
 
 
 def delegation_required(bundle: dict[str, Any]) -> bool:

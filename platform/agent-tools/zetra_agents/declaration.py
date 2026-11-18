@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 COMMAND = "zetra-agents render"
 API_VERSION = "agentplatform.io/v1alpha1"
 HEADER = f"# Written by `{COMMAND}` from agent.yaml; not edited by hand.\n"
-KEYS = ("owner", "description", "tenant", "identity", "budget", "tools", "runtime")
+KEYS = ("owner", "description", "tenant", "identity", "budget", "tools", "effects", "runtime")
 ALIASES = {"main": "llm-main", "fast": "llm-fast"}
 
 
@@ -66,6 +66,8 @@ def generate(manifest: dict[str, Any]) -> dict[str, Any]:
         entries.append(entry)
     spec = {k: block[k] for k in ("owner", "description", "identity") if k in block}
     spec["capabilities"] = {"models": entries, "mcp": block.get("tools") or []}
+    if block.get("effects"):  # absent when nothing is requested (skills.md section 7.1)
+        spec["capabilities"]["effects"] = block["effects"]
     if "runtime" in block:
         spec["runtime"] = block["runtime"]
     return {
@@ -96,6 +98,9 @@ def block_problems(name: str, manifest: dict[str, Any]) -> list[str]:
     tools = block.get("tools")
     if tools is not None and not isinstance(tools, list):
         found.append(f"{name}: agent.yaml requires.tools must be a list")
+    effects = block.get("effects")
+    if effects is not None and not isinstance(effects, list):
+        found.append(f"{name}: agent.yaml requires.effects must be a list")
     if not isinstance(manifest.get("name"), str):
         found.append(f"{name}: agent.yaml name must be a string")
     return found

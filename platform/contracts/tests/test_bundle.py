@@ -162,3 +162,22 @@ def test_release_for_other_agent_is_refused(agent, release, cfg):
     except ValueError:
         return
     raise AssertionError("expected ValueError")
+
+
+def with_effects(agent, effects):
+    agent = copy.deepcopy(agent)
+    agent["spec"]["capabilities"]["effects"] = effects
+    return agent
+
+
+def test_bundle_has_effects_only_when_requested(agent, release, cfg):
+    plain = build(agent, release, cfg)
+    assert "effects" not in plain
+    assert build(with_effects(agent, []), release, cfg) == plain
+    asked = build(with_effects(agent, ["sandbox_execute", "sandbox_execute"]), release, cfg)
+    assert asked["effects"] == ["sandbox_execute"]
+    assert {k: v for k, v in asked.items() if k != "effects"} == plain
+    assert canonical_json(plain) == canonical_json(
+        {k: v for k, v in asked.items() if k != "effects"}
+    )
+    assert policy_digest(asked) != policy_digest(plain)

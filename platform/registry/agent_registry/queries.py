@@ -233,7 +233,7 @@ def _looked_at(store: Reads, deployment: Deployment) -> tuple[Revision, Release]
 
 
 def _dependants(
-    store: Reads, cluster: str, type: Literal["tool", "model"], target: str | None
+    store: Reads, cluster: str, type: Literal["tool", "model", "skill"], target: str | None
 ) -> list[s.Dependant]:
     if target is None:
         return []
@@ -273,11 +273,13 @@ def _alias(store: Reads, cluster: str, name: str) -> Alias | None:
 
 
 def dependants(
-    store: Reads, cluster: str, type: Literal["tool", "model"], name: str
+    store: Reads, cluster: str, type: Literal["tool", "model", "skill"], name: str
 ) -> s.DependantsOut:
     if type == "tool":
         server = _tool_server(store, cluster, name)
         target, provided_by = name, server.id if server else None
+    elif type == "skill":
+        target, provided_by = name, None
     else:
         alias = _alias(store, cluster, name)
         target, provided_by = (alias.backend, alias.deployment_id) if alias else (None, None)

@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from agent_registry import derive
 from agent_registry.rules import Refusal
 
 # The same rule as `zetra_agents.suite` checks before a release is built.
@@ -90,6 +91,21 @@ def _check_case(where: str, case: Any, seen: set[str]) -> None:
                     re.compile(entry)
                 except re.error as error:
                     raise _invalid(f"{here}: {entry!r} does not compile ({error})") from None
+
+
+def check_skills(agent_release: dict[str, Any]) -> None:
+    """A release that lists skills lists at most 16, each once, each with a skill name and a
+    digest (`contract/skills.md` section 11.1). A release without the key is accepted."""
+    spec = agent_release.get("spec")
+    if not isinstance(spec, dict) or "skills" not in spec:
+        return
+    skills = spec["skills"]
+    if not isinstance(skills, list) or not 1 <= len(skills) <= derive.MAX_SKILLS:
+        raise _invalid(f"agentRelease.spec.skills: is not a list of 1 to {derive.MAX_SKILLS}")
+    if len(derive.skill_entries(skills)) != len(skills):
+        raise _invalid(
+            "agentRelease.spec.skills: every entry needs a skill name, listed once, and a digest"
+        )
 
 
 def check_declaration(agent: dict[str, Any], agent_release: dict[str, Any]) -> None:

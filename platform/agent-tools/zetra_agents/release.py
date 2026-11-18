@@ -22,6 +22,7 @@ from typing import Any
 import yaml
 from agent_platform.bundle import canonical_json, compile_bundle, digest_hex
 
+from zetra_agents import skills
 from zetra_agents.layout import AgentDir
 
 API_VERSION = "agentplatform.io/v1alpha1"
@@ -79,6 +80,9 @@ def build(
     release["spec"]["declaration"] = {
         k: v for k, v in copy.deepcopy(cr["spec"]).items() if k != "enabled"
     }
+    carried = skills.release_entries(agent)
+    if carried:  # absent for an agent with no skills (skills.md section 11.1)
+        release["spec"]["skills"] = carried
     return {
         "name": name,
         "agent": cr,

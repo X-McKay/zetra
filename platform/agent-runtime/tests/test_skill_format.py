@@ -335,3 +335,31 @@ def test_release_entry_says_what_the_release_carries(tmp_path):
         "interpreters": ["python3"],
         "tools": [{"backend": "postgres-admin", "tools": ["execute_sql", "list_schemas"]}],
     }
+
+
+# --- the list in the manifest
+
+
+@pytest.mark.parametrize("manifest", [{}, {"skills": None}, {"skills": []}, None])
+def test_a_manifest_without_skills_lists_none(manifest):
+    assert fmt.listed(manifest) == []
+
+
+def test_the_listed_names_keep_the_manifests_order():
+    assert fmt.listed({"skills": ["row-count", "alpha"]}) == ["row-count", "alpha"]
+
+
+@pytest.mark.parametrize(
+    ("skills", "says"),
+    [
+        ("row-count", "must be a list"),
+        (["Row-Count"], "must be a list of skill names"),
+        (["../x"], "must be a list of skill names"),
+        ([1], "must be a list of skill names"),
+        (["a", "a"], "more than once"),
+        ([f"s{n}" for n in range(17)], "more than 16"),
+    ],
+)
+def test_a_list_that_is_not_skill_names_is_refused(skills, says):
+    with pytest.raises(fmt.SkillError, match=says):
+        fmt.listed({"skills": skills})

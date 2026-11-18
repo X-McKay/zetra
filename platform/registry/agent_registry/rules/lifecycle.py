@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from agent_registry import canonical, derive
+from agent_registry.importer.skills import record_skills
 from agent_registry.models import RELEASE_NAME, Revision, revision_id
 from agent_registry.rules import Refusal, activation, alias_move, revocation
 from agent_registry.rules import approval as approvals
@@ -102,7 +103,9 @@ def record_release(
 
     agent_doc = canonical.agent_document(agent)
     authority = canonical.authority_of(agent_doc)
-    requirements = derive.requirements_of(release.id, agent_doc)
+    requirements = derive.requirements_of(
+        release.id, agent_doc, release.document["spec"].get("skills")
+    )
     number = max((r.number for r in revisions), default=0) + 1
     seq = tx.event(
         "release-recorded",
@@ -114,6 +117,7 @@ def record_release(
         },
     ).seq
     tx.add_release(release)
+    record_skills(tx, release)
     tx.add_requirements(release.id, requirements)
     tx.add_revision(
         Revision(
@@ -321,6 +325,18 @@ class _Plan:
     action: str = "progress"
 
 
+def _in_the_clusters_words(failure: str, observed: dict[str, Any]) -> str:
+    """A gate's failure as a person reads it in the status. A release that waits on something
+    other than approval says what in its Ready condition (an effect the tenant does not grant,
+    an Agent that is disabled), so that is added to the gate that only says it waits."""
+    ready = derive.condition(observed, "Ready")
+    reason = ready.get("reason")
+    if failure != approvals.APPROVAL_STATE_GATES[1] or reason in (None, "", "NotApproved"):
+        return failure
+    message = ready.get("message")
+    return f"{failure} ({reason}: {message})" if message else f"{failure} ({reason})"
+
+
 def _decide(reads: Reads, deployment_id: str, now: datetime, max_age_seconds: int) -> _Plan | None:
     """What `advance` would write, from `reads` alone. None: nothing."""
     if reads.meta().mode == "recovery":
@@ -361,13 +377,14 @@ def _decide(reads: Reads, deployment_id: str, now: datetime, max_age_seconds: in
 
     failures = approvals.gate_failures_of(reads, deployment, found, newest)
     if failures:
-        if (newest.phase, newest.reason) == ("awaiting-runtime", failures[0]):
+        why = _in_the_clusters_words(failures[0], observed)
+        if (newest.phase, newest.reason) == ("awaiting-runtime", why):
             return None
         return _Plan(
             newest.number,
             "runtime-verdict",
             {"failures": failures},
-            {"phase": "awaiting-runtime", "reason": failures[0]},
+            {"phase": "awaiting-runtime", "reason": why},
         )
 
     covered = approvals.covering(reads, deployment, newest)

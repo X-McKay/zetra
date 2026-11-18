@@ -441,3 +441,103 @@ def test_keyless_refuses_a_certificate_from_another_agents_tag(cfg):
     assert status["signatureVerified"] is False and status["ready"] is False
     cond = {c["type"]: c for c in status["conditions"]}["SignatureVerified"]
     assert cond["reason"] == "SignerAgentMismatch"
+
+
+# ---- effects (skills contract 7.2) ----------------------------------------------------
+
+
+def ready_condition(world):
+    return {c["type"]: c for c in world.release()["status"]["conditions"]}["Ready"]
+
+
+def effect_agent():
+    agent = copy.deepcopy(AGENT)
+    agent["spec"]["capabilities"]["effects"] = ["sandbox_execute"]
+    return agent
+
+
+def grant(world, value="sandbox_execute"):
+    world.kube.merge_patch(
+        "v1", "Namespace", None, "tenant-a", {"metadata": {"annotations": {GRANT: value}}}
+    )
+
+
+GRANT = "agentplatform.io/granted-effects"
+
+
+def test_ungranted_effect_is_not_ready_and_wins_over_not_approved(world):
+    agent = effect_agent()
+    setup(world, agent)
+    cond = ready_condition(world)
+    assert world.release()["status"]["ready"] is False
+    assert cond["reason"] == "EffectNotGranted" and "sandbox_execute" in cond["message"]
+
+    unapproved = make_release(
+        agent, world.cfg, name="investigator-r2", approval={"approved": False}
+    )
+    world.add(unapproved)
+    world.reconcile_agent()
+    r2 = {c["type"]: c for c in world.release("investigator-r2")["status"]["conditions"]}
+    assert r2["Ready"]["reason"] == "EffectNotGranted"
+
+
+def test_granted_effect_proceeds_as_an_ordinary_release(world):
+    agent = effect_agent()
+    world.add(agent)
+    grant(world, " sandbox_execute , ")
+    world.add(make_release(agent, world.cfg))
+    world.add(make_release(agent, world.cfg, name="investigator-r2", approval={"approved": False}))
+    world.reconcile_agent()
+    assert world.release()["status"]["ready"] is True
+    cond = ready_condition(world)
+    assert cond["reason"] == "Ready" and cond["message"] == ""
+    r2 = {c["type"]: c for c in world.release("investigator-r2")["status"]["conditions"]}
+    assert r2["Ready"]["reason"] == "NotApproved"
+
+
+def test_withdrawing_the_grant_makes_the_release_not_ready(world):
+    agent = effect_agent()
+    world.add(agent)
+    grant(world)
+    world.add(make_release(agent, world.cfg))
+    world.reconcile_agent()
+    assert world.release()["status"]["ready"] is True
+    grant(world, "")
+    world.reconcile_agent()
+    assert world.release()["status"]["ready"] is False
+    assert ready_condition(world)["reason"] == "EffectNotGranted"
+
+
+def test_an_unknown_effect_is_never_granted(world):
+    agent = effect_agent()
+    agent["spec"]["capabilities"]["effects"] = ["sandbox_execute", "made_up"]
+    world.add(agent)
+    grant(world, "sandbox_execute,made_up")
+    world.add(make_release(agent, world.cfg))
+    world.reconcile_agent()
+    cond = ready_condition(world)
+    assert cond["reason"] == "EffectNotGranted" and "made_up" in cond["message"]
+    assert "sandbox_execute" not in cond["message"]
+
+
+def test_a_release_requesting_nothing_is_never_effect_not_granted(world):
+    setup(world)
+    assert world.release()["status"]["ready"] is True
+    world.add(make_release(AGENT, world.cfg, name="investigator-r2", approval={"approved": False}))
+    world.reconcile_agent()
+    r2 = {c["type"]: c for c in world.release("investigator-r2")["status"]["conditions"]}
+    assert r2["Ready"]["reason"] == "NotApproved"
+
+
+def test_carried_declaration_decides_the_request(world):
+    world.add(AGENT)  # the live Agent requests nothing
+    declared = effect_agent()
+    spec = {k: v for k, v in declared["spec"].items() if k != "enabled"}
+    world.add(make_release(declared, world.cfg, declaration=spec))
+    world.reconcile_agent()
+    assert ready_condition(world)["reason"] == "EffectNotGranted"
+
+
+def test_ready_formula_requires_effects_granted():
+    f = desired.ReleaseFacts(True, True, False, True, True, effects_granted=False)
+    assert desired.release_ready(f) is False

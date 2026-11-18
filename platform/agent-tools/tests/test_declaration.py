@@ -152,6 +152,25 @@ def test_an_unknown_key_of_requires_is_an_error_naming_it(repo, capsys):
     assert len(problems) == 1 and "requires.colour" in problems[0]
 
 
+def test_requires_effects_becomes_capabilities_effects_and_is_absent_when_empty(repo):
+    # skills.md 7.1: no key at all when nothing is requested, so no existing Agent changes
+    manifest = agent_of(repo).manifest()
+    assert "effects" not in declaration.generate(manifest)["spec"]["capabilities"]
+    manifest["requires"]["effects"] = []
+    assert "effects" not in declaration.generate(manifest)["spec"]["capabilities"]
+    manifest["requires"]["effects"] = ["sandbox_execute"]
+    generated = declaration.generate(manifest)["spec"]["capabilities"]
+    assert generated["effects"] == ["sandbox_execute"]
+
+
+def test_an_effect_outside_the_vocabulary_is_refused_by_the_agent_schema(repo, capsys):
+    edit_manifest(repo, lambda t: t.replace("  tenant:", "  effects: [remote_write]\n  tenant:"))
+    render.write_tools(repo)
+    code, problems = check(repo, capsys)
+    assert code == 1
+    assert any("spec.capabilities.effects[0]" in p and "sandbox_execute" in p for p in problems)
+
+
 def test_an_agent_without_requires_generates_nothing_and_is_checked_as_before(repo, capsys):
     two = repo / "agents" / NAME
     manifest = yaml.safe_load((two / "agent.yaml").read_text())

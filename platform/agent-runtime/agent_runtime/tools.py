@@ -5,7 +5,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-EFFECTS = {"workspace_read", "workspace_write", "remote_read"}  # remote_write is not admitted
+# The effects an agent author's tool may have. remote_write is not admitted.
+AUTHOR_EFFECTS = {"workspace_read", "workspace_write", "remote_read"}
+# The whole vocabulary. `sandbox_execute` belongs to the built-in skill launcher and to no
+# tool an author writes (platform/registry/contract/skills.md, section 7.1).
+EFFECTS = AUTHOR_EFFECTS | {"sandbox_execute"}
+# Tools the runtime provides for skills. An author's tool may not take one of these names.
+RESERVED_NAMES = ("skill_use", "skill_file", "skill_run")
 
 
 @dataclass(frozen=True)

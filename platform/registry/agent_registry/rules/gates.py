@@ -26,7 +26,15 @@ ATTESTATIONS = frozenset(
         "https://agentplatform.io/attestations/release/v1",
     }
 )
-SPEC_KEYS = ("agent", "image", "manifestSha256", "policySha256", "lockSha256", "buildRevision")
+SPEC_KEYS = (
+    "agent",
+    "image",
+    "manifestSha256",
+    "policySha256",
+    "lockSha256",
+    "buildRevision",
+    "skills",
+)
 
 
 def subject_prefix(repository: str, agent: str) -> str:
