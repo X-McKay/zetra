@@ -1,5 +1,6 @@
 """The one-boundary protocol (10.4, 11.8), driven as the runner drives it: a subprocess."""
 
+import hashlib
 import json
 import os
 import stat
@@ -555,3 +556,61 @@ def test_a_call_of_skill_run_where_it_is_not_offered_is_recorded_as_refused(sand
     record = out["script_run"]
     assert record["refused"] == "not_offered" and record["argument_count"] == 0
     assert (record["skill"], record["script"], record["digest"]) == (None, None, None)
+
+
+SHOW = "import os, sys\nprint(sys.argv[1:], sorted(os.environ), os.getcwd())\n"
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="the launcher needs /proc")
+def test_a_granted_step_runs_a_skill_script_and_records_it(sandbox):
+    """skills.md 8 to 10 in one real step: the tool, the launcher, its supervisor, a script."""
+    from tests.test_skill_tools import write_lock, write_skill
+
+    app = sandbox.root / "app"
+    write_skill(app, "row-count", "Counts rows.", "BODY", scripts=True)
+    (app / "skills" / "row-count" / "scripts" / "count.py").write_text(SHOW)
+    write_lock(app, ["row-count"])
+    make_app(app, {**MANIFEST, "skills": ["row-count"]})
+    sandbox.workspace.mkdir(parents=True, exist_ok=True)
+    sandbox.env["AGENT_EFFECTS"] = "sandbox_execute"
+    arguments = ["a b", "$(id)"]
+    call = {"skill": "row-count", "script": "scripts/count.py", "arguments": arguments}
+    sandbox.seed(tool_call_state("skill_run", call))
+    rc, out, err = sandbox.run(0)
+    assert rc == 0, err
+    record = out["script_run"]
+    assert record.pop("duration_ms") >= 0
+    assert record == {
+        "skill": "row-count",
+        "script": "scripts/count.py",
+        "digest": json.loads((app / "skills.lock").read_text())["skills"][0]["digest"],
+        "argument_count": 2,
+        "arguments_sha256": hashlib.sha256(
+            json.dumps(arguments, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "exit_status": 0,
+        "limits_hit": [],
+        "refused": None,
+    }
+    result = json.loads(sandbox.saved()["messages"][-1]["content"])
+    environment = ["HOME", "LANG", "PATH", "PYTHONDONTWRITEBYTECODE"]
+    assert result["stdout"] == f"{arguments} {environment} {sandbox.workspace}\n"
+    assert result["exit_status"] == 0 and result["stderr"] == ""
+
+
+def test_a_step_without_the_effect_does_not_run_a_declared_script(sandbox):
+    from tests.test_skill_tools import write_lock, write_skill
+
+    app = sandbox.root / "app"
+    write_skill(app, "row-count", "Counts rows.", "BODY", scripts=True)
+    marker = sandbox.root / "ran"
+    script = f"open({str(marker)!r}, 'w').close()\n"
+    (app / "skills" / "row-count" / "scripts" / "count.py").write_text(script)
+    write_lock(app, ["row-count"])
+    make_app(app, {**MANIFEST, "skills": ["row-count"]})
+    sandbox.workspace.mkdir(parents=True, exist_ok=True)
+    call = {"skill": "row-count", "script": "scripts/count.py", "arguments": []}
+    sandbox.seed(tool_call_state("skill_run", call))
+    rc, out, _ = sandbox.run(0)
+    assert rc == 3 and out["script_run"]["refused"] == "not_offered"
+    assert not marker.exists()

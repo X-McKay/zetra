@@ -268,6 +268,25 @@ def test_another_platform_is_refused(tmp_path, monkeypatch):
     refused(app, workspace, "unsupported")
 
 
+@pytest.mark.parametrize("hidden", ["/proc/self/stat", os.devnull])
+def test_a_step_that_cannot_read_what_the_supervisor_needs_is_refused(
+    tmp_path, monkeypatch, hidden
+):
+    """Rules on the step (Landlock) that hide /proc or the null device: a refusal, and no
+    supervisor is started to fail."""
+    app, workspace = make(tmp_path, "")
+    real = open
+
+    def denied(path, *args, **kwargs):
+        if path == hidden:
+            raise PermissionError(13, "Permission denied", path)
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", denied)
+    monkeypatch.setattr(launcher, "_supervise", lambda *a, **k: pytest.fail("supervisor started"))
+    refused(app, workspace, "unsupported")
+
+
 @pytest.mark.parametrize(
     "arguments",
     [

@@ -179,6 +179,17 @@ def _confined(directory: Path, relative: str) -> Path:
     return Path(os.path.abspath(target))
 
 
+def _supervisable() -> bool:
+    """Whether a supervisor could do its work here: it reads `/proc` to find the script's
+    processes and opens the null device for the script's input. Rules on the step that
+    forbid either (Landlock without them) make every run a refusal, not a failure."""
+    try:
+        with open("/proc/self/stat", "rb"), open(os.devnull, "rb"):
+            return True
+    except OSError:
+        return False
+
+
 def _prepare(
     app: Path,
     workspace: Path,
@@ -190,7 +201,7 @@ def _prepare(
 ) -> tuple[dict, int]:
     """Every check of 9.2 and 9.3 in order. Returns what the supervisor is to run and the
     script's own timeout, or raises `_Refused`."""
-    if not sys.platform.startswith("linux") or not os.path.isdir("/proc/self"):
+    if not sys.platform.startswith("linux") or not _supervisable():
         raise _Refused("unsupported")
     names = [name for name in listed if isinstance(name, str)]
     if not isinstance(skill, str) or not fmt.is_name(skill) or skill not in names:
