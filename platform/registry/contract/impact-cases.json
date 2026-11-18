@@ -1,0 +1,216 @@
+{
+  "about": [
+    "Cases for rules.impact.tool_contract (contract/dependencies.md section 3).",
+    "The server is postgres-admin-mcp on cluster kubani, backend postgres-admin, registered.",
+    "`recorded` is the contract stored for it. A case with \"recorded\": null runs with no stored contract; its proposed contract is still built from the top-level `recorded`.",
+    "`users` are agent deployments in tenant-test. `current` is the tool list the release of the current revision requires from backend postgres-admin; `newest` is the same for a newer revision in the stated phase, or null when the current revision is the newest.",
+    "A case's proposed contract is `recorded` with `mutations` applied in order: {\"op\": \"remove-tool\", \"tool\"}, {\"op\": \"add-tool\", \"value\": <tool>}, {\"op\": \"set\", \"tool\", \"field\", \"value\"} replaces one field of one tool.",
+    "`findings` is the expected list, in order, as [agent, tool, finding]. `blocked` and `reevaluated` (agent names) are the expected answer fields."
+  ],
+  "recorded": {
+    "schemaVersion": 1,
+    "server": "postgres-admin-mcp",
+    "backend": "postgres-admin",
+    "image": "docker.io/crystaldba/postgres-mcp@sha256:dbbd346860d29f1543e991f30f3284bf4ab5f096d049ecc3426528f20b1b6e6b",
+    "configDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+    "tools": [
+      {
+        "name": "execute_sql",
+        "description": "Execute a SQL query.",
+        "effect": "remote_read",
+        "inputSchema": {
+          "type": "object",
+          "properties": {"sql": {"type": "string", "description": "The query"}},
+          "required": ["sql"]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "explain_query",
+        "description": "Explain the plan of a SQL query.",
+        "effect": "remote_read",
+        "inputSchema": {
+          "type": "object",
+          "properties": {"sql": {"type": "string"}, "analyze": {"type": "boolean"}},
+          "required": ["sql"]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_schemas",
+        "description": "List the schemas of the database.",
+        "effect": "remote_read",
+        "inputSchema": {"type": "object"},
+        "outputSchema": null
+      }
+    ]
+  },
+  "users": [
+    {"agent": "db-admin", "authority": "registry", "current": ["execute_sql"], "newest": null},
+    {"agent": "sql-helper", "authority": "pull-request", "current": ["execute_sql", "explain_query"], "newest": null},
+    {"agent": "upgrading", "authority": "registry", "current": ["execute_sql"],
+     "newest": {"phase": "awaiting-runtime", "tools": ["execute_sql", "explain_query"]}},
+    {"agent": "was-refused", "authority": "registry", "current": ["execute_sql"],
+     "newest": {"phase": "refused", "tools": ["execute_sql", "list_schemas"]}}
+  ],
+  "cases": [
+    {
+      "name": "the same contract",
+      "mutations": [],
+      "findings": [], "blocked": false, "reevaluated": []
+    },
+    {
+      "name": "a tool every user requires is removed",
+      "mutations": [{"op": "remove-tool", "tool": "execute_sql"}],
+      "findings": [
+        ["db-admin", "execute_sql", "tool-removed"],
+        ["sql-helper", "execute_sql", "tool-removed"],
+        ["upgrading", "execute_sql", "tool-removed"],
+        ["was-refused", "execute_sql", "tool-removed"]
+      ],
+      "blocked": true, "reevaluated": []
+    },
+    {
+      "name": "a tool only a refused revision required is removed",
+      "mutations": [{"op": "remove-tool", "tool": "list_schemas"}],
+      "findings": [], "blocked": false, "reevaluated": []
+    },
+    {
+      "name": "a tool is added",
+      "mutations": [{"op": "add-tool", "value": {
+        "name": "analyze_db_health", "description": "Check the health of the database.",
+        "effect": "remote_read", "inputSchema": {"type": "object"}, "outputSchema": null}}],
+      "findings": [], "blocked": false, "reevaluated": []
+    },
+    {
+      "name": "an argument becomes required",
+      "mutations": [{"op": "set", "tool": "explain_query", "field": "inputSchema", "value": {
+        "type": "object",
+        "properties": {"sql": {"type": "string"}, "analyze": {"type": "boolean"}},
+        "required": ["sql", "analyze"]}}],
+      "findings": [
+        ["sql-helper", "explain_query", "input-incompatible"],
+        ["upgrading", "explain_query", "input-incompatible"]
+      ],
+      "blocked": true, "reevaluated": []
+    },
+    {
+      "name": "an argument changes type",
+      "mutations": [{"op": "set", "tool": "execute_sql", "field": "inputSchema", "value": {
+        "type": "object",
+        "properties": {"sql": {"type": "array", "description": "The query"}},
+        "required": ["sql"]}}],
+      "findings": [
+        ["db-admin", "execute_sql", "input-incompatible"],
+        ["sql-helper", "execute_sql", "input-incompatible"],
+        ["upgrading", "execute_sql", "input-incompatible"],
+        ["was-refused", "execute_sql", "input-incompatible"]
+      ],
+      "blocked": true, "reevaluated": []
+    },
+    {
+      "name": "an optional argument is removed",
+      "mutations": [{"op": "set", "tool": "explain_query", "field": "inputSchema", "value": {
+        "type": "object",
+        "properties": {"sql": {"type": "string"}},
+        "required": ["sql"]}}],
+      "findings": [
+        ["sql-helper", "explain_query", "input-incompatible"],
+        ["upgrading", "explain_query", "input-incompatible"]
+      ],
+      "blocked": true, "reevaluated": []
+    },
+    {
+      "name": "an optional argument is added",
+      "mutations": [{"op": "set", "tool": "explain_query", "field": "inputSchema", "value": {
+        "type": "object",
+        "properties": {"sql": {"type": "string"}, "analyze": {"type": "boolean"}, "format": {"type": "string"}},
+        "required": ["sql"]}}],
+      "findings": [
+        ["sql-helper", "explain_query", "input-changed"],
+        ["upgrading", "explain_query", "input-changed"]
+      ],
+      "blocked": false, "reevaluated": ["upgrading"]
+    },
+    {
+      "name": "a nested part of an argument changes",
+      "mutations": [{"op": "set", "tool": "explain_query", "field": "inputSchema", "value": {
+        "type": "object",
+        "properties": {"sql": {"type": "string"}, "analyze": {"type": "boolean", "default": false}},
+        "required": ["sql"]}}],
+      "findings": [
+        ["sql-helper", "explain_query", "input-changed"],
+        ["upgrading", "explain_query", "input-changed"]
+      ],
+      "blocked": false, "reevaluated": ["upgrading"]
+    },
+    {
+      "name": "a description changes",
+      "mutations": [{"op": "set", "tool": "execute_sql", "field": "description", "value": "Execute a read-only SQL query."}],
+      "findings": [
+        ["db-admin", "execute_sql", "description-changed"],
+        ["sql-helper", "execute_sql", "description-changed"],
+        ["upgrading", "execute_sql", "description-changed"],
+        ["was-refused", "execute_sql", "description-changed"]
+      ],
+      "blocked": false, "reevaluated": ["db-admin", "upgrading", "was-refused"]
+    },
+    {
+      "name": "an output schema appears",
+      "mutations": [{"op": "set", "tool": "execute_sql", "field": "outputSchema", "value": {"type": "object"}}],
+      "findings": [
+        ["db-admin", "execute_sql", "output-changed"],
+        ["sql-helper", "execute_sql", "output-changed"],
+        ["upgrading", "execute_sql", "output-changed"],
+        ["was-refused", "execute_sql", "output-changed"]
+      ],
+      "blocked": false, "reevaluated": ["db-admin", "upgrading", "was-refused"]
+    },
+    {
+      "name": "a tool stops being read-only, and its description changes too",
+      "mutations": [
+        {"op": "set", "tool": "execute_sql", "field": "effect", "value": "remote_write"},
+        {"op": "set", "tool": "execute_sql", "field": "description", "value": "Execute any SQL."}
+      ],
+      "findings": [
+        ["db-admin", "execute_sql", "effect-widened"],
+        ["sql-helper", "execute_sql", "effect-widened"],
+        ["upgrading", "execute_sql", "effect-widened"],
+        ["was-refused", "execute_sql", "effect-widened"]
+      ],
+      "blocked": true, "reevaluated": []
+    },
+    {
+      "name": "one tool removed and another described differently",
+      "mutations": [
+        {"op": "remove-tool", "tool": "explain_query"},
+        {"op": "set", "tool": "execute_sql", "field": "description", "value": "Execute a read-only SQL query."}
+      ],
+      "findings": [
+        ["db-admin", "execute_sql", "description-changed"],
+        ["sql-helper", "execute_sql", "description-changed"],
+        ["sql-helper", "explain_query", "tool-removed"],
+        ["upgrading", "execute_sql", "description-changed"],
+        ["upgrading", "explain_query", "tool-removed"],
+        ["was-refused", "execute_sql", "description-changed"]
+      ],
+      "blocked": true, "reevaluated": ["db-admin", "was-refused"]
+    },
+    {
+      "name": "nothing recorded yet, and the proposed contract offers everything",
+      "recorded": null,
+      "mutations": [{"op": "set", "tool": "execute_sql", "field": "description", "value": "Anything."}],
+      "findings": [], "blocked": false, "reevaluated": []
+    },
+    {
+      "name": "nothing recorded yet, and a required tool is missing",
+      "recorded": null,
+      "mutations": [{"op": "remove-tool", "tool": "explain_query"}],
+      "findings": [
+        ["sql-helper", "explain_query", "tool-removed"],
+        ["upgrading", "explain_query", "tool-removed"]
+      ],
+      "blocked": true, "reevaluated": []
+    }
+  ]
+}

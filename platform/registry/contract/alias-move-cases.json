@@ -1,0 +1,178 @@
+{
+  "about": [
+    "Scenarios for rules.assessment and rules.alias_move (contract/dependencies.md sections 5 to 8).",
+    "Each scenario starts from `setup` and runs `steps` in order. A step has one action under `do` and what must hold afterwards under `expect`.",
+    "Actions: `assess` (the operator asks for an assessment of `candidate`, default the setup's candidate); `start` (the operator starts a move for the last assessment; `sessions` default finish; `evaluationSeconds` default 600); `ack` (an observation report acknowledges the hold of `agent` with `running` task sessions); `feed` (a feed is applied in which the pair behind the alias is `pair`); `ready` (the cluster reports the newest revision of `agent` approved and Ready, as in the milestone 2 tests); `engine` (the newest observation of the candidate's engine shows `readyReplicas` and `servedName`); `evaluate` (the operator says the engine is serving); `result` (the evaluator records `verdict` for the open evaluation of `agent`); `clock` (time moves forward by `seconds`, then a provisioner pass happens); `cancel` (the operator cancels the move); `check` (POST /v1/checks/alias for `candidate`, default the setup's); `enable` (the operator enables `agent`); `evaluate-again` (the operator asks another evaluation of `agent`, D14); `new-dependant` (another registry-owned agent that uses the alias is activated); `disable` (the operator disables `agent`); `database-down` (the store refuses every call from here on).",
+    "`expect` keys: `error` (the action is refused with this code); `move` (the move's state); `holds` (agent name to hold state; agents not named are not checked); `held` (the agents whose Agent object carries the held annotation, exactly); `dependants` (agent name to the assessment's `held` flag); `blocked`; `allowed`; `events` (event kinds written by this step, in order, among those of section 6.2); `phase` (agent name to the phase of its newest revision); `reason` (agent name to a text its newest revision's reason contains).",
+    "A step with `error` writes nothing. An `expect` key that is absent is not checked."
+  ],
+  "setup": {
+    "cluster": "kubani",
+    "alias": "fast",
+    "pair": {"engine": "fast", "release": "r1"},
+    "candidate": {"engine": "fast", "release": "r2"},
+    "releases": {
+      "r1": {"servedName": "fast-one", "offers": {"toolCalling": true}},
+      "r2": {"servedName": "fast-two", "offers": {"toolCalling": true}},
+      "r3": {"servedName": "fast-three", "offers": {"toolCalling": false}}
+    },
+    "agents": [
+      {"agent": "passes", "authority": "registry", "enabled": true, "suite": true, "tools": false},
+      {"agent": "fails", "authority": "registry", "enabled": true, "suite": true, "tools": false},
+      {"agent": "no-suite", "authority": "registry", "enabled": true, "suite": false, "tools": true},
+      {"agent": "by-hand", "authority": "pull-request", "enabled": true, "suite": false, "tools": false},
+      {"agent": "off", "authority": "registry", "enabled": false, "suite": true, "tools": false},
+      {"agent": "elsewhere", "authority": "registry", "enabled": true, "suite": true, "tools": false, "alias": "main"}
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "a whole move: held, moved, evaluated, one resumed and one suspended",
+      "steps": [
+        {"do": "assess", "expect": {"blocked": false, "dependants": {"passes": true, "fails": true, "no-suite": true, "by-hand": false, "off": false}}},
+        {"do": "start", "expect": {"move": "holding", "holds": {"passes": "holding", "fails": "holding", "no-suite": "holding"}, "held": ["passes", "fails", "no-suite"], "events": ["alias-move-started"]}},
+        {"do": "ack", "agent": "passes", "running": 0, "expect": {"move": "holding", "holds": {"passes": "held"}}},
+        {"do": "ack", "agent": "fails", "running": 0, "expect": {"move": "holding"}},
+        {"do": "ack", "agent": "no-suite", "running": 1, "expect": {"move": "holding", "holds": {"no-suite": "holding"}}},
+        {"do": "ack", "agent": "no-suite", "running": 0, "expect": {"move": "held", "holds": {"no-suite": "held"}, "events": ["alias-move-held"]}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r2"}, "expect": {"move": "moving", "events": ["alias-moved"], "phase": {"passes": "awaiting-runtime", "fails": "awaiting-runtime", "no-suite": "awaiting-runtime"}}},
+        {"do": "ready", "agent": "passes", "expect": {"phase": {"passes": "awaiting-runtime"}, "reason": {"passes": "held by alias move"}}},
+        {"do": "ready", "agent": "fails", "expect": {"phase": {"fails": "awaiting-runtime"}}},
+        {"do": "ready", "agent": "no-suite", "expect": {"phase": {"no-suite": "awaiting-runtime"}}},
+        {"do": "engine", "readyReplicas": 0, "servedName": "fast-two", "expect": {"move": "moving"}},
+        {"do": "evaluate", "expect": {"error": "refused"}},
+        {"do": "engine", "readyReplicas": 1, "servedName": "fast-one", "expect": {"move": "moving"}},
+        {"do": "evaluate", "expect": {"error": "refused"}},
+        {"do": "engine", "readyReplicas": 1, "servedName": "fast-two", "expect": {"move": "moving"}},
+        {"do": "evaluate", "expect": {"move": "evaluating", "events": ["alias-move-evaluating"]}},
+        {"do": "clock", "seconds": 5, "expect": {"phase": {"passes": "evaluating", "fails": "evaluating", "no-suite": "activated"}, "holds": {"no-suite": "resumed", "passes": "held", "fails": "held"}, "held": ["passes", "fails"]}},
+        {"do": "result", "agent": "passes", "verdict": "pass", "expect": {"holds": {"passes": "resumed"}, "move": "evaluating", "held": ["fails"]}},
+        {"do": "result", "agent": "fails", "verdict": "fail", "expect": {"holds": {"fails": "suspended"}, "phase": {"fails": "refused"}}},
+        {"do": "clock", "seconds": 5, "expect": {"move": "completed", "held": ["fails"], "events": ["alias-move-completed"]}},
+        {"do": "evaluate-again", "agent": "fails", "expect": {"phase": {"fails": "evaluating"}, "holds": {"fails": "suspended"}}},
+        {"do": "result", "agent": "fails", "verdict": "pass", "expect": {"holds": {"fails": "resumed"}, "held": [], "move": "completed"}}
+      ]
+    },
+    {
+      "name": "a stale assessment is refused: a dependant appeared",
+      "steps": [
+        {"do": "assess", "expect": {"blocked": false}},
+        {"do": "new-dependant", "expect": {}},
+        {"do": "start", "expect": {"error": "stale-assessment"}}
+      ]
+    },
+    {
+      "name": "a stale assessment is refused: a dependant was disabled",
+      "steps": [
+        {"do": "assess", "expect": {"blocked": false}},
+        {"do": "disable", "agent": "passes", "expect": {}},
+        {"do": "start", "expect": {"error": "stale-assessment"}}
+      ]
+    },
+    {
+      "name": "a stale assessment is refused: the alias already moved",
+      "steps": [
+        {"do": "assess", "expect": {"blocked": false}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r3"}, "expect": {"events": ["alias-changed-without-move"]}},
+        {"do": "start", "expect": {"error": "stale-assessment"}}
+      ]
+    },
+    {
+      "name": "a candidate that does not offer what a dependant needs is blocked",
+      "steps": [
+        {"do": "assess", "candidate": {"engine": "fast", "release": "r3"}, "expect": {"blocked": true}},
+        {"do": "start", "expect": {"error": "refused"}}
+      ]
+    },
+    {
+      "name": "one open move per alias",
+      "steps": [
+        {"do": "assess", "expect": {}},
+        {"do": "start", "expect": {"move": "holding"}},
+        {"do": "assess", "expect": {}},
+        {"do": "start", "expect": {"error": "conflict"}}
+      ]
+    },
+    {
+      "name": "evaluation that runs out of time suspends, and a late pass resumes",
+      "steps": [
+        {"do": "assess", "expect": {}},
+        {"do": "start", "evaluationSeconds": 600, "expect": {"move": "holding"}},
+        {"do": "ack", "agent": "passes", "running": 0, "expect": {}},
+        {"do": "ack", "agent": "fails", "running": 0, "expect": {}},
+        {"do": "ack", "agent": "no-suite", "running": 0, "expect": {"move": "held"}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r2"}, "expect": {"move": "moving"}},
+        {"do": "ready", "agent": "passes", "expect": {}},
+        {"do": "ready", "agent": "no-suite", "expect": {}},
+        {"do": "engine", "readyReplicas": 1, "servedName": "fast-two", "expect": {}},
+        {"do": "evaluate", "expect": {"move": "evaluating"}},
+        {"do": "clock", "seconds": 599, "expect": {"move": "evaluating", "holds": {"passes": "held", "fails": "held", "no-suite": "resumed"}}},
+        {"do": "clock", "seconds": 2, "expect": {"move": "completed", "holds": {"passes": "suspended", "fails": "suspended"}, "held": ["passes", "fails"], "events": ["hold-suspended", "hold-suspended", "alias-move-completed"]}},
+        {"do": "result", "agent": "passes", "verdict": "pass", "expect": {"holds": {"passes": "resumed"}, "held": ["fails"], "move": "completed"}}
+      ]
+    },
+    {
+      "name": "a move is cancelled before the alias moves, and cannot be after",
+      "steps": [
+        {"do": "assess", "expect": {}},
+        {"do": "start", "expect": {"move": "holding", "held": ["passes", "fails", "no-suite"]}},
+        {"do": "ack", "agent": "passes", "running": 0, "expect": {}},
+        {"do": "cancel", "expect": {"move": "cancelled", "holds": {"passes": "released", "fails": "released", "no-suite": "released"}, "held": [], "events": ["alias-move-cancelled"]}},
+        {"do": "assess", "expect": {}},
+        {"do": "start", "expect": {"move": "holding"}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r2"}, "expect": {"move": "moving", "events": ["alias-moved", "alias-moved-before-hold-confirmed"]}},
+        {"do": "cancel", "expect": {"error": "refused"}}
+      ]
+    },
+    {
+      "name": "the alias moves to something else while a move is open",
+      "steps": [
+        {"do": "assess", "expect": {}},
+        {"do": "start", "expect": {"move": "holding"}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r3"}, "expect": {"move": "cancelled", "held": [], "events": ["alias-changed-without-move", "alias-move-cancelled"]}}
+      ]
+    },
+    {
+      "name": "the alias moves with no move at all: milestone 2 applies",
+      "steps": [
+        {"do": "feed", "pair": {"engine": "fast", "release": "r2"}, "expect": {"events": ["alias-changed-without-move"], "held": [], "phase": {"passes": "awaiting-runtime"}}},
+        {"do": "ready", "agent": "passes", "expect": {"phase": {"passes": "evaluating"}}}
+      ]
+    },
+    {
+      "name": "what the pull request check answers",
+      "steps": [
+        {"do": "check", "expect": {"allowed": false}},
+        {"do": "assess", "expect": {}},
+        {"do": "check", "expect": {"allowed": false}},
+        {"do": "start", "expect": {"move": "holding"}},
+        {"do": "check", "expect": {"allowed": false}},
+        {"do": "ack", "agent": "passes", "running": 0, "expect": {}},
+        {"do": "ack", "agent": "fails", "running": 0, "expect": {}},
+        {"do": "ack", "agent": "no-suite", "running": 0, "expect": {"move": "held"}},
+        {"do": "check", "expect": {"allowed": true}},
+        {"do": "check", "candidate": {"engine": "fast", "release": "r3"}, "expect": {"allowed": false}},
+        {"do": "new-dependant", "expect": {}},
+        {"do": "check", "expect": {"allowed": false}}
+      ]
+    },
+    {
+      "name": "a dependant cannot be enabled while its alias is being moved",
+      "steps": [
+        {"do": "assess", "expect": {}},
+        {"do": "start", "expect": {"move": "holding"}},
+        {"do": "enable", "agent": "off", "expect": {"error": "refused"}},
+        {"do": "enable", "agent": "elsewhere", "expect": {}}
+      ]
+    },
+    {
+      "name": "with the database down nothing starts and the check does not pass",
+      "steps": [
+        {"do": "assess", "expect": {}},
+        {"do": "database-down", "expect": {}},
+        {"do": "start", "expect": {"error": "unavailable"}},
+        {"do": "check", "expect": {"error": "unavailable"}}
+      ]
+    }
+  ]
+}
