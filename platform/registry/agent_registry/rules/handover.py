@@ -61,6 +61,8 @@ def differences(reads: Reads, deployment: Deployment, *, now: datetime, max_age:
     for revision in reads.revisions(deployment.id):
         release = reads.release(revision.release_id)
         assert release is not None
+        if release.name in names:
+            continue  # two revisions of one release share one object
         names.add(release.name)
         found = seen("agentrelease", release.name)
         if found is None:
@@ -68,8 +70,8 @@ def differences(reads: Reads, deployment: Deployment, *, now: datetime, max_age:
         if _spec_without_approval(found) != (release.document.get("spec") or {}):
             reasons.append(f"the spec of agentrelease {release.name} on the cluster differs")
         shown = (found.document.get("spec") or {}).get("approval")
-        block = projection.approval_block(reads, revision)
-        if revision.approval_id is None:
+        block = projection.release_approval_block(reads, deployment, release.id)
+        if block.get("approved") is not True:
             differs = bool(shown) and shown.get("approved") is True
         else:
             differs = shown != block

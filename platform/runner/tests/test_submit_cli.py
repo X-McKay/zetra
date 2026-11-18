@@ -46,6 +46,21 @@ async def test_duplicate_pinned_and_compares_full_input():
         await submit(client, inp(task="changed"))
 
 
+async def test_memo_reaches_start_workflow_only_when_given():
+    client = Client()
+    seen = []
+
+    async def start(*a, **kw):
+        seen.append(kw)
+        return client
+
+    client.start_workflow = start
+    await submit(client, inp())
+    await submit(client, inp(), memo={"release": "r1", "purpose": "task"})
+    assert seen[0]["memo"] is None
+    assert seen[1]["memo"] == {"release": "r1", "purpose": "task"}
+
+
 def test_default_output_and_receipt_before_inspection_failure(monkeypatch, capsys, tmp_path):
     import runner.worker
 

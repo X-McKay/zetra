@@ -95,3 +95,18 @@ def test_the_migrate_command_is_repeatable(empty, monkeypatch, capsys):
     first, second = capsys.readouterr().out.strip().splitlines()
     assert '"0001_init.sql"' in first
     assert second == '{"applied": []}'
+
+
+def test_the_second_migration_applies_on_a_database_holding_the_first(empty, tmp_path, monkeypatch):
+    names = [p.name for p in sorted(migrations_dir().glob("*.sql"))]
+    first, second = names[0], names[1]
+    for name in (first,):
+        (tmp_path / name).write_text((migrations_dir() / name).read_text())
+    monkeypatch.setattr(pg_module, "migrations_dir", lambda: tmp_path)
+    assert migrate(empty) == [first]
+    assert "evaluations" not in tables(empty)
+    monkeypatch.undo()
+    assert migrate(empty) == names[1:]
+    assert second in recorded(empty)
+    assert {"evaluations", "revocations"} <= tables(empty)
+    assert migrate(empty) == []

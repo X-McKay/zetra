@@ -21,6 +21,8 @@ from agent_registry.models import (
     ApprovalState,
     Cluster,
     Deployment,
+    Evaluation,
+    EvaluationState,
     Event,
     Item,
     Meta,
@@ -32,6 +34,7 @@ from agent_registry.models import (
     Requirement,
     Resolution,
     Revision,
+    Revocation,
     Tenant,
     TrustedRepository,
 )
@@ -259,6 +262,26 @@ class _Reads:
     def approval(self, approval_id: str) -> Approval | None:
         return self._one(Approval, "approvals", id=approval_id)
 
+    def evaluations(
+        self, deployment_id: str | None = None, *, state: str | None = None
+    ) -> list[Evaluation]:
+        return self._select(
+            Evaluation,
+            "evaluations",
+            f"created_at, id {_C}",
+            deployment_id=deployment_id,
+            state=state,
+        )
+
+    def evaluation(self, evaluation_id: str) -> Evaluation | None:
+        return self._one(Evaluation, "evaluations", id=evaluation_id)
+
+    def revocations(self, *, kind: str | None = None, item: str | None = None) -> list[Revocation]:
+        return self._select(Revocation, "revocations", f"revoked_at, id {_C}", kind=kind, item=item)
+
+    def revocation(self, revocation_id: str) -> Revocation | None:
+        return self._one(Revocation, "revocations", id=revocation_id)
+
     def events(
         self, *, deployment_id: str | None = None, after: int = 0, limit: int = 200
     ) -> list[Event]:
@@ -297,6 +320,14 @@ def _same_release(a: Release, b: Release) -> bool:
 
 
 _PROGRESS = {"phase", "approval_id", "reason", "activated_at", "generation"}
+_EVALUATION_PROGRESS = {
+    "state",
+    "claimed_by",
+    "claim_expires_at",
+    "evaluator_version",
+    "result",
+    "finished_at",
+}
 
 
 class _Tx(_Reads):
@@ -496,6 +527,70 @@ class _Tx(_Reads):
                 "UPDATE approvals SET state = %s WHERE id = %s", (state, approval_id)
             )
             self.changed = True
+
+    def add_evaluation(self, evaluation: Evaluation) -> None:
+        if self.revision(evaluation.deployment_id, evaluation.revision) is None:
+            raise Missing(
+                f"revision {evaluation.deployment_id}@{evaluation.revision} does not exist"
+            )
+        have = self.evaluation(evaluation.id)
+        if have is not None:
+            skip = _EVALUATION_PROGRESS | {"created_at"}
+            if have.model_dump(exclude=skip) != evaluation.model_dump(exclude=skip):
+                raise Conflict(f"evaluation {evaluation.id} exists with other content")
+            return
+        highest = self._rows(
+            "SELECT coalesce(max(attempt), 0) AS n FROM evaluations"
+            " WHERE deployment_id = %s AND revision = %s",
+            (evaluation.deployment_id, evaluation.revision),
+        )[0]["n"]
+        if evaluation.attempt != highest + 1:
+            raise Conflict(f"evaluation {evaluation.id} is out of sequence; next is {highest + 1}")
+        self._insert("evaluations", evaluation)
+        self.changed = True
+
+    def set_evaluation_progress(
+        self,
+        evaluation_id: str,
+        *,
+        state: EvaluationState | None = None,
+        claimed_by: str | None = None,
+        claim_expires_at: datetime | None = None,
+        evaluator_version: str | None = None,
+        result: dict[str, Any] | None = None,
+        finished_at: datetime | None = None,
+    ) -> Evaluation:
+        have = self.evaluation(evaluation_id)
+        if have is None:
+            raise Missing(f"evaluation {evaluation_id} does not exist")
+        given = {
+            "state": state,
+            "claimed_by": claimed_by,
+            "claim_expires_at": claim_expires_at,
+            "evaluator_version": evaluator_version,
+            "result": result,
+            "finished_at": finished_at,
+        }
+        given = {k: v for k, v in given.items() if v is not None}
+        updated = have.model_copy(update=given)
+        if updated != have:
+            sets = ", ".join(f"{k} = %s" for k in given)
+            values = [Jsonb(v) if isinstance(v, dict) else v for v in given.values()]
+            self._conn.execute(
+                f"UPDATE evaluations SET {sets} WHERE id = %s", [*values, evaluation_id]
+            )
+            self.changed = True
+        return updated
+
+    def add_revocation(self, revocation: Revocation) -> None:
+        have = self.revocation(revocation.id)
+        if have is None:
+            self._insert("revocations", revocation)
+            self.changed = True
+        elif have.model_dump(exclude={"indexed_at"}) != revocation.model_dump(
+            exclude={"indexed_at"}
+        ):
+            raise Conflict(f"revocation {revocation.id} exists with other content")
 
     def _insert_event(self, event: Event) -> None:
         self._insert("events", event)

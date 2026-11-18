@@ -1,7 +1,7 @@
 """Rendered repository files and new repositories.
 
 The files that are the same for every agent repository (the Dockerfile, `.dockerignore`,
-the justfile, the root `pyproject.toml`, CI and the release shim) are rendered from the
+the justfile, the root `pyproject.toml`, CI, the tag-on-merge workflow and the release shim) are rendered from the
 templates packaged here and verified by `zetra-agents render --check`, the way Kubani's
 `check-sync` verifies its copy of each Agent. Hand edits fail the check; a change to the
 shape of an agent repository is a change to these templates in zetra.
@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from importlib import metadata, resources
 from pathlib import Path
 
-from zetra_agents import layout, manifest
+from zetra_agents import declaration, layout, manifest
 
 ZETRA_GIT = "https://github.com/X-McKay/zetra.git"
 ZETRA_ORIGIN = re.compile(
@@ -66,6 +66,7 @@ RENDERED = {
     "pyproject.toml": "pyproject.toml",
     ".github/workflows/ci.yml": "workflows/ci.yml",
     ".github/workflows/release.yml": "workflows/release.yml",
+    ".github/workflows/tag-on-merge.yml": "workflows/tag-on-merge.yml",
 }
 AGENT_TEMPLATES = "agent"
 # Files laid over the agent templates by `init --model-free`; the rest are shared.
@@ -204,8 +205,16 @@ def derived_agents(repo: Path) -> list[layout.AgentDir]:
 
 
 def tool_problems(repo: Path) -> list[Difference]:
-    """Manifests whose `tools:` list is not what the agent's code declares."""
+    """Manifests whose `tools:` list is not what the agent's code declares, and generated
+    `deploy/agent.yaml` files that are missing or out of date."""
     problems = []
+    for agent in layout.all_agents(repo):
+        if declaration.one_file(agent):
+            path = agent.agent_cr_path.relative_to(repo).as_posix()
+            problems += [
+                Difference(path, "tools", p.removeprefix(f"{agent.name}: "))
+                for p in declaration.generated_file_problems(agent)
+            ]
     for agent in derived_agents(repo):
         path = agent.manifest_path.relative_to(repo).as_posix()
         try:
@@ -219,8 +228,16 @@ def tool_problems(repo: Path) -> list[Difference]:
 
 
 def write_tools(repo: Path) -> list[Path]:
-    """Rewrite each manifest's `tools:` from its code; the manifests that changed."""
-    return [agent.manifest_path for agent in derived_agents(repo) if manifest.write(agent)]
+    """Rewrite each manifest's `tools:` from its code, and each one-file agent's generated
+    `deploy/agent.yaml` from its manifest; the files that changed."""
+    written = [
+        agent.agent_cr_path
+        for agent in layout.all_agents(repo)
+        if declaration.one_file(agent) and declaration.write(agent)
+    ]
+    return written + [
+        agent.manifest_path for agent in derived_agents(repo) if manifest.write(agent)
+    ]
 
 
 def lock_problems(repo: Path, revision: str) -> list[Difference]:

@@ -17,7 +17,7 @@ from agent_registry.models import (
     Revision,
     revision_id,
 )
-from agent_registry.rules import Refusal, projection
+from agent_registry.rules import Refusal, projection, revocation
 from agent_registry.rules.lifecycle import API_VERSION
 from agent_registry.store import Reads, Tx
 
@@ -125,8 +125,11 @@ def differences_of(reads: Reads, deployment: Deployment) -> list[Difference]:
             continue
         subject = f"agentrelease/{name}"
         shown = (observed.document.get("spec") or {}).get("approval") or {}
-        block = projection.approval_block(reads, revision)
-        if shown.get("approved") is True and (revision.approval_id is None or block != shown):
+        block = projection.release_approval_block(reads, deployment, revision.release_id)
+        release = reads.release(revision.release_id)
+        revoked = release is not None and revocation.revoked(reads, release) is not None
+        # A revoked release's approval is never adopted: the registry writes it unapproved.
+        if shown.get("approved") is True and block != shown and not revoked:
             add(subject, "approval", block, shown)
         generation = derive.live_generation(observed.document)
         if generation is not None and generation > revision.generation:
@@ -315,7 +318,11 @@ def _adopt(
 
     for found in differences:
         if found.field == "current-release" and found.cluster in by_name:
-            update["current_revision"] = by_name[found.cluster].number
+            chosen = by_name[found.cluster]
+            named = tx.release(chosen.release_id)
+            if named is not None and revocation.revoked(tx, named) is not None:
+                continue  # a revoked release is never made current (delivery.md section 8)
+            update["current_revision"] = chosen.number
 
     for revision in tx.revisions(deployment.id):
         tx.set_revision_progress(deployment.id, revision.number, generation=seq)

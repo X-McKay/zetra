@@ -10,6 +10,8 @@ Roles are realm roles (`realm_access.roles`):
   account) with an email address, because the address is written as `approvedBy`.
 - `registry-provisioner`: the cluster routes, and only for the cluster the client is named
   for: the token's `azp` is `registry-provisioner-<cluster>`.
+- `registry-evaluator`: the evaluation routes (`contract/delivery.md` section 6.2), checked the
+  same way: the token's `azp` is `registry-evaluator-<cluster>`.
 
 An operator may also read. A provisioner may not.
 """
@@ -22,9 +24,10 @@ from typing import Protocol
 from fastapi import Request
 
 from agent_registry.api.errors import ApiError
-from agent_registry.config import OPERATOR, PROVISIONER, READER
+from agent_registry.config import EVALUATOR, OPERATOR, PROVISIONER, READER
 
 PROVISIONER_CLIENT_PREFIX = "registry-provisioner-"
+EVALUATOR_CLIENT_PREFIX = "registry-evaluator-"
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,7 @@ class Principal:
     person: bool  # False for a client's service account
     email: str | None = None
     cluster: str | None = None  # set only for a provisioner client: the cluster in its name
+    azp: str = ""  # the token's authorized party: the client the token was issued to
 
     @property
     def actor(self) -> str:
@@ -100,4 +104,28 @@ def provisioner(cluster: str, request: Request) -> Principal:
         raise ApiError.forbidden(f"the {PROVISIONER} role is required")
     if principal.person or principal.cluster != cluster:
         raise ApiError.forbidden(f"this token is not the provisioner of cluster {cluster}")
+    return principal
+
+
+def evaluator_cluster(principal: Principal) -> str | None:
+    """The cluster named by an evaluator client's `azp`, or None for any other caller."""
+    if principal.person or not principal.azp.startswith(EVALUATOR_CLIENT_PREFIX):
+        return None
+    return principal.azp.removeprefix(EVALUATOR_CLIENT_PREFIX) or None
+
+
+def evaluator_of_any_cluster(request: Request) -> Principal:
+    """An evaluator of some cluster. Routes that name a deployment compare its cluster."""
+    principal = _principal(request)
+    if EVALUATOR not in principal.roles:
+        raise ApiError.forbidden(f"the {EVALUATOR} role is required")
+    if evaluator_cluster(principal) is None:
+        raise ApiError.forbidden("this token is not an evaluator's service account")
+    return principal
+
+
+def evaluator(cluster: str, request: Request) -> Principal:
+    principal = evaluator_of_any_cluster(request)
+    if evaluator_cluster(principal) != cluster:
+        raise ApiError.forbidden(f"this token is not the evaluator of cluster {cluster}")
     return principal

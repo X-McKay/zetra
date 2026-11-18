@@ -4,6 +4,17 @@
       "AgentStatus": {
         "additionalProperties": false,
         "properties": {
+          "acknowledged": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged"
+          },
           "agent": {
             "title": "Agent",
             "type": "string"
@@ -22,6 +33,26 @@
             },
             "title": "Blockers",
             "type": "array"
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrentStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "currentRelease": {
             "anyOf": [
@@ -52,6 +83,16 @@
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
+          },
+          "lastRefused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefusedStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "namespace": {
             "title": "Namespace",
@@ -100,6 +141,17 @@
             ],
             "title": "Phase"
           },
+          "pinned": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned"
+          },
           "pinnedRevision": {
             "anyOf": [
               {
@@ -121,6 +173,13 @@
               }
             ],
             "title": "Ready"
+          },
+          "revoked": {
+            "items": {
+              "$ref": "#/components/schemas/RevokedStatus"
+            },
+            "title": "Revoked",
+            "type": "array"
           },
           "tenant": {
             "anyOf": [
@@ -385,6 +444,247 @@
           "revision"
         ],
         "title": "ApproveOut",
+        "type": "object"
+      },
+      "CandidateEvaluation": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt",
+          "state"
+        ],
+        "title": "CandidateEvaluation",
+        "type": "object"
+      },
+      "CandidateStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateEvaluation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "release",
+          "revision",
+          "phase",
+          "reason",
+          "evaluation"
+        ],
+        "title": "CandidateStatus",
+        "type": "object"
+      },
+      "CaseResultIn": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "default": "",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "default": "",
+            "title": "Sessionid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "passed"
+        ],
+        "title": "CaseResultIn",
+        "type": "object"
+      },
+      "ClaimIn": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluator": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Evaluator",
+            "type": "string"
+          },
+          "leaseSeconds": {
+            "default": 900,
+            "maximum": 3600.0,
+            "minimum": 60.0,
+            "title": "Leaseseconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evaluator"
+        ],
+        "title": "ClaimIn",
+        "type": "object"
+      },
+      "ClaimOut": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimedEvaluation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "evaluation"
+        ],
+        "title": "ClaimOut",
+        "type": "object"
+      },
+      "ClaimedEvaluation": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "claimExpiresAt": {
+            "format": "date-time",
+            "title": "Claimexpiresat",
+            "type": "string"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "suite": {
+            "additionalProperties": true,
+            "title": "Suite",
+            "type": "object"
+          },
+          "suiteDigest": {
+            "title": "Suitedigest",
+            "type": "string"
+          },
+          "tenant": {
+            "title": "Tenant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment",
+          "revision",
+          "attempt",
+          "agent",
+          "tenant",
+          "namespace",
+          "release",
+          "suite",
+          "suiteDigest",
+          "claimExpiresAt"
+        ],
+        "title": "ClaimedEvaluation",
+        "type": "object"
+      },
+      "CurrentStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "admittedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admittedby"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "release",
+          "revision",
+          "since",
+          "admittedBy"
+        ],
+        "title": "CurrentStatus",
         "type": "object"
       },
       "Dependant": {
@@ -748,6 +1048,13 @@
             },
             "title": "Observe",
             "type": "array"
+          },
+          "revocations": {
+            "items": {
+              "$ref": "#/components/schemas/DesiredRevocation"
+            },
+            "title": "Revocations",
+            "type": "array"
           }
         },
         "required": [
@@ -761,6 +1068,47 @@
           "observe"
         ],
         "title": "DesiredOut",
+        "type": "object"
+      },
+      "DesiredRevocation": {
+        "additionalProperties": false,
+        "description": "A revoked release whose running sessions the provisioner cancels, after it has written\nthe release's AgentRelease (`contract/delivery.md` section 8.3).",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "sessions": {
+            "const": "cancel",
+            "title": "Sessions",
+            "type": "string"
+          },
+          "tenant": {
+            "title": "Tenant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant",
+          "namespace",
+          "agent",
+          "release",
+          "sessions"
+        ],
+        "title": "DesiredRevocation",
         "type": "object"
       },
       "Difference": {
@@ -812,6 +1160,139 @@
           "enabled"
         ],
         "title": "EnabledIn",
+        "type": "object"
+      },
+      "Evaluation": {
+        "additionalProperties": false,
+        "description": "One attempt to evaluate one revision (`contract/delivery.md` section 6). `id` to\n`created_at` are written once. The fields after the marker are progress; the store changes\nthem only through `Tx.set_evaluation_progress`.",
+        "properties": {
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "claimExpiresAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimexpiresat"
+          },
+          "claimedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimedby"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "deploymentId": {
+            "title": "Deploymentid",
+            "type": "string"
+          },
+          "evaluatorVersion": {
+            "default": "",
+            "title": "Evaluatorversion",
+            "type": "string"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishedat"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "state": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "claimed",
+              "passed",
+              "failed",
+              "error",
+              "cancelled"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "suite": {
+            "additionalProperties": true,
+            "title": "Suite",
+            "type": "object"
+          },
+          "suiteDigest": {
+            "default": "",
+            "title": "Suitedigest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "deploymentId",
+          "revision",
+          "attempt",
+          "createdAt"
+        ],
+        "title": "Evaluation",
+        "type": "object"
+      },
+      "EvaluationRequestIn": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "EvaluationRequestIn",
+        "type": "object"
+      },
+      "EvaluationRequestOut": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluation": {
+            "$ref": "#/components/schemas/Evaluation"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Revision"
+          }
+        },
+        "required": [
+          "evaluation",
+          "revision"
+        ],
+        "title": "EvaluationRequestOut",
         "type": "object"
       },
       "Event": {
@@ -1624,6 +2105,16 @@
             "title": "Agentrelease",
             "type": "object"
           },
+          "evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SuiteIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "lineage": {
             "additionalProperties": true,
             "title": "Lineage",
@@ -1706,6 +2197,73 @@
           "digest"
         ],
         "title": "RecoveryOut",
+        "type": "object"
+      },
+      "RefusedEvaluation": {
+        "additionalProperties": false,
+        "properties": {
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "summary"
+        ],
+        "title": "RefusedEvaluation",
+        "type": "object"
+      },
+      "RefusedStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefusedEvaluation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "release",
+          "revision",
+          "reason",
+          "at",
+          "evaluation"
+        ],
+        "title": "RefusedStatus",
         "type": "object"
       },
       "Release": {
@@ -1814,6 +2372,98 @@
         "title": "ReleaseOut",
         "type": "object"
       },
+      "ReportEvaluationIn": {
+        "additionalProperties": false,
+        "properties": {
+          "suite": {
+            "additionalProperties": true,
+            "title": "Suite",
+            "type": "object"
+          }
+        },
+        "required": [
+          "suite"
+        ],
+        "title": "ReportEvaluationIn",
+        "type": "object"
+      },
+      "ReportLineageIn": {
+        "description": "Only the checksums are read. Any other key is ignored: the rest is the token's.",
+        "properties": {
+          "checksums": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Checksums",
+            "type": "object"
+          }
+        },
+        "title": "ReportLineageIn",
+        "type": "object"
+      },
+      "ReportReleaseIn": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "additionalProperties": true,
+            "title": "Agent",
+            "type": "object"
+          },
+          "agentRelease": {
+            "additionalProperties": true,
+            "title": "Agentrelease",
+            "type": "object"
+          },
+          "evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportEvaluationIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lineage": {
+            "$ref": "#/components/schemas/ReportLineageIn"
+          }
+        },
+        "required": [
+          "agent",
+          "agentRelease"
+        ],
+        "title": "ReportReleaseIn",
+        "type": "object"
+      },
+      "ReportReleaseOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deployment",
+          "release",
+          "revision",
+          "created"
+        ],
+        "title": "ReportReleaseOut",
+        "type": "object"
+      },
       "Requirement": {
         "additionalProperties": false,
         "properties": {
@@ -1911,6 +2561,76 @@
           "target"
         ],
         "title": "Resolution",
+        "type": "object"
+      },
+      "ResultIn": {
+        "additionalProperties": false,
+        "properties": {
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/CaseResultIn"
+            },
+            "title": "Cases",
+            "type": "array"
+          },
+          "evaluator": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Evaluator",
+            "type": "string"
+          },
+          "evaluatorVersion": {
+            "default": "",
+            "title": "Evaluatorversion",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "passed",
+              "failed",
+              "error"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evaluator",
+          "verdict"
+        ],
+        "title": "ResultIn",
+        "type": "object"
+      },
+      "ResultOut": {
+        "additionalProperties": false,
+        "properties": {
+          "phase": {
+            "enum": [
+              "awaiting-runtime",
+              "pending-approval",
+              "activated",
+              "superseded",
+              "evaluating",
+              "refused"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recorded",
+          "phase"
+        ],
+        "title": "ResultOut",
         "type": "object"
       },
       "ReturnOut": {
@@ -2079,6 +2799,13 @@
               }
             ]
           },
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/Evaluation"
+            },
+            "title": "Evaluations",
+            "type": "array"
+          },
           "release": {
             "$ref": "#/components/schemas/Release"
           },
@@ -2100,6 +2827,59 @@
           "approval"
         ],
         "title": "RevisionOut",
+        "type": "object"
+      },
+      "RevokedStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "release",
+          "reason",
+          "at"
+        ],
+        "title": "RevokedStatus",
+        "type": "object"
+      },
+      "RollbackIn": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "title": "RollbackIn",
         "type": "object"
       },
       "SnapshotScope": {
@@ -2180,6 +2960,22 @@
           "models"
         ],
         "title": "StatusOut",
+        "type": "object"
+      },
+      "SuiteIn": {
+        "additionalProperties": false,
+        "description": "The evaluation suite the release carries (`contract/delivery.md` section 1.3).",
+        "properties": {
+          "suite": {
+            "additionalProperties": true,
+            "title": "Suite",
+            "type": "object"
+          }
+        },
+        "required": [
+          "suite"
+        ],
+        "title": "SuiteIn",
         "type": "object"
       },
       "ToolServerStatus": {
@@ -2386,6 +3182,59 @@
         "summary": "Desired",
         "tags": [
           "cluster"
+        ]
+      }
+    },
+    "/v1/clusters/{cluster}/evaluations/claim": {
+      "post": {
+        "description": "The oldest evaluation of the cluster that is waiting for an evaluator, or null. Null\nin recovery too.",
+        "operationId": "claim_v1_clusters__cluster__evaluations_claim_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cluster",
+            "required": true,
+            "schema": {
+              "title": "Cluster",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim",
+        "tags": [
+          "evaluations"
         ]
       }
     },
@@ -3057,6 +3906,192 @@
         ]
       }
     },
+    "/v1/deployments/{deployment_id}/revisions/{number}/evaluations": {
+      "post": {
+        "description": "D14: another evaluation of a revision the last one refused.",
+        "operationId": "request_again_v1_deployments__deployment_id__revisions__number__evaluations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "title": "Number",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Again",
+        "tags": [
+          "evaluations"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/revisions/{number}/evaluations/{attempt}/result": {
+      "post": {
+        "description": "An evaluator's verdict. The revision moves by D9 to D12 in the same transaction.",
+        "operationId": "result_v1_deployments__deployment_id__revisions__number__evaluations__attempt__result_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "title": "Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attempt",
+            "required": true,
+            "schema": {
+              "title": "Attempt",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResultIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Result",
+        "tags": [
+          "evaluations"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/rollback": {
+      "post": {
+        "description": "Return to an earlier release: the given revision, or the newest earlier activated one.",
+        "operationId": "rollback_v1_deployments__deployment_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentChangeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rollback",
+        "tags": [
+          "write"
+        ]
+      }
+    },
     "/v1/events": {
       "get": {
         "operationId": "events_v1_events_get",
@@ -3367,6 +4402,48 @@
         "summary": "Release",
         "tags": [
           "read"
+        ]
+      }
+    },
+    "/v1/reports/releases": {
+      "post": {
+        "description": "Record a release the workflow published. Nothing is approved or made current.",
+        "operationId": "report_release_v1_reports_releases_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportReleaseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportReleaseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Release",
+        "tags": [
+          "intake"
         ]
       }
     },

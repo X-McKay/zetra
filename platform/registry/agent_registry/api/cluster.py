@@ -6,7 +6,7 @@ Rules: `contract/projection.md`. Logic lives in `agent_registry/rules/projection
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -32,7 +32,9 @@ Now = Annotated[datetime, Depends(now)]
 def desired(
     cluster: str,
     store: StoreDep,
+    settings: SettingsDep,
     who: Provisioner,
+    at: Now,
     last_generation: Annotated[int, Query(alias="lastGeneration", ge=0)] = 0,
 ) -> s.DesiredOut:
     """Everything the provisioner should apply and observe. If `lastGeneration` is higher
@@ -85,7 +87,40 @@ def desired(
             )
             for o in projection.observe_of(store, cluster)
         ],
+        revocations=_cancellations(store, cluster, at, settings.revocation_cancel_seconds)
+        if normal
+        else [],
     )
+
+
+def _cancellations(
+    store: Store, cluster: str, at: datetime, seconds: int
+) -> list[s.DesiredRevocation]:
+    """Section 8.3: fresh security revocations that cancel sessions, for each registry-owned
+    agent of the cluster that has a revision of the revoked release."""
+    window = timedelta(seconds=seconds)
+    found = []
+    for stored in store.revocations(kind="agent"):
+        if stored.reason != "security" or stored.sessions != "cancel":
+            continue
+        if at - stored.indexed_at >= window:
+            continue
+        for deployment in projection.registry_owned(store, cluster):
+            if deployment.item != stored.item:
+                continue
+            named = {store.release(r.release_id).name for r in store.revisions(deployment.id)}
+            if stored.release in named:
+                found.append(
+                    s.DesiredRevocation(
+                        id=stored.id,
+                        tenant=deployment.tenant or "",
+                        namespace=deployment.namespace,
+                        agent=deployment.item,
+                        release=stored.release,
+                        sessions="cancel",
+                    )
+                )
+    return sorted(found, key=lambda r: (r.id, r.tenant))
 
 
 @router.post("/observations", response_model=s.ObservationsOut)

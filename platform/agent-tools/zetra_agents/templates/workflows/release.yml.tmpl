@@ -26,7 +26,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.repository }}
   cancel-in-progress: false
 jobs:
   release:
@@ -44,3 +44,5 @@ jobs:
           registry-password: ${{ secrets.REGISTRY_PASSWORD }}
           registry: ${{ vars.AGENT_REGISTRY || 'registry.almckay.io/agents' }}
           vuln-exceptions: ${{ vars.VULN_EXCEPTIONS }}
+          registry-url: ${{ vars.AGENT_REGISTRY_URL }}
+          registry-audience: ${{ vars.AGENT_REGISTRY_AUDIENCE }}

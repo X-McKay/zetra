@@ -92,6 +92,34 @@
     "rebuild": "2026-11-17: first build, with the Agent Registry"
   },
   {
+    "repository": "registry-evaluator",
+    "dockerfile": "platform/evaluator/Dockerfile",
+    "context": "platform/evaluator",
+    "inputs": [
+      "platform/evaluator/pyproject.toml",
+      "platform/evaluator/uv.lock",
+      "platform/evaluator/registry_evaluator"
+    ],
+    "platform": "linux/amd64",
+    "buildArgs": {},
+    "rebuild": "2026-11-18: first build, with the evaluator"
+  },
+  {
+    "repository": "session-api",
+    "dockerfile": "platform/session-api/Dockerfile",
+    "context": "platform",
+    "inputs": [
+      "platform/runner/pyproject.toml",
+      "platform/runner/runner",
+      "platform/session-api/pyproject.toml",
+      "platform/session-api/uv.lock",
+      "platform/session-api/session_api"
+    ],
+    "platform": "linux/amd64",
+    "buildArgs": {},
+    "rebuild": "2026-11-18: first build, with the session interface"
+  },
+  {
     "repository": "session-runner",
     "dockerfile": "platform/runner/Dockerfile",
     "context": "platform/runner",

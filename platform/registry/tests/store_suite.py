@@ -18,6 +18,7 @@ from agent_registry.models import (
     Approval,
     Cluster,
     Deployment,
+    Evaluation,
     Item,
     Observation,
     Provision,
@@ -25,9 +26,11 @@ from agent_registry.models import (
     Requirement,
     Resolution,
     Revision,
+    Revocation,
     Tenant,
     TrustedRepository,
     deployment_id,
+    evaluation_id,
     release_id,
     revision_id,
 )
@@ -118,6 +121,35 @@ def approval(aid: str = "approval-1", number: int = 1, **changes) -> Approval:
         "origin": "registry",
     }
     return Approval(**(values | changes))
+
+
+def evaluation(attempt: int = 1, dep: str = DEP, number: int = 1, **changes) -> Evaluation:
+    values = {
+        "id": evaluation_id(dep, number, attempt),
+        "deployment_id": dep,
+        "revision": number,
+        "attempt": attempt,
+        "suite": {"cases": [{"name": "smoke"}]},
+        "suite_digest": "e" * 64,
+        "created_at": T0,
+    }
+    return Evaluation(**(values | changes))
+
+
+def revocation(rid: str = "rev-1", **changes) -> Revocation:
+    values = {
+        "id": rid,
+        "kind": "agent",
+        "item": "db-admin",
+        "release": "db-admin-2026-11-13-33c8acb2",
+        "reason": "security",
+        "sessions": "cancel",
+        "summary": "leaks a token",
+        "revoked_by": "al",
+        "revoked_at": T0,
+        "indexed_at": T0,
+    }
+    return Revocation(**(values | changes))
 
 
 def observation(name: str, at: datetime = T0, **changes) -> Observation:
@@ -495,6 +527,140 @@ class StoreSuite:
         assert store.approval("a").state == "active"
         with pytest.raises(Missing), store.transaction("test") as tx:
             tx.set_approval_state("nope", "superseded")
+
+    def test_evaluation_is_added_and_read_back(self, store: Store):
+        seed(store)
+        with store.transaction("test") as tx:
+            tx.add_evaluation(evaluation())
+            tx.event("evaluation-requested", deployment_id=DEP)
+        assert store.evaluation(evaluation().id) == evaluation()
+        assert store.evaluations(DEP) == [evaluation()]
+        assert store.evaluation("nope") is None
+
+    def test_evaluation_attempts_count_up_from_one(self, store: Store):
+        seed(store)
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.add_evaluation(evaluation(2))
+        with store.transaction("test") as tx:
+            tx.add_evaluation(evaluation(1))
+            tx.event("evaluation-requested", deployment_id=DEP)
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.add_evaluation(evaluation(3))
+        with store.transaction("test") as tx:
+            tx.add_evaluation(evaluation(2))
+            tx.event("evaluation-requested", deployment_id=DEP)
+        assert [e.attempt for e in store.evaluations(DEP)] == [1, 2]
+
+    def test_evaluation_is_written_once(self, store: Store):
+        seed(store)
+        with store.transaction("test") as tx:
+            tx.add_evaluation(evaluation())
+            tx.event("evaluation-requested", deployment_id=DEP)
+        before = store.generation()
+        with store.transaction("test") as tx:
+            tx.add_evaluation(evaluation())
+        assert store.generation() == before
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.add_evaluation(evaluation(suite_digest="f" * 64))
+        assert store.evaluation(evaluation().id) == evaluation()
+
+    def test_evaluation_progress_changes_only_what_is_given(self, store: Store):
+        seed(store)
+        with store.transaction("test") as tx:
+            tx.add_evaluation(evaluation())
+            tx.event("evaluation-requested", deployment_id=DEP)
+        with store.transaction("test") as tx:
+            got = tx.set_evaluation_progress(
+                evaluation().id,
+                state="claimed",
+                claimed_by="evaluator-1",
+                claim_expires_at=T0 + timedelta(minutes=5),
+            )
+            tx.event("evaluation-claimed", deployment_id=DEP)
+        assert (got.state, got.claimed_by, got.claim_expires_at) == (
+            "claimed",
+            "evaluator-1",
+            T0 + timedelta(minutes=5),
+        )
+        assert got.result == {} and got.finished_at is None
+        assert store.evaluation(evaluation().id) == got
+        with store.transaction("test") as tx:
+            done = tx.set_evaluation_progress(
+                evaluation().id,
+                state="passed",
+                evaluator_version="1.0",
+                result={"verdict": "pass"},
+                finished_at=T0 + timedelta(minutes=1),
+            )
+            tx.event("evaluation-finished", deployment_id=DEP)
+        assert done.claimed_by == "evaluator-1"
+        assert (done.state, done.evaluator_version, done.result) == (
+            "passed",
+            "1.0",
+            {"verdict": "pass"},
+        )
+        assert done.model_dump(include={"id", "suite", "created_at"}) == evaluation().model_dump(
+            include={"id", "suite", "created_at"}
+        )
+        assert store.evaluation(evaluation().id) == done
+        with pytest.raises(Missing), store.transaction("test") as tx:
+            tx.set_evaluation_progress("nope", state="error")
+
+    def test_evaluations_filter_and_order(self, store: Store):
+        seed(store)
+        other = "agent:kubani:tenant-test:other"
+        with store.transaction("test") as tx:
+            tx.put_deployment(deployment(id=other))
+            tx.add_revision(revision(id=revision_id(other, 1), deployment_id=other))
+            tx.add_evaluation(evaluation(1, created_at=T0 + timedelta(minutes=1)))
+            tx.add_evaluation(evaluation(2, created_at=T0))
+            tx.add_evaluation(evaluation(1, other, created_at=T0))
+            tx.set_evaluation_progress(evaluation(2).id, state="failed")
+            tx.event("evaluation-requested", deployment_id=DEP)
+        assert [e.id for e in store.evaluations()] == [
+            evaluation(2).id,
+            evaluation(1, other).id,
+            evaluation(1).id,
+        ]
+        assert [e.id for e in store.evaluations(DEP)] == [evaluation(2).id, evaluation(1).id]
+        assert [e.id for e in store.evaluations(state="failed")] == [evaluation(2).id]
+        assert [e.id for e in store.evaluations(DEP, state="pending")] == [evaluation(1).id]
+        assert store.evaluations(other, state="failed") == []
+
+    def test_evaluation_needs_its_revision(self, store: Store):
+        seed(store)
+        with pytest.raises(Missing), store.transaction("test") as tx:
+            tx.add_evaluation(evaluation(1, number=2))
+        with pytest.raises(Missing), store.transaction("test") as tx:
+            tx.add_evaluation(evaluation(1, "agent:kubani:tenant-test:unknown"))
+
+    def test_revocation_is_written_once_apart_from_indexed_at(self, store: Store):
+        with store.transaction("test") as tx:
+            tx.add_revocation(revocation())
+            tx.event("revoked")
+        assert store.revocation("rev-1") == revocation()
+        assert store.revocation("nope") is None
+        before = store.generation()
+        with store.transaction("test") as tx:
+            tx.add_revocation(revocation(indexed_at=T0 + timedelta(hours=1)))
+        assert store.generation() == before
+        assert store.revocation("rev-1") == revocation()
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.add_revocation(revocation(reason="quality"))
+        assert store.revocation("rev-1") == revocation()
+
+    def test_revocations_filter_and_order(self, store: Store):
+        with store.transaction("test") as tx:
+            tx.add_revocation(revocation("b", revoked_at=T0 + timedelta(minutes=1)))
+            tx.add_revocation(revocation("z", revoked_at=T0))
+            tx.add_revocation(revocation("a", revoked_at=T0 + timedelta(minutes=1)))
+            tx.add_revocation(revocation("m", kind="skill", item="lookup", revoked_at=T0))
+            tx.event("revoked")
+        assert [r.id for r in store.revocations()] == ["m", "z", "a", "b"]
+        assert [r.id for r in store.revocations(kind="agent")] == ["z", "a", "b"]
+        assert [r.id for r in store.revocations(item="lookup")] == ["m"]
+        assert [r.id for r in store.revocations(kind="agent", item="db-admin")] == ["z", "a", "b"]
+        assert store.revocations(kind="model") == []
 
     # -- 6. nothing is deleted -------------------------------------------------------------
 

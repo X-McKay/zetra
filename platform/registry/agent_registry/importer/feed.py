@@ -15,12 +15,15 @@ from agent_registry.models import (
     Deployment,
     Item,
     Release,
+    Revocation,
     Tenant,
     TrustedRepository,
     deployment_id,
     release_id,
     release_slug,
 )
+from agent_registry.rules import revisions
+from agent_registry.rules import revocation as revocations
 from agent_registry.store import Store, Tx
 
 VERSION = 1
@@ -56,6 +59,21 @@ _KEYS: dict[str, tuple[str, ...]] = {
     ),
     "aliases": ("cluster", "alias", "engine", "backend"),
 }
+
+_REVOCATION_KEYS = (
+    "schemaVersion",
+    "id",
+    "kind",
+    "item",
+    "release",
+    "reason",
+    "sessions",
+    "summary",
+    "revokedBy",
+    "revokedAt",
+)
+_REVOCATION_REQUIRED = tuple(k for k in _REVOCATION_KEYS if k not in ("sessions", "summary"))
+_REVOCATION_KINDS = ("agent", "tool-server", "model")
 
 
 def load_feed(path: Path) -> dict[str, Any]:
@@ -102,6 +120,68 @@ def validate_feed(feed: Any) -> None:
                 f"aliases: engine {entry['engine']!r} is not in modelEngines "
                 f"of cluster {entry['cluster']!r}"
             )
+    _validate_revocations(feed.get("revocations", []))
+
+
+def _revocation_time(text: Any, where: str) -> datetime:
+    try:
+        at = datetime.fromisoformat(str(text).replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError(f"{where}: revokedAt is not a time: {text!r}") from error
+    return at if at.tzinfo else at.replace(tzinfo=UTC)
+
+
+def _validate_revocations(entries: Any) -> None:
+    """Section 8.1: every field, and ids unique and in id order."""
+    if not isinstance(entries, list):
+        raise ValueError("revocations is not a list")
+    seen: list[str] = []
+    for position, entry in enumerate(entries):
+        where = f"revocations[{position}]"
+        if not isinstance(entry, dict):
+            raise ValueError(f"{where} is not an object")
+        missing = [key for key in _REVOCATION_REQUIRED if key not in entry]
+        if missing:
+            raise ValueError(f"{where} lacks {', '.join(missing)}")
+        extra = sorted(set(entry) - set(_REVOCATION_KEYS))
+        if extra:
+            raise ValueError(f"{where} has unknown keys {', '.join(extra)}")
+        if entry["schemaVersion"] != 1:
+            raise ValueError(f"{where}: schemaVersion {entry['schemaVersion']!r} is not 1")
+        for key in ("id", "item", "release", "revokedBy"):
+            if not isinstance(entry[key], str) or not entry[key]:
+                raise ValueError(f"{where}: {key} is not a non-empty string")
+        if entry["kind"] not in _REVOCATION_KINDS:
+            raise ValueError(
+                f"{where}: kind {entry['kind']!r} is not one of agent, tool-server, model"
+            )
+        if entry["reason"] not in ("security", "quality"):
+            raise ValueError(f"{where}: reason {entry['reason']!r} is not security or quality")
+        if entry.get("sessions", "cancel") not in ("cancel", "finish"):
+            raise ValueError(f"{where}: sessions {entry['sessions']!r} is not cancel or finish")
+        if not isinstance(entry.get("summary", ""), str):
+            raise ValueError(f"{where}: summary is not a string")
+        _revocation_time(entry["revokedAt"], where)
+        seen.append(entry["id"])
+    if len(set(seen)) != len(seen):
+        raise ValueError("revocations: ids are not unique")
+    if seen != sorted(seen):
+        raise ValueError("revocations: not in id order")
+
+
+def _revocation_of(entry: dict[str, Any], now: datetime) -> Revocation:
+    return Revocation(
+        id=entry["id"],
+        kind=entry["kind"],
+        item=entry["item"],
+        release=entry["release"],
+        reason=entry["reason"],
+        sessions=entry.get("sessions") or ("cancel" if entry["reason"] == "security" else "finish"),
+        summary=entry.get("summary", ""),
+        revoked_by=entry["revokedBy"],
+        revoked_at=_revocation_time(entry["revokedAt"], entry["id"]),
+        indexed_at=now,
+    )
 
 
 def _image_release_name(image: str) -> str:
@@ -116,8 +196,9 @@ def _image_release_name(image: str) -> str:
 def apply_feed(
     store: Store, feed: dict[str, Any], *, now: datetime | None = None, actor: str = "feed"
 ) -> bool:
-    """Write the feed's clusters, tenants, trusted repositories, tool servers, model engines
-    and aliases. Returns True when anything changed."""
+    """Write the feed's clusters, tenants, trusted repositories, tool servers, model engines,
+    aliases and revocations, then record a new revision of each registry-owned agent whose
+    requirements now resolve differently. Returns True when anything changed."""
     validate_feed(feed)
     now = now or datetime.now(UTC)
     changed: list[str] = []
@@ -209,6 +290,24 @@ def apply_feed(
                 if item.name not in named and not item.retired:
                     tx.put_item(item.model_copy(update={"retired": True}))
                     changed.append(f"{kind}:{item.name}")
+        for entry in feed.get("revocations", []):
+            revocation = _revocation_of(entry, now)
+            stored = tx.revocation(revocation.id)
+            if stored is None:
+                tx.add_revocation(revocation)
+                revocations.apply(tx, revocation, now=now)
+                changed.append(f"revocation:{revocation.id}")
+            elif stored.model_copy(update={"indexed_at": now}) != revocation:
+                raise ValueError(
+                    f"revocations: {revocation.id} is stored differently; a revocation is "
+                    "never edited"
+                )
+        # What a release's requirements resolve to may have changed with the feed
+        # (contract/delivery.md section 5.1).
+        for owned in sorted(tx.deployments(kind="agent", authority="registry"), key=lambda d: d.id):
+            number = revisions.re_resolve(tx, owned.id, now=now)
+            if number is not None:
+                changed.append(f"revision:{owned.id}@{number}")
         if changed:
             tx.event("feed-applied", detail={"changed": changed})
     return bool(changed)

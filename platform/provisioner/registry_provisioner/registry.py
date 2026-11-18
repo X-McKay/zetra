@@ -127,6 +127,14 @@ class HttpRegistry:
         self._tokens = tokens
         self._http = http
 
+    @property
+    def tokens(self) -> TokenSource:
+        return self._tokens
+
+    @property
+    def http(self) -> httpx.Client:
+        return self._http
+
     @classmethod
     def from_settings(
         cls, settings: Settings, *, transport: httpx.BaseTransport | None = None

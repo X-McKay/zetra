@@ -9,7 +9,8 @@ from typing import Any, Literal
 from agent_registry import derive
 from agent_registry.api import schemas as s
 from agent_registry.models import Alias, Deployment, Observation, Release, Revision
-from agent_registry.rules import Refusal
+from agent_registry.rules import Refusal, activation, revocation
+from agent_registry.rules.revisions import candidate
 from agent_registry.store import Reads
 
 # ---- records ---------------------------------------------------------------------------------
@@ -91,6 +92,7 @@ def revision(store: Reads, deployment_id: str, number: int) -> s.RevisionOut:
         release=store.release(stored.release_id),
         resolutions=store.resolutions(stored.id),
         approval=store.approval(stored.approval_id) if stored.approval_id else None,
+        evaluations=activation.attempts_of(store, found.id, number),
     )
 
 
@@ -196,6 +198,135 @@ def _projection(store: Reads, cluster: str, deployment: Deployment, kind: str, n
     return (result if isinstance(result, str) else None), stored
 
 
+PENDING_TOO_LONG_SECONDS = 600
+
+
+def _refused_at(store: Reads, deployment_id: str, number: int) -> datetime | None:
+    """When a revision was refused: its newest `revision-refused` event."""
+    found, after = None, 0
+    while True:
+        page = store.events(deployment_id=deployment_id, after=after, limit=1000)
+        for event in page:
+            if event.type == "revision-refused" and event.detail.get("revision") == number:
+                found = event.at
+        if len(page) < 1000:
+            return found
+        after = page[-1].seq
+
+
+def _delivery_status(
+    store: Reads,
+    deployment: Deployment,
+    revisions: list[Revision],
+    releases: dict[int, Release | None],
+    at: datetime,
+    agent_observation: Observation | None,
+    agent_state: str,
+    blockers: list[str],
+    actions: list[str],
+) -> dict[str, Any]:
+    """The fields of `contract/delivery.md` section 10, and the blockers and actions they add."""
+    named = {r.number: releases[r.number].name for r in revisions if releases[r.number]}
+    registry = deployment.authority == "registry"
+
+    current = None
+    admission = None
+    if deployment.current_revision is not None:
+        number = deployment.current_revision
+        stored = next((r for r in revisions if r.number == number), None)
+        if stored is not None and number in named:
+            admission = activation.admission(store, deployment.id, number)
+            current = s.CurrentStatus(
+                release=named[number],
+                revision=number,
+                since=stored.activated_at,
+                admitted_by=admission.id if admission else None,
+            )
+
+    waiting = candidate(revisions)
+    candidacy = None
+    if waiting is not None and waiting.number in named:
+        attempts = activation.attempts_of(store, deployment.id, waiting.number)
+        last = attempts[-1] if attempts else None
+        candidacy = s.CandidateStatus(
+            release=named[waiting.number],
+            revision=waiting.number,
+            phase=waiting.phase,
+            reason=waiting.reason,
+            evaluation=s.CandidateEvaluation(attempt=last.attempt, state=last.state)
+            if last
+            else None,
+        )
+        if last is not None and last.state == "pending":
+            if (at - last.created_at).total_seconds() > PENDING_TOO_LONG_SECONDS:
+                blockers.append(
+                    f"evaluation {last.id} has been pending for more than 10 minutes; "
+                    "the evaluator is not running"
+                )
+
+    refused = None
+    newest = revisions[-1] if revisions else None
+    if (
+        newest is not None
+        and newest.phase == "refused"
+        and newest.number > (deployment.current_revision or 0)
+        and newest.number in named
+    ):
+        attempts = activation.attempts_of(store, deployment.id, newest.number)
+        verdict = attempts[-1] if attempts and attempts[-1].state in ("failed", "error") else None
+        refused = s.RefusedStatus(
+            release=named[newest.number],
+            revision=newest.number,
+            reason=newest.reason,
+            at=_refused_at(store, deployment.id, newest.number),
+            evaluation=s.RefusedEvaluation(
+                verdict=verdict.state, summary=(verdict.result or {}).get("summary", "")
+            )
+            if verdict
+            else None,
+        )
+        blockers.append(f"release {named[newest.number]} was refused: {newest.reason}")
+        actions.append(
+            "release a fixed version"
+            + (" or ask for another evaluation" if refused.evaluation else "")
+        )
+
+    revoked = [
+        s.RevokedStatus(id=r.id, release=r.release, reason=r.reason, at=r.revoked_at)
+        for r in sorted(
+            store.revocations(kind="agent", item=deployment.item),
+            key=lambda r: (r.revoked_at, r.id),
+            reverse=True,
+        )
+    ]
+    if registry and current is None and deployment.current_revision is None and revoked:
+        if any(rel is not None and revocation.revoked(store, rel) for rel in releases.values()):
+            blockers.append(
+                f"there is no current release: {revoked[0].release} was revoked ({revoked[0].id})"
+            )
+            actions.append(f"just agent rollback {deployment.item}")
+
+    acknowledged = None
+    if registry:
+        live = (
+            derive.live_generation(agent_observation.document)
+            if agent_observation is not None
+            else None
+        )
+        acknowledged = agent_state == "fresh" and live is not None and live >= deployment.generation
+        if agent_state == "fresh" and not acknowledged:
+            blockers.append("the cluster has not taken the last change to the Agent")
+
+    return {
+        "current": current,
+        "candidate": candidacy,
+        "last_refused": refused,
+        "acknowledged": acknowledged,
+        "pinned": deployment.pinned_revision,
+        "revoked": revoked,
+    }
+
+
 def _agent_status(
     store: Reads, deployment: Deployment, *, mode: str, at: datetime, max_age: int
 ) -> s.AgentStatus:
@@ -258,9 +389,23 @@ def _agent_status(
             message = stored.document.get("message")
             blockers.append(f"{kind}/{name} could not be written: {message}")
 
+    extra = _delivery_status(
+        store,
+        deployment,
+        revisions,
+        releases,
+        at,
+        agent_observation,
+        agent_state,
+        blockers,
+        actions,
+    )
+
     if newest is not None:
         name = release_name(newest)
-        if newest.phase == "awaiting-runtime":
+        if newest.phase == "evaluating":
+            blockers.append(f"release {name}: {newest.reason}")
+        elif newest.phase == "awaiting-runtime":
             blockers.append(f"release {name}: {newest.reason}")
             if newest.approval_id is None and deployment.authority == "pull-request":
                 actions.append(f"just agent approve {name}")
@@ -300,6 +445,7 @@ def _agent_status(
         blockers=blockers,
         next_actions=actions,
         observation=_observed(agent_observation, at, max_age),
+        **extra,
     )
 
 

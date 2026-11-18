@@ -10,6 +10,7 @@ from typing import Any
 
 from agent_registry.config import ANNOTATION_PREFIX
 from agent_registry.models import Deployment, Revision
+from agent_registry.rules import revocation
 from agent_registry.store import Reads
 
 
@@ -97,17 +98,35 @@ def agent_object(reads: Reads, deployment: Deployment) -> ProjectedObject:
     )
 
 
+def release_approval_block(reads: Reads, deployment: Deployment, release_id: str) -> dict[str, Any]:
+    """What the one AgentRelease object of a release shows as its approval: the block of the
+    newest revision of the release that has an approval, and `{"approved": false}` when none
+    has or when the release is revoked (`contract/delivery.md` section 5.1)."""
+    release = reads.release(release_id)
+    if release is None or revocation.revoked(reads, release) is not None:
+        return {"approved": False}
+    for revision in reversed(reads.revisions(deployment.id)):
+        if revision.release_id == release_id and revision.approval_id is not None:
+            return approval_block(reads, revision)
+    return {"approved": False}
+
+
 def release_object(reads: Reads, deployment: Deployment, revision: Revision) -> ProjectedObject:
+    """The AgentRelease of `revision`'s release, where `revision` is the newest revision of it
+    (`contract/delivery.md` section 5.1). The approval block is the one of the newest revision
+    of the release that has an approval, and `{"approved": false}` when none has or when the
+    release is revoked."""
     release = reads.release(revision.release_id)
     assert release is not None  # a revision always has its release
     document = release.document
     meta = _meta(document, deployment, release.name)
     annotations = _annotations(deployment, revision.generation)
     annotations[ANNOTATION_PREFIX + "revision"] = str(revision.number)
-    spec = {
-        **copy.deepcopy(document.get("spec") or {}),
-        "approval": approval_block(reads, revision),
-    }
+    revoked = revocation.revoked(reads, release)
+    if revoked is not None:
+        annotations[ANNOTATION_PREFIX + "revoked"] = revoked.id
+    block = release_approval_block(reads, deployment, revision.release_id)
+    spec = {**copy.deepcopy(document.get("spec") or {}), "approval": block}
     return ProjectedObject(
         kind="AgentRelease",
         namespace=meta["namespace"],
@@ -123,10 +142,17 @@ def release_object(reads: Reads, deployment: Deployment, revision: Revision) -> 
 
 
 def objects_of(reads: Reads, deployment: Deployment) -> list[ProjectedObject]:
-    """The Agent first, then the AgentReleases in ascending revision number."""
+    """The Agent first, then one AgentRelease per release, in ascending number of the newest
+    revision of each."""
+    newest: dict[str, Revision] = {}
+    for revision in reads.revisions(deployment.id):
+        newest[revision.release_id] = revision
     return [
         agent_object(reads, deployment),
-        *(release_object(reads, deployment, r) for r in reads.revisions(deployment.id)),
+        *(
+            release_object(reads, deployment, r)
+            for r in sorted(newest.values(), key=lambda r: r.number)
+        ),
     ]
 
 

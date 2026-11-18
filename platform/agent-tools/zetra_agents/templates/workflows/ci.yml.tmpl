@@ -18,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          fetch-depth: 0  # version-check compares with the pull request's base
           persist-credentials: false
       - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
         with:
@@ -29,6 +30,12 @@ jobs:
       - run: uv run --locked ruff format --check .
       - run: uv run --locked zetra-agents check
       - run: uv run --locked --all-packages zetra-agents render --check
+      # An agent's source changed with the same version would never be released.
+      - name: Changed agents carry a new version
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: uv run --locked zetra-agents version-check --base "$BASE"
       - id: list
         run: echo "agents=$(uv run --locked zetra-agents list)" >> "$GITHUB_OUTPUT"
 

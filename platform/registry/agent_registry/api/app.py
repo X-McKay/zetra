@@ -7,9 +7,10 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI
 
-from agent_registry.api import cluster, errors, handover, read, write
+from agent_registry.api import cluster, errors, evaluations, handover, intake, read, write
 from agent_registry.api import schemas as s
 from agent_registry.api.auth import TokenVerifier
+from agent_registry.api.github import GithubTokenVerifier, GithubJwksVerifier
 from agent_registry.config import Settings
 from agent_registry.store import Store
 
@@ -23,6 +24,7 @@ def create_app(
     settings: Settings,
     verifier: TokenVerifier,
     *,
+    github_verifier: GithubTokenVerifier | None = None,
     clock: Callable[[], datetime] = _utcnow,
 ) -> FastAPI:
     app = FastAPI(title="Agent registry", version="1", docs_url=None, redoc_url=None)
@@ -30,6 +32,8 @@ def create_app(
     app.state.settings = settings
     app.state.verifier = verifier
     app.state.clock = clock
+    # The real verifier fetches nothing until the first token arrives.
+    app.state.github_verifier = github_verifier or GithubJwksVerifier(settings)
     errors.install(app)
 
     @app.get("/healthz", response_model=s.Health, tags=["health"])
@@ -40,6 +44,8 @@ def create_app(
 
     app.include_router(read.router)
     app.include_router(write.router)
+    app.include_router(intake.router)
     app.include_router(handover.router)
     app.include_router(cluster.router)
+    app.include_router(evaluations.router)
     return app

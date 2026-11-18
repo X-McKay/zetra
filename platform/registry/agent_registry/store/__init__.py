@@ -9,8 +9,9 @@ Rules both implementations keep, each covered by `tests/store_suite.py`:
 3. An exception inside the `with` block leaves the store exactly as it was.
 4. Write transactions are serialised: two never interleave.
 5. Releases, requirements, provisions, revisions (apart from progress), resolutions, approvals
-   (apart from state) and events are written once. Writing the same content again is a no-op;
-   writing different content under the same key raises `Conflict`.
+   (apart from state), evaluations (apart from progress), revocations and events are written
+   once. Writing the same content again is a no-op; writing different content under the same
+   key raises `Conflict`.
 6. Nothing is deleted. There is no delete operation.
 7. Event sequence numbers only grow. `generation()` is the highest one recorded.
 8. Observations are not desired state: `put_observations` needs no transaction and no event.
@@ -28,6 +29,8 @@ from agent_registry.models import (
     ApprovalState,
     Cluster,
     Deployment,
+    Evaluation,
+    EvaluationState,
     Event,
     Item,
     Meta,
@@ -39,6 +42,7 @@ from agent_registry.models import (
     Requirement,
     Resolution,
     Revision,
+    Revocation,
     Tenant,
     TrustedRepository,
 )
@@ -105,6 +109,18 @@ class Reads(Protocol):
         ...
 
     def approval(self, approval_id: str) -> Approval | None: ...
+    def evaluations(
+        self, deployment_id: str | None = None, *, state: str | None = None
+    ) -> list[Evaluation]:
+        """In ascending order of created_at, then id."""
+        ...
+
+    def evaluation(self, evaluation_id: str) -> Evaluation | None: ...
+    def revocations(self, *, kind: str | None = None, item: str | None = None) -> list[Revocation]:
+        """In ascending order of revoked_at, then id."""
+        ...
+
+    def revocation(self, revocation_id: str) -> Revocation | None: ...
     def events(
         self, *, deployment_id: str | None = None, after: int = 0, limit: int = 200
     ) -> list[Event]:
@@ -166,6 +182,30 @@ class Tx(Reads, Protocol):
         ...
 
     def set_approval_state(self, approval_id: str, state: ApprovalState) -> None: ...
+    def add_evaluation(self, evaluation: Evaluation) -> None:
+        """Write once. `attempt` must be one more than the revision's highest (1 for the
+        first). The record's progress fields are stored as given."""
+        ...
+
+    def set_evaluation_progress(
+        self,
+        evaluation_id: str,
+        *,
+        state: EvaluationState | None = None,
+        claimed_by: str | None = None,
+        claim_expires_at: datetime | None = None,
+        evaluator_version: str | None = None,
+        result: dict[str, Any] | None = None,
+        finished_at: datetime | None = None,
+    ) -> Evaluation:
+        """Change only the fields given (None leaves a field as it is). Raises `Missing` when
+        there is no such evaluation."""
+        ...
+
+    def add_revocation(self, revocation: Revocation) -> None:
+        """Write once. `indexed_at` is not compared when deciding whether content is the same."""
+        ...
+
     def event(
         self, type: str, *, deployment_id: str | None = None, detail: dict[str, Any] | None = None
     ) -> Event:

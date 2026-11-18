@@ -15,6 +15,8 @@ from agent_registry.models import (
     ApprovalState,
     Cluster,
     Deployment,
+    Evaluation,
+    EvaluationState,
     Event,
     Item,
     Meta,
@@ -26,6 +28,7 @@ from agent_registry.models import (
     Requirement,
     Resolution,
     Revision,
+    Revocation,
     Tenant,
     TrustedRepository,
 )
@@ -52,6 +55,8 @@ class _State:
     resolutions: dict[str, list[Resolution]] = field(default_factory=dict)
     aliases: dict[tuple[str, str | None, str], Alias] = field(default_factory=dict)
     approvals: dict[str, Approval] = field(default_factory=dict)
+    evaluations: dict[str, Evaluation] = field(default_factory=dict)
+    revocations: dict[str, Revocation] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
     observations: dict[tuple[str, str, str, str], Observation] = field(default_factory=dict)
 
@@ -68,6 +73,8 @@ class _State:
             "revisions",
             "aliases",
             "approvals",
+            "evaluations",
+            "revocations",
             "observations",
         ):
             setattr(out, name, dict(getattr(self, name)))
@@ -186,6 +193,30 @@ class _Reads:
     def approval(self, approval_id: str) -> Approval | None:
         return self._s.approvals.get(approval_id)
 
+    def evaluations(
+        self, deployment_id: str | None = None, *, state: str | None = None
+    ) -> list[Evaluation]:
+        rows = [
+            e
+            for e in self._s.evaluations.values()
+            if deployment_id in (None, e.deployment_id) and state in (None, e.state)
+        ]
+        return sorted(rows, key=lambda e: (e.created_at, e.id))
+
+    def evaluation(self, evaluation_id: str) -> Evaluation | None:
+        return self._s.evaluations.get(evaluation_id)
+
+    def revocations(self, *, kind: str | None = None, item: str | None = None) -> list[Revocation]:
+        rows = [
+            r
+            for r in self._s.revocations.values()
+            if kind in (None, r.kind) and item in (None, r.item)
+        ]
+        return sorted(rows, key=lambda r: (r.revoked_at, r.id))
+
+    def revocation(self, revocation_id: str) -> Revocation | None:
+        return self._s.revocations.get(revocation_id)
+
     def events(
         self, *, deployment_id: str | None = None, after: int = 0, limit: int = 200
     ) -> list[Event]:
@@ -217,6 +248,14 @@ def _same_release(a: Release, b: Release) -> bool:
 
 
 _CONTENT = {"phase", "approval_id", "reason", "activated_at", "generation"}
+_EVALUATION_PROGRESS = {
+    "state",
+    "claimed_by",
+    "claim_expires_at",
+    "evaluator_version",
+    "result",
+    "finished_at",
+}
 
 
 class _Tx(_Reads):
@@ -355,6 +394,66 @@ class _Tx(_Reads):
         if have is None:
             raise Missing(f"approval {approval_id} does not exist")
         self._put(self._s.approvals, approval_id, have.model_copy(update={"state": state}))
+
+    def add_evaluation(self, evaluation: Evaluation) -> None:
+        if (evaluation.deployment_id, evaluation.revision) not in self._s.revisions:
+            raise Missing(
+                f"revision {evaluation.deployment_id}@{evaluation.revision} does not exist"
+            )
+        have = self._s.evaluations.get(evaluation.id)
+        if have is not None:
+            skip = _EVALUATION_PROGRESS | {"created_at"}
+            if have.model_dump(exclude=skip) != evaluation.model_dump(exclude=skip):
+                raise Conflict(f"evaluation {evaluation.id} exists with other content")
+            return
+        highest = max(
+            (
+                e.attempt
+                for e in self._s.evaluations.values()
+                if (e.deployment_id, e.revision) == (evaluation.deployment_id, evaluation.revision)
+            ),
+            default=0,
+        )
+        if evaluation.attempt != highest + 1:
+            raise Conflict(f"evaluation {evaluation.id} is out of sequence; next is {highest + 1}")
+        self._s.evaluations[evaluation.id] = evaluation
+        self.changed = True
+
+    def set_evaluation_progress(
+        self,
+        evaluation_id: str,
+        *,
+        state: EvaluationState | None = None,
+        claimed_by: str | None = None,
+        claim_expires_at: datetime | None = None,
+        evaluator_version: str | None = None,
+        result: dict[str, Any] | None = None,
+        finished_at: datetime | None = None,
+    ) -> Evaluation:
+        have = self._s.evaluations.get(evaluation_id)
+        if have is None:
+            raise Missing(f"evaluation {evaluation_id} does not exist")
+        given = {
+            "state": state,
+            "claimed_by": claimed_by,
+            "claim_expires_at": claim_expires_at,
+            "evaluator_version": evaluator_version,
+            "result": result,
+            "finished_at": finished_at,
+        }
+        updated = have.model_copy(update={k: v for k, v in given.items() if v is not None})
+        self._put(self._s.evaluations, evaluation_id, updated)
+        return updated
+
+    def add_revocation(self, revocation: Revocation) -> None:
+        have = self._s.revocations.get(revocation.id)
+        if have is None:
+            self._s.revocations[revocation.id] = revocation
+            self.changed = True
+        elif have.model_dump(exclude={"indexed_at"}) != revocation.model_dump(
+            exclude={"indexed_at"}
+        ):
+            raise Conflict(f"revocation {revocation.id} exists with other content")
 
     def event(
         self, type: str, *, deployment_id: str | None = None, detail: dict[str, Any] | None = None
