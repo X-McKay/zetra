@@ -1,0 +1,74 @@
+# Rendered by `zetra-agents render`; do not edit.
+#
+# A merge to main releases: for each agents/<name>/pyproject.toml whose version has no tag
+# `<name>/v<version>`, this workflow creates that tag on the pushed commit, one at a time
+# in name order. The tag then starts release.yml, which is what signs the image.
+#
+# A tag pushed with this workflow's own token starts no workflow, so the tags are pushed
+# with a deploy key. Repository settings this needs:
+#   secrets  RELEASE_TAG_KEY   the private half of a deploy key with write access, allowed
+#                              by any tag rule to create the release tags
+# Without the secret this workflow prints the tags it would have created and succeeds.
+name: Tag on merge
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: tag-on-merge
+  cancel-in-progress: false
+env:
+  UV_VERSION: "0.13.1"
+  PYTHON_VERSION: "3.12.14"
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --locked
+      - name: Tags this merge owes
+        id: missing
+        run: echo "tags=$(uv run --locked zetra-agents tags)" >> "$GITHUB_OUTPUT"
+      # A secret cannot be read in an `if:`, so the key's presence is copied out here.
+      - name: Is the tag key present
+        id: key
+        env:
+          RELEASE_TAG_KEY: ${{ secrets.RELEASE_TAG_KEY }}
+        run: |
+          if [ -n "$RELEASE_TAG_KEY" ]; then present=true; else present=false; fi
+          echo "present=$present" >> "$GITHUB_OUTPUT"
+      - name: Print the tags that would be created (no RELEASE_TAG_KEY)
+        if: steps.key.outputs.present != 'true'
+        env:
+          TAGS: ${{ steps.missing.outputs.tags }}
+        run: |
+          echo "RELEASE_TAG_KEY is not set; not creating tags. Would create:"
+          echo "$TAGS" | jq -r '.[]'
+      - name: Create and push the tags
+        if: steps.key.outputs.present == 'true'
+        env:
+          RELEASE_TAG_KEY: ${{ secrets.RELEASE_TAG_KEY }}
+          TAGS: ${{ steps.missing.outputs.tags }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          umask 077
+          dir=$(mktemp -d)
+          trap 'rm -rf "$dir"' EXIT
+          printf '%s\n' "$RELEASE_TAG_KEY" > "$dir/key"
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$dir/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$dir/known_hosts -o StrictHostKeyChecking=yes"
+          git remote set-url origin "git@github.com:$REPOSITORY.git"
+          echo "$TAGS" | jq -r '.[]' | while read -r tag; do
+            git tag "$tag" "$COMMIT"
+            git push origin "refs/tags/$tag"
+            echo "pushed $tag"
+          done

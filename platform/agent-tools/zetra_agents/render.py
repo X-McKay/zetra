@@ -1,7 +1,7 @@
 """Rendered repository files and new repositories.
 
 The files that are the same for every agent repository (the Dockerfile, `.dockerignore`,
-the justfile, the root `pyproject.toml`, CI and the release shim) are rendered from the
+the justfile, the root `pyproject.toml`, CI, the tag-on-merge workflow and the release shim) are rendered from the
 templates packaged here and verified by `zetra-agents render --check`, the way Kubani's
 `check-sync` verifies its copy of each Agent. Hand edits fail the check; a change to the
 shape of an agent repository is a change to these templates in zetra.
@@ -66,6 +66,7 @@ RENDERED = {
     "pyproject.toml": "pyproject.toml",
     ".github/workflows/ci.yml": "workflows/ci.yml",
     ".github/workflows/release.yml": "workflows/release.yml",
+    ".github/workflows/tag-on-merge.yml": "workflows/tag-on-merge.yml",
 }
 AGENT_TEMPLATES = "agent"
 # Files laid over the agent templates by `init --model-free`; the rest are shared.
