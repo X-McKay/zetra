@@ -492,7 +492,7 @@ def main() -> None:
                 os.environ.get("AGENT_EFFECTS", ""),
             )
             tools = {**tools, **builtin.tools()}
-            instructions += skill_tools.prompt_section(skills)
+            instructions = instructions.rstrip("\n") + skill_tools.prompt_section(skills)
     except Exception as e:  # noqa: BLE001 - any failure to build the agent is an agent error
         emit({**out, "summary": f"agent error: {type(e).__name__}: {short(e, 200)}"}, 3)
     if not state["messages"]:
@@ -515,8 +515,10 @@ def main() -> None:
         )
         keys = list(result)[:3] if isinstance(result, dict) else "ok"
         out.update(kind="tool", tool=name, summary=f"{name} -> {keys}")
-        if name == "skill_run" and builtin is not None and builtin.script_run is not None:
-            out["script_run"] = builtin.script_run
+        if name == "skill_run":  # every call is recorded, a call where it is not offered too
+            record = builtin.script_run if name in tools else skill_tools.not_offered_record()
+            if record is not None:  # None: the launcher raised, and the runner will say so
+                out["script_run"] = record
     elif decide is not None:
         rc = run_decide(state, req["task"], tools, decide, out)
     else:

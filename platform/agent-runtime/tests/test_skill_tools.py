@@ -125,7 +125,7 @@ def run_of(**kw):
 def test_two_listed_skills_are_in_the_prompt_in_manifest_order(boundary, tmp_path):
     assert boundary(0, {"tool": "skill_use", "args": {"skill": "notes"}})[0] == 0
     system = saved(tmp_path)["messages"][0]["content"]
-    assert system.startswith("You are a test agent.\n## Skills\n\nBefore a task")
+    assert system.startswith("You are a test agent.\n\n## Skills\n\nBefore a task")
     lines = system.splitlines()[-2:]
     assert lines == [
         "- row-count: Counts rows. Use when asked how many.",

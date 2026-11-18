@@ -537,3 +537,21 @@ def test_an_agent_without_skills_gets_no_skill_tools_or_prompt(sandbox):
     body = sandbox.gw.chat_requests[0]["body"]
     assert [t["function"]["name"] for t in body["tools"]] == [t["name"] for t in MANIFEST["tools"]]
     assert body["messages"][0]["content"] == "You are a test agent."
+
+
+@pytest.mark.parametrize("skills", [[], ["notes"]])
+def test_a_call_of_skill_run_where_it_is_not_offered_is_recorded_as_refused(sandbox, skills):
+    """skills.md 10: every skill_run boundary carries a record, so the runner can read it."""
+    from tests.test_skill_tools import write_lock, write_skill
+
+    app = sandbox.root / "app"
+    if skills:
+        write_skill(app, "notes", "Takes notes.", "NOTES-BODY")
+        write_lock(app, skills)
+        make_app(app, {**MANIFEST, "skills": skills})
+    sandbox.seed(tool_call_state("skill_run", {"skill": "notes", "script": "scripts/x.py"}))
+    rc, out, _ = sandbox.run(0)
+    assert rc == 3 and out["tool"] == "skill_run"
+    record = out["script_run"]
+    assert record["refused"] == "not_offered" and record["argument_count"] == 0
+    assert (record["skill"], record["script"], record["digest"]) == (None, None, None)

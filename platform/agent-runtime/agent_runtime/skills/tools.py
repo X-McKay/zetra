@@ -37,6 +37,8 @@ REFUSAL_TEXT = {
     "not_text": "That file is not UTF-8 text.",
     "too_large": "SKILL.md is larger than 32768 bytes.",
 }
+# The step's own refusal, never the launcher's: `skill_run` was called where it is not offered.
+NOT_OFFERED = "not_offered"
 
 SCHEMAS = {
     "skill_use": {
@@ -105,7 +107,7 @@ def prompt_section(skills: list[fmt.Skill]) -> str:
     """What follows the agent's instructions in the system prompt (section 8.2)."""
     lines = [f"- {s.name}: {LINE_BREAKS.sub(' ', s.description)}" for s in skills]
     head = (
-        "\n## Skills\n\nBefore a task that one of these skills covers, call `skill_use` "
+        "\n\n## Skills\n\nBefore a task that one of these skills covers, call `skill_use` "
         "with its name and follow what it returns.\n\n"
     )
     return head + "\n".join(lines)
@@ -136,6 +138,22 @@ def confined(root: pathlib.Path, relative: Any) -> pathlib.Path | None:
 def digest_of(arguments: tuple[str, ...]) -> str:
     text = json.dumps(list(arguments), ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def not_offered_record() -> dict:
+    """The record of a `skill_run` call where the tool is not offered (section 10): nothing
+    the model sent is in it, and nothing was read or started."""
+    return {
+        "skill": None,
+        "script": None,
+        "digest": None,
+        "argument_count": 0,
+        "arguments_sha256": digest_of(()),
+        "exit_status": None,
+        "limits_hit": [],
+        "refused": NOT_OFFERED,
+        "duration_ms": 0,
+    }
 
 
 class SkillTools:

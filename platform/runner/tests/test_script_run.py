@@ -152,3 +152,15 @@ def test_existing_boundary_output_is_unaffected():
 def test_script_run_survives_asdict():
     parsed = BoundaryOut.parse_strict(boundary_doc())
     assert BoundaryOut.parse_strict(copy.deepcopy(asdict(parsed))) == parsed
+
+
+def test_a_call_where_the_tool_is_not_offered_is_accepted_as_a_refusal():
+    doc = run_doc(
+        skill=None,
+        script=None,
+        digest=None,
+        argument_count=0,
+        exit_status=None,
+        refused="not_offered",
+    )
+    assert BoundaryOut.parse_strict(boundary_doc(script_run=doc)).script_run == doc

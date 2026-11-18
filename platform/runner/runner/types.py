@@ -60,6 +60,7 @@ SCRIPT_REFUSALS = (  # section 9.3
     "digest",
     "workspace",
     "unsupported",
+    "not_offered",  # section 10: the step's own, for a call where the tool is not offered
 )
 SKILL_RUN_TOOL = "skill_run"
 
