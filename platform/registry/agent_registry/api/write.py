@@ -44,6 +44,7 @@ def record_release(
     if body.evaluation is not None:
         report.check_suite(body.evaluation.suite)
     report.check_declaration(body.agent, body.agent_release)
+    report.check_skills(body.agent_release)
     lineage = dict(body.lineage)
     if body.evaluation is not None:
         lineage["evaluation"] = {"suite": body.evaluation.suite}

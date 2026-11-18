@@ -91,8 +91,34 @@ def agent_release_record(
     )
 
 
+SKILL_NAME = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*\Z")
+SKILL_DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
+MAX_SKILLS = 16
+
+
+def skill_entries(skills: Any) -> list[dict[str, Any]]:
+    """The entries of a release's `spec.skills` that name a skill and a digest
+    (`contract/skills.md` section 11.1), one per name. The report routes refuse a list with
+    any other entry (`rules/report.check_skills`); what a cluster holds passed its resource
+    definition. Anything else is left out here."""
+    entries: dict[str, dict[str, Any]] = {}
+    for entry in skills if isinstance(skills, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        name, digest = entry.get("name"), entry.get("digest")
+        if (
+            isinstance(name, str)
+            and isinstance(digest, str)
+            and len(name) <= 64
+            and SKILL_NAME.match(name)
+            and SKILL_DIGEST.match(digest)
+        ):
+            entries.setdefault(name, entry)
+    return list(entries.values())
+
+
 def requirements_of(
-    rid: str, agent_document: dict[str, Any], skills: list[dict[str, Any]] | None = None
+    rid: str, agent_document: dict[str, Any], skills: Any = None
 ) -> list[Requirement]:
     """What a release needs, read from the Agent document published with it (milestone 1) and
     the release's `spec.skills`.
@@ -123,8 +149,8 @@ def requirements_of(
         Requirement(release_id=rid, type="effect", target=effect)
         for effect in sorted(set(capabilities.get("effects") or []))
     ] + [
-        Requirement(release_id=rid, type="skill", target=str(k.get("name")), names=[k["digest"]])
-        for k in skills or []
+        Requirement(release_id=rid, type="skill", target=k["name"], names=[k["digest"]])
+        for k in skill_entries(skills)
     ]
     return sorted(rows, key=lambda r: (r.type, r.target))
 

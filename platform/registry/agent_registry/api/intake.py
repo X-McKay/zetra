@@ -132,6 +132,7 @@ def report_release(
     if suite is not None:
         report.check_suite(suite)
     report.check_declaration(body.agent, body.agent_release)
+    report.check_skills(body.agent_release)
 
     tag = claims.ref.removeprefix("refs/tags/")
     lineage: dict[str, Any] = {

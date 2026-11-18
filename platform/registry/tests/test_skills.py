@@ -190,3 +190,14 @@ def test_the_registrys_statement_is_the_one_in_effects_json():
     effects = json.loads((CONTRACT / "effects.json").read_text())["effects"]
 
     assert STATEMENTS == {name: found["statement"] for name, found in effects.items()}
+
+
+def test_a_release_with_a_malformed_skill_list_is_refused():
+    world = registry_owned()
+    twice = [entry(), entry(DIGEST_B)]
+    for skills in ([], "row-count", [entry(digest="sha256:abc")], [{"digest": DIGEST_A}], twice):
+        body = published("c")
+        body["agentRelease"]["spec"]["skills"] = skills
+        answer = world.post(f"/v1/deployments/{DEP}/releases", body)
+        assert (answer.status_code, answer.json()["error"]["code"]) == (400, "invalid-arguments")
+    assert world.store.item("skill", "row-count") is None

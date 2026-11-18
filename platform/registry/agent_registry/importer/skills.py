@@ -8,27 +8,23 @@ in the same transaction.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from agent_registry import derive
 from agent_registry.models import Item, Release, release_id
 from agent_registry.store import Tx
-
-DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
 
 
 def record_skills(tx: Tx, agent_release: Release) -> list[str]:
     """Write the items and releases for `spec.skills` of an agent release. Returns the ids of
     what was written or changed; a skill and digest already recorded add nothing."""
-    skills = (agent_release.document.get("spec") or {}).get("skills") or []
+    skills = derive.skill_entries((agent_release.document.get("spec") or {}).get("skills"))
     agent = tx.item("agent", agent_release.item)
     owner = agent.owner if agent else ""
     source = agent.source if agent else ""
     written: list[str] = []
     for entry in skills:
-        name, digest = str(entry.get("name") or ""), str(entry.get("digest") or "")
-        if not name or not DIGEST.match(digest):
-            continue
+        name, digest = entry["name"], entry["digest"]
         description = str(entry.get("description") or "")
         have = tx.item("skill", name)
         if have is None:
