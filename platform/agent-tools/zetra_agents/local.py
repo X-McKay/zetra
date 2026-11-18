@@ -112,6 +112,7 @@ REFUSALS = {
     "digest",
     "workspace",
     "unsupported",
+    "not_offered",  # the step's own: the tool was called where it is not offered
 }
 # The exit codes the Session Runner reads a result after; any other is a failed boundary.
 OUTCOMES = {0: "running", 2: "completed", 3: "agent_error", 4: "budget"}
