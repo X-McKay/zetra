@@ -190,10 +190,13 @@ def test_the_registry_takes_an_agent_releases_it_and_gives_it_back(world: World)
     world.settle()
     seen = world.agent_status(AGENT)
     assert (seen["currentRelease"], seen["phase"], seen["ready"]) == (new, "activated", True)
-    assert (seen["blockers"], seen["nextActions"]) == ([], [])
+    # The pointer moved in this pass; the cluster's Agent names the new release after the next.
+    assert seen["acknowledged"] is False
     world.settle()
     named = registry_annotations(world.agent(AGENT))[ANNOTATION_PREFIX + "current-release"]
     assert named == new
+    seen = world.agent_status(AGENT)
+    assert (seen["blockers"], seen["nextActions"], seen["acknowledged"]) == ([], [], True)
     kept = platform_specs(world)
     assert {k: v for k, v in kept.items() if k[3] != new} == before
     events = world.read("/v1/events", deployment=D)["events"]
