@@ -130,6 +130,15 @@
               }
             }
           }
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "sandbox_execute"
+            ]
+          }
         }
       }
     },

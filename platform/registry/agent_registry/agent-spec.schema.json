@@ -2,6 +2,15 @@
   "properties": {
     "capabilities": {
       "properties": {
+        "effects": {
+          "items": {
+            "enum": [
+              "sandbox_execute"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
         "mcp": {
           "items": {
             "properties": {

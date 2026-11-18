@@ -59,6 +59,7 @@ which command wrote it and that it is not edited by hand. The mapping:
 | `spec.owner`, `spec.description`, `spec.identity`, `spec.runtime` | the same keys of `requires` |
 | `spec.capabilities.models` | one entry: `backend` and `models: [name]` from `model`, `budget` from `requires.budget`. Empty list when `model` is null. |
 | `spec.capabilities.mcp` | `requires.tools`, unchanged |
+| `spec.capabilities.effects` | `requires.effects`; left out when it is absent or empty (`skills.md` section 7.1) |
 
 Keys of `requires` are checked: an unknown key is an error that names it. The generated Agent
 is checked against the Agent schema as today.

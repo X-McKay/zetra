@@ -214,6 +214,9 @@ requires:
 from the generated Agent, not an empty list. Both resource definitions and both copies of
 the Agent schema describe the field.
 
+An agent on the two-file layout could write `spec.capabilities.effects` in its Agent by
+hand. It cannot list skills (section 2), so rule 5 of section 6 refuses the request there.
+
 ### 7.2 The grant
 
 A tenant grants effects on its Namespace:
@@ -591,9 +594,9 @@ The image build, from the repository's one `Dockerfile`:
 
 | Package | Files it owns | Sections |
 | --- | --- | --- |
-| 4.0 Contracts | this file, `skill-digest-cases.json`, `effects.json`, `agent_runtime/skills/format.py`, the interface in `agent_runtime/skills/launcher.py`, the effect lists and reserved names in `agent_runtime/tools.py` and `zetra_agents/layout.py`, `agent_platform/effects.py` | 2 to 5, 7.1 (the vocabulary), 7.2 (the function), 9.1 |
+| 4.0 Contracts | this file, `skill-digest-cases.json`, `effects.json`, `agent_runtime/skills/format.py`, the interface in `agent_runtime/skills/launcher.py`, the effect lists and reserved names in `agent_runtime/tools.py` and `zetra_agents/layout.py`, `requires.effects` in `zetra_agents/declaration.py`, `deploy/platform/crds/` and the two copies of the Agent schema, `agent_platform/effects.py` | 2 to 5, 7.1, 7.2 (the function), 9.1, 11.1 (the resource definition) |
 | 4.1 Discovery | `agent_runtime/skills/tools.py`, `agent_runtime/skills/image.py`, `agent_runtime/step.py` (loading, the prompt, the built-in tools, the `script_run` key) | 8, 10 (the step's side), 12 (`image.py`) |
-| 4.2 Effect | `zetra_agents/declaration.py`, `zetra_agents/schemas/`, `registry/agent_registry/agent-spec.schema.json`, `deploy/platform/crds/`, `platform/contracts/agent_platform/` (`bundle.py`, `podtemplate.py`), `platform/controller/` | 7.1 to 7.3, 11.1 (the resource definition) |
+| 4.2 Effect | `platform/contracts/agent_platform/` (`bundle.py`, `podtemplate.py`), `platform/controller/` | 7.2 (the controller), 7.3 |
 | 4.3 Launcher | the body of `agent_runtime/skills/launcher.py`, `agent_runtime/skills/supervisor.py` and their tests | 9 |
 | 4.4, 4.5 Tooling | `zetra_agents/skills.py`, the hooks in `layout.py`, `render.py`, `release.py`, `local.py`, `testing.py` and `cli.py`, `templates/Dockerfile.tmpl`, `templates/dockerignore.tmpl`, `pyproject.toml` and its lock | 4, 6, 8.1 (the local harness), 10 (the local harness), 11.1, 12 |
 | 4.6 Catalog | `agent_registry/importer/skills.py`, `canonical.py`, `derive.py`, `rules/authority.py`, the `type=skill` answer of `/v1/dependants`, `contract/openapi.json` | 7.4, 11.2 |
@@ -603,8 +606,7 @@ The image build, from the repository's one `Dockerfile`:
 4.1 and 4.3 meet at `launcher.run` (section 9.1) and at nothing else: 4.1 calls it, turns a
 `Run` into the tool result and the `script_run` key, and does not start a process itself.
 4.4 adds one call to `skills.problems(agent, manifest)` in `layout.py`'s `check` and
-changes nothing else there. 4.2 owns `requires.effects` in `declaration.py`; 4.4 reads the
-generated Agent and does not change the generator.
+changes nothing else there. It reads the generated Agent and does not change the generator.
 
 Order on a cluster: the resource definitions, then the controller, the registry and the
 runner, then the tenant's grant, then any release that lists a skill with a script.
