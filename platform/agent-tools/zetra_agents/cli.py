@@ -20,6 +20,7 @@ from agent_platform.constants import DEFAULT_TRUST_DOMAIN
 
 from zetra_agents import (
     attestations,
+    contracts,
     layout,
     local,
     local_step,
@@ -58,6 +59,12 @@ def main(argv: list[str] | None = None) -> int:
     chk.add_argument(
         "--mcp-resource-base",
         default=os.environ.get("AGENT_PLATFORM_MCP_RESOURCE_BASE", MCP_RESOURCE_BASE),
+    )
+    chk.add_argument(
+        "--contracts",
+        type=Path,
+        help="a directory of tool contracts, <server>.json; each tool grant whose backend a "
+        "contract names must list its tools with the grant's effect",
     )
 
     tgt = sub.add_parser("image-target", help="print the Dockerfile target an agent builds with")
@@ -215,6 +222,11 @@ def main(argv: list[str] | None = None) -> int:
             problems += [
                 p for a in agents for p in release.compile_problems(a, args.mcp_resource_base)
             ]
+        if args.contracts is not None:
+            contract_problems, notes = contracts.check(agents, args.contracts)
+            problems += contract_problems
+            for note in notes:
+                print(note)
         for p in problems:
             print(p, file=sys.stderr)
         if not problems:
