@@ -128,6 +128,10 @@ class JwksVerifier:
         roles = (claims.get("realm_access") or {}).get("roles")
         service = "client_id" in claims or username.startswith("service-account-")
         azp = text("azp")
+        if service and not username:
+            # A client whose scopes leave out `profile` has no preferred_username; events
+            # then name the client, not its service account's opaque id.
+            username = text("client_id") or azp
         cluster = None
         if service and azp.startswith(PROVISIONER_CLIENT_PREFIX):
             cluster = azp.removeprefix(PROVISIONER_CLIENT_PREFIX) or None

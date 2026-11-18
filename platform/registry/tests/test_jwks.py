@@ -125,6 +125,41 @@ def test_a_provisioner_is_known_by_the_cluster_in_its_client_name(key):
     assert (principal.person, principal.cluster) == (False, "kubani")
 
 
+def test_a_client_token_as_keycloak_issues_it_carries_client_id_and_no_username(key):
+    # What realm `agents` gives the registry's own clients: their scopes are basic, roles and
+    # agent-registry, so there is no preferred_username; the scope's mapper adds client_id.
+    verifier = Realm((KID, key)).verifier()
+
+    token = sign(
+        key,
+        sub="5d0e5e0e-0000-4000-8000-000000000001",
+        client_id="registry-provisioner-kubani",
+        azp="registry-provisioner-kubani",
+        preferred_username=MISSING,
+        email=MISSING,
+        realm_access={"roles": ["registry-provisioner"]},
+    )
+    principal = verifier.verify(token)
+
+    assert (principal.person, principal.cluster) == (False, "kubani")
+    assert principal.actor == "registry-provisioner-kubani"
+
+
+def test_a_client_token_with_neither_claim_is_not_taken_for_a_provisioner(key):
+    verifier = Realm((KID, key)).verifier()
+
+    token = sign(
+        key,
+        azp="registry-provisioner-kubani",
+        preferred_username=MISSING,
+        email=MISSING,
+        realm_access={"roles": ["registry-provisioner"]},
+    )
+    principal = verifier.verify(token)
+
+    assert principal.cluster is None
+
+
 def forged_hs256(secret: bytes) -> str:
     def part(value: dict) -> str:
         return base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=").decode()
