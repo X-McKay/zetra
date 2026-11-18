@@ -64,6 +64,19 @@ In this order, before anything else. A refusal writes nothing.
 The approval preview is a read, but it is served by the same router and makes the same
 checks: there is nothing to approve at the registry for an agent it does not own.
 
+**One transaction per request.** A write route opens its transaction first and makes every
+check inside it, reading through the transaction (`with store.transaction(actor) as tx`, then
+`tx.deployment(...)` and so on). That includes the mode: the `writable` dependency answers a
+request early, and the route checks `tx.meta().mode` again. A refusal is raised inside the
+transaction, which then writes nothing; a request that finds nothing to do leaves it without
+a write and without an event. Writers are serialised by the store, so of two requests at
+once the second is decided on what the first wrote. A check made on a plain read before the
+transaction opens can be out of date by the time the write happens, and is not a check.
+
+The logic of each route is a function in `agent_registry/rules/` that takes the transaction;
+the handler opens the transaction, calls it and shapes the answer. A rule refuses by raising
+`rules.Refusal(code, message)`, which leaves the service as the error body with that code.
+
 ## 5. Record a release
 
 `POST /v1/deployments/{id}/releases` with `{agent, agentRelease, lineage}`: the two documents
@@ -119,6 +132,12 @@ It also does nothing unless the observation of `N`'s AgentRelease is fresh and i
 generation is at least `N.generation`. Until the cluster has the object as the registry last
 wrote it, what it reports is about something older.
 
+It runs after every report, for every agent, and nearly always finds nothing to do. So it
+decides twice: first on plain reads, with no transaction; and only when that says something
+would change, again inside the transaction that writes it, reading through the transaction.
+The second decision is the one that counts. Two replicas that take the same report then
+record one event, not two.
+
 **`N` has no approval.** `failures = gate_failures(release.document, observation.document,
 pin_for(...))`.
 
@@ -129,8 +148,8 @@ pin_for(...))`.
     `approved; waiting for Ready`. Event `approval-carried-forward` (`detail`: approval id,
     revision).
   - Not found: phase `pending-approval`. Event `approval-needed` (`detail.reason`) only when
-    the phase changes. The reason says why no approval covers it. With `A` the newest
-    `active` approval of this deployment with origin `registry`:
+    the phase or the reason changes. The reason says why no approval covers it. With `A` the
+    newest `active` approval of this deployment with origin `registry`:
     - there is no `A`: `no release has been approved under the registry yet`;
     - `A.policy_revision` is not the tenant's now: `the tenant policy changed since the last
       approval`;

@@ -12,6 +12,7 @@ from agent_registry.api import errors
 from agent_registry.api.app import create_app
 from agent_registry.api.auth import StaticVerifier
 from agent_registry.config import Settings
+from agent_registry.rules import Refusal
 from agent_registry.store import Conflict, Missing, Unavailable
 from agent_registry.store.memory import MemoryStore
 from tests.world import DEP, TOKENS, World
@@ -129,6 +130,7 @@ def test_every_failure_leaves_in_the_same_shape():
             "unbuilt": NotImplementedError(),
             "stale": errors.ApiError("stale-approval", "the policy changed"),
             "forbidden": errors.ApiError.forbidden("not for you"),
+            "rule": Refusal("wrong-path", "owned by the pull request path"),
         }[what]
 
     client = TestClient(app)
@@ -143,5 +145,10 @@ def test_every_failure_leaves_in_the_same_shape():
         "retryable": False,
     }
     assert error(client.get("/forbidden"), 403)["code"] == "refused"
+    assert error(client.get("/rule"), 409) == {
+        "code": "wrong-path",
+        "message": "owned by the pull request path",
+        "retryable": False,
+    }
     with pytest.raises(ValueError):
         errors.ApiError("made-up", "x")
