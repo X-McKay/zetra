@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [contracts, controller, netpol-attestor, agent-runtime, agent-tools, egress-guard, runner, provisioner, session-api]
+        project: [contracts, controller, netpol-attestor, agent-runtime, agent-tools, egress-guard, runner, provisioner, session-api, evaluator]
     defaults:
       run:
         working-directory: platform/${{ matrix.project }}
