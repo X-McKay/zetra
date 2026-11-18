@@ -252,7 +252,8 @@ the Namespace does not grant is not Ready:
 - The Ready condition's reason is `EffectNotGranted`, and it comes **before**
   `NotApproved`. A release that asks for an ungranted effect is therefore never "not Ready
   solely for want of approval", and the approval commands refuse it.
-- The condition's message names the effects that are not granted.
+- The condition's message names the effects that are not granted:
+  `effects not granted: sandbox_execute`.
 - Withdrawing a grant makes the tenant's releases that request the effect not Ready at the
   next reconcile, and sessions are refused for them as for any release that is not Ready.
 

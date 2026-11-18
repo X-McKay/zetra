@@ -366,11 +366,13 @@ class Reconciler:
             )
         # On drift policyDigest and the ConfigMaps are left exactly as they were.
 
-        # The Namespace is read each time, so withdrawing a grant takes effect at the next
-        # reconcile.
-        not_granted = effects_mod.ungranted(
-            built_from["spec"], self.kube.get("v1", "Namespace", None, tenant)
-        )
+        # The Namespace is read each time a release requests an effect, so withdrawing a
+        # grant takes effect at the next reconcile. A release that requests none needs no read.
+        not_granted: list[str] = []
+        if effects_mod.requested(built_from["spec"]):
+            not_granted = effects_mod.ungranted(
+                built_from["spec"], self.kube.get("v1", "Namespace", None, tenant)
+            )
         facts = desired.ReleaseFacts(
             approved=(spec.get("approval") or {}).get("approved") is True,
             signature_verified=signed,
