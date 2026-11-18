@@ -219,3 +219,21 @@ def test_t22_mutations_are_rejected(pod, case):
     bad = copy.deepcopy(pod)
     T22_CASES[case](bad)
     assert not admitted(bad), case
+
+
+def _env(agent, release, cfg) -> list[dict]:
+    bundle = compile_bundle(
+        agent, release, mcp_resource_base=cfg.mcp_resource_base, trust_domain=cfg.trust_domain
+    )
+    template = render_pod_template(agent, release, bundle, policy_digest(bundle), cfg)
+    return template["spec"]["containers"][0]["env"]
+
+
+def test_pod_has_agent_effects_only_when_the_bundle_has_effects(agent, release, cfg):
+    plain = _env(agent, release, cfg)
+    assert "AGENT_EFFECTS" not in {e["name"] for e in plain}
+    asked = copy.deepcopy(agent)
+    asked["spec"]["capabilities"]["effects"] = ["sandbox_execute"]
+    env = _env(asked, release, cfg)
+    assert {"name": "AGENT_EFFECTS", "value": "sandbox_execute"} in env
+    assert [e for e in env if e["name"] != "AGENT_EFFECTS"] == plain

@@ -212,12 +212,15 @@ class ReleaseFacts:
     policy_drift: bool
     agent_enabled: bool
     agent_ready: bool
+    # False when the release requests an effect its tenant Namespace does not grant (7.2).
+    effects_granted: bool = True
 
 
 def release_ready(f: ReleaseFacts) -> bool:
     """6.4 step 5, exactly."""
     return (
-        f.approved
+        f.effects_granted
+        and f.approved
         and f.signature_verified
         and not f.policy_drift
         and f.agent_enabled

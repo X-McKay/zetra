@@ -99,8 +99,10 @@ def render_pod_template(
         env.append({"name": "AGENT_MODEL_ROUTE", "value": f"/models/{min(bundle['models'])}"})
     env += [
         {"name": "AGENT_TOKENS_PER_SESSION", "value": str(bundle["budgets"]["tokens_per_session"])},
-        {"name": "AGENT_SESSION_ID", "value": ""},
     ]
+    if bundle.get("effects"):
+        env.append({"name": "AGENT_EFFECTS", "value": ",".join(sorted(bundle["effects"]))})
+    env.append({"name": "AGENT_SESSION_ID", "value": ""})
 
     hardened = {
         "allowPrivilegeEscalation": False,
