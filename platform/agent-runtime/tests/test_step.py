@@ -510,3 +510,30 @@ def test_model_backed_manifest_with_decide_exits_3(sandbox):
     rc, out, _ = sandbox.run(0)
     assert rc == 3 and "declares a model" in out["summary"] and "remove" in out["summary"]
     assert sandbox.gw.chat_requests == []
+
+
+def test_listed_skills_reach_the_model_as_descriptions_and_two_tools(sandbox):
+    """skills.md 8.2 and 8.3 through the real process: the prompt and the tool list."""
+    from tests.test_skill_tools import write_lock, write_skill
+
+    app = sandbox.root / "app"
+    write_skill(app, "notes", "Takes notes.", "NOTES-BODY")
+    write_lock(app, ["notes"])
+    make_app(app, {**MANIFEST, "skills": ["notes"]})
+    sandbox.gw.chat_replies = [(200, chat_response("done"))]
+    rc, out, _ = sandbox.run(0)
+    assert rc == 2
+    body = sandbox.gw.chat_requests[0]["body"]
+    names = [t["function"]["name"] for t in body["tools"]]
+    assert names == [t["name"] for t in MANIFEST["tools"]] + ["skill_use", "skill_file"]
+    assert body["messages"][0]["content"].endswith("\n- notes: Takes notes.")
+    assert "NOTES-BODY" not in json.dumps(body)
+    assert "script_run" not in out
+
+
+def test_an_agent_without_skills_gets_no_skill_tools_or_prompt(sandbox):
+    sandbox.gw.chat_replies = [(200, chat_response("done"))]
+    sandbox.run(0)
+    body = sandbox.gw.chat_requests[0]["body"]
+    assert [t["function"]["name"] for t in body["tools"]] == [t["name"] for t in MANIFEST["tools"]]
+    assert body["messages"][0]["content"] == "You are a test agent."
