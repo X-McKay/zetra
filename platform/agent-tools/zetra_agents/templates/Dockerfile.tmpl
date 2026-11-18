@@ -19,6 +19,14 @@ COPY --parents agents/*/pyproject.toml ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --package "zetra-agent-${AGENT}" --compile-bytecode
 
+# The agent's pinned skills (skills.md section 12): this fails when the lock is stale, and
+# writes /stage/skills/<name>/ and /stage/skills.lock, or an empty /stage/skills/ for an
+# agent with no skills. The build context is bind-mounted rather than copied so that a
+# repository with no skills/ directory builds the same way, which COPY could not do.
+RUN --mount=type=bind,target=/context \
+    /app/.venv/bin/python -m agent_runtime.skills.image stage \
+        --agent "/context/agents/${AGENT}" --skills /context/skills --out /stage
+
 # 3.12.16 fixes the interpreter's Critical CVE-2026-19445 and CVE-2026-115557; the
 # upgrade takes Debian security fixes newer than the base image (openssl, pcre2), which
 # Kubani's admission vuln check would otherwise reject.
@@ -29,6 +37,10 @@ ARG AGENT
 COPY --from=build /app/.venv /app/.venv
 COPY agents/${AGENT}/agent.yaml /app/agent.yaml
 COPY agents/${AGENT}/src/ /app/
+COPY --from=build /stage/ /app/
+# Fails when a pinned skill's interpreter is not in this image, when a digest differs from
+# the lock, or when /app/skills holds a skill the agent does not list.
+RUN /app/.venv/bin/python -m agent_runtime.skills.image verify --app /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 USER 1500:1500
 ENTRYPOINT ["/app/.venv/bin/python", "-m", "agent_runtime.wait"]

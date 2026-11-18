@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from importlib import metadata, resources
 from pathlib import Path
 
-from zetra_agents import declaration, layout, manifest
+from zetra_agents import declaration, layout, manifest, skills
 
 ZETRA_GIT = "https://github.com/X-McKay/zetra.git"
 ZETRA_ORIGIN = re.compile(
@@ -215,6 +215,9 @@ def tool_problems(repo: Path) -> list[Difference]:
                 Difference(path, "tools", p.removeprefix(f"{agent.name}: "))
                 for p in declaration.generated_file_problems(agent)
             ]
+    for agent in layout.all_agents(repo):
+        path = skills.lock_path(agent).relative_to(repo).as_posix()
+        problems += [Difference(path, "tools", p) for p in skills.lock_differences(agent)]
     for agent in derived_agents(repo):
         path = agent.manifest_path.relative_to(repo).as_posix()
         try:
@@ -228,12 +231,16 @@ def tool_problems(repo: Path) -> list[Difference]:
 
 
 def write_tools(repo: Path) -> list[Path]:
-    """Rewrite each manifest's `tools:` from its code, and each one-file agent's generated
-    `deploy/agent.yaml` from its manifest; the files that changed."""
+    """Rewrite each manifest's `tools:` from its code, each one-file agent's generated
+    `deploy/agent.yaml` from its manifest, and each agent's `skills.lock` from its skills
+    (removed when it lists none); the files that changed."""
     written = [
         agent.agent_cr_path
         for agent in layout.all_agents(repo)
         if declaration.one_file(agent) and declaration.write(agent)
+    ]
+    written += [
+        skills.lock_path(agent) for agent in layout.all_agents(repo) if skills.write_lock(agent)
     ]
     return written + [
         agent.manifest_path for agent in derived_agents(repo) if manifest.write(agent)

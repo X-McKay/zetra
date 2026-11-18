@@ -65,6 +65,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 import secrets
 import stat
 import subprocess
@@ -88,6 +89,30 @@ MAX_SNAPSHOT = 64 * 1024 * 1024  # the Session Runner's limit on the tar of work
 MAX_OUTPUT = 65536  # the Session Runner's limit on what a step prints
 MAX_SUMMARY = 512
 RESULT_FIELDS = {"boundary", "kind", "done", "tool", "usage", "summary"}
+# Present on a `skill_run` boundary and on no other (skills.md section 10).
+SCRIPT_RUN_FIELDS = {
+    "skill",
+    "script",
+    "digest",
+    "argument_count",
+    "arguments_sha256",
+    "exit_status",
+    "limits_hit",
+    "refused",
+    "duration_ms",
+}
+LIMITS = ("memory", "output", "processes", "time")
+REFUSALS = {
+    "unknown_skill",
+    "undeclared",
+    "unknown_script",
+    "path",
+    "arguments",
+    "interpreter",
+    "digest",
+    "workspace",
+    "unsupported",
+}
 # The exit codes the Session Runner reads a result after; any other is a failed boundary.
 OUTCOMES = {0: "running", 2: "completed", 3: "agent_error", 4: "budget"}
 NOT_A_DEPLOYMENT_CHECK = (
@@ -130,7 +155,7 @@ class Result:
 
     def document(self) -> dict:
         usage = [b.get("usage") or {} for b in self.boundaries]
-        return {
+        document = {
             "ok": self.ok,
             "agent": self.agent,
             "outcome": self.outcome,
@@ -152,6 +177,10 @@ class Result:
             "runDirectory": str(self.directory),
             "note": NOT_A_DEPLOYMENT_CHECK,
         }
+        runs = [b["script_run"] for b in self.boundaries if "script_run" in b]
+        if runs:  # absent for an agent that ran no script
+            document["scriptRuns"] = runs
+        return document
 
 
 def _keys(where: str, entry: Any, required: set[str], optional: set[str]) -> dict:
@@ -335,6 +364,14 @@ def _last_message(directory: Path) -> dict:
 
 def _detail(record: dict, last: dict) -> str:
     """What the boundary did, read from the transcript the step just wrote."""
+    run = record.get("script_run")
+    if run is not None:
+        outcome = f"refused {run['refused']}" if run["refused"] else f"exit {run['exit_status']}"
+        limits = f", limits {','.join(run['limits_hit'])}" if run["limits_hit"] else ""
+        return (
+            f"script_run {run['skill']}/{run['script']} {outcome}{limits}, "
+            f"{run['argument_count']} arguments, {run['duration_ms']} ms"
+        )
     if record.get("kind") == "tool" and last.get("role") == "tool":
         return f"{record.get('tool')} -> {_clip(last.get('content', ''))}"
     calls = last.get("tool_calls") or []
@@ -360,6 +397,45 @@ def mcp_problems(agent: AgentDir, calls: list[dict]) -> list[str]:
     return found
 
 
+def script_run_accepted(record: Any) -> bool:
+    """The `script_run` key of a `skill_run` boundary as the runner validates it (skills.md
+    section 10): exactly nine keys, each of the type and range given there."""
+    from agent_runtime.skills import format as fmt
+
+    def count(value, high) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= high
+
+    if not isinstance(record, dict) or set(record) != SCRIPT_RUN_FIELDS:
+        return False
+    skill, script, digest = record["skill"], record["script"], record["digest"]
+    status, limits = record["exit_status"], record["limits_hit"]
+    return (
+        (skill is None or fmt.is_name(skill))
+        and (
+            script is None
+            or (
+                isinstance(script, str)
+                and fmt.SCRIPT_PATH.match(script) is not None
+                and len(script) <= fmt.MAX_SCRIPT_PATH
+            )
+        )
+        and (digest is None or (isinstance(digest, str) and fmt.DIGEST.match(digest) is not None))
+        and count(record["argument_count"], 32)
+        and isinstance(record["arguments_sha256"], str)
+        and re.fullmatch(r"[0-9a-f]{64}", record["arguments_sha256"]) is not None
+        and (
+            status is None
+            or (isinstance(status, int) and not isinstance(status, bool) and -64 <= status <= 255)
+        )
+        and isinstance(limits, list)
+        and all(isinstance(x, str) for x in limits)
+        and limits == sorted(set(limits))
+        and set(limits) <= set(LIMITS)
+        and (record["refused"] is None or record["refused"] in REFUSALS)
+        and count(record["duration_ms"], 2**63)
+    )
+
+
 def step_result(stdout: bytes, boundary: int, rc: int) -> dict | None:
     """What a step printed, if the Session Runner would take it as this boundary's result
     (spec 10.4; zetra platform/runner `BoundaryOut.parse_strict` and `run_boundary`): at
@@ -375,9 +451,13 @@ def step_result(stdout: bytes, boundary: int, rc: int) -> dict | None:
         doc = json.loads(stdout.decode("utf-8"))
     except (ValueError, RecursionError):
         return None
-    if not isinstance(doc, dict) or set(doc) != RESULT_FIELDS:
+    if not isinstance(doc, dict) or not RESULT_FIELDS <= set(doc) <= RESULT_FIELDS | {"script_run"}:
         return None
     tool, usage, summary = doc["tool"], doc["usage"], doc["summary"]
+    if ("script_run" in doc) != (tool == "skill_run") or (
+        "script_run" in doc and not script_run_accepted(doc["script_run"])
+    ):
+        return None
     accepted = (
         count(doc["boundary"])
         and doc["boundary"] == boundary
@@ -537,7 +617,7 @@ def run(
 
     directory = new_directory(agent, out)
     app, sandbox, mcp_log = directory / "app", directory / "sandbox", directory / "mcp.jsonl"
-    testing.lay_out(agent, app)
+    testing.lay_out(agent, app, with_skills=True)
     sandbox.mkdir(mode=0o700)
     # The working directory: empty and read only, like the image's root filesystem.
     (directory / "cwd").mkdir(mode=0o500)
@@ -558,6 +638,7 @@ def run(
         sandbox,
         AGENT_TOKENS_PER_SESSION=str(bundle["budgets"]["tokens_per_session"]),
         **{local_step.SPEC_ENV: str(directory / "run.json")},
+        **testing.effects_environment(agent),
         **{
             name: os.environ[name]
             for name in (local_step.MODEL_URL, local_step.MODEL_NAME, local_step.MODEL_API_KEY)

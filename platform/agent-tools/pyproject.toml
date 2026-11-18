@@ -8,6 +8,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "PyYAML==6.0.3",
     "agent-platform-contracts",
+    # `check` validates each skill with it (skills.md section 6); never in an image
+    "skills-ref==0.1.1",
 ]
 
 [project.scripts]

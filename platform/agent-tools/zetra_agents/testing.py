@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from zetra_agents import skills
 from zetra_agents.layout import AgentDir, image_target
 
 Call = tuple[str, str, dict]
@@ -274,12 +275,28 @@ class LocalAgent:
         return step.schema(self.tools[tool])
 
 
-def lay_out(agent: AgentDir, app: Path) -> Path:
-    """Copy what the Dockerfile copies: `agent.yaml` and everything under `src/`. A
-    symbolic link stays a link, as `COPY` keeps it."""
+def lay_out(agent: AgentDir, app: Path, *, with_skills: bool = False) -> Path:
+    """Copy what the Dockerfile copies: `agent.yaml` and everything under `src/`, and with
+    `with_skills`, for an agent that lists skills, `skills/<name>/` and `skills.lock`
+    (skills.md section 8.1), staged by the same code the image build runs. A symbolic link
+    stays a link, as `COPY` keeps it. Reading the agent's code needs no skills, so the
+    default leaves them out and a stale lock cannot stop `render` from repairing it."""
     shutil.copytree(agent.src, app, symlinks=True, ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copy(agent.manifest_path, app / "agent.yaml")
+    if with_skills and skills.listed(agent):
+        from agent_runtime.skills import image
+
+        problems = image.stage(agent.root, skills.skills_dir(agent), app)
+        if problems:
+            raise ValueError(f"{agent.name}: skills cannot be staged: {'; '.join(problems)}")
     return app
+
+
+def effects_environment(agent: AgentDir) -> dict[str, str]:
+    """`AGENT_EFFECTS` as the pod template sets it: the requested effects, comma-separated,
+    and absent when there are none."""
+    effects = skills.requested_effects(agent)
+    return {"AGENT_EFFECTS": ",".join(effects)} if effects else {}
 
 
 @contextlib.contextmanager
@@ -293,15 +310,21 @@ def loaded(
     from agent_runtime import step
 
     agent = agent_dir if isinstance(agent_dir, AgentDir) else AgentDir(Path(agent_dir).resolve())
-    app = lay_out(agent, Path(tmp).resolve() / "app")
+    app = lay_out(agent, Path(tmp).resolve() / "app", with_skills=True)
     sandbox = Path(tmp).resolve() / "sandbox"
     (sandbox / "workspace").mkdir(parents=True)
     fake = mcp if mcp is not None else FakeMcp.for_agent(agent)
 
-    environment = {"AGENT_APP_DIR": str(app), "AGENT_SANDBOX_DIR": str(sandbox)}
-    before = {name: os.environ.get(name) for name in environment}
+    environment = {
+        "AGENT_APP_DIR": str(app),
+        "AGENT_SANDBOX_DIR": str(sandbox),
+        **effects_environment(agent),
+    }
+    before = {name: os.environ.get(name) for name in (*environment, "AGENT_EFFECTS")}
     path, modules, call_tool = list(sys.path), set(sys.modules), runtime_mcp.call_tool
     os.environ.update(environment)
+    if "AGENT_EFFECTS" not in environment:
+        os.environ.pop("AGENT_EFFECTS", None)  # the caller's is not this agent's request
     runtime_mcp.call_tool = fake
     try:
         manifest = step.load_manifest()
