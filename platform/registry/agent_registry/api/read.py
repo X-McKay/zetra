@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 
+from agent_registry import queries
 from agent_registry.api import schemas as s
 from agent_registry.api.auth import reader
 from agent_registry.api.deps import get_settings, get_store, now
@@ -28,23 +29,23 @@ Now = Annotated[datetime, Depends(now)]
 @router.get("/meta", response_model=s.MetaOut)
 def meta(store: StoreDep) -> s.MetaOut:
     """The mode and the generation."""
-    raise NotImplementedError
+    return queries.meta(store)
 
 
 @router.get("/items", response_model=s.ItemsOut)
 def items(store: StoreDep, kind: Kind | None = None) -> s.ItemsOut:
-    raise NotImplementedError
+    return queries.items(store, kind)
 
 
 @router.get("/items/{kind}/{name}", response_model=s.ItemOut)
 def item(store: StoreDep, kind: Kind, name: str) -> s.ItemOut:
     """One item with its releases and its deployments. `not-found` when there is none."""
-    raise NotImplementedError
+    return queries.item(store, kind, name)
 
 
 @router.get("/releases/{release_id}", response_model=s.ReleaseOut)
 def release(store: StoreDep, release_id: str) -> s.ReleaseOut:
-    raise NotImplementedError
+    return queries.release(store, release_id)
 
 
 @router.get("/deployments", response_model=s.DeploymentsOut)
@@ -55,18 +56,18 @@ def deployments(
     tenant: str | None = None,
     authority: Authority | None = None,
 ) -> s.DeploymentsOut:
-    raise NotImplementedError
+    return queries.deployments(store, kind, cluster, tenant, authority)
 
 
 @router.get("/deployments/{deployment_id}", response_model=s.DeploymentOut)
 def deployment(store: StoreDep, deployment_id: str) -> s.DeploymentOut:
     """A deployment with its revisions (ascending) and its approvals."""
-    raise NotImplementedError
+    return queries.deployment(store, deployment_id)
 
 
 @router.get("/deployments/{deployment_id}/revisions/{number}", response_model=s.RevisionOut)
 def revision(store: StoreDep, deployment_id: str, number: int) -> s.RevisionOut:
-    raise NotImplementedError
+    return queries.revision(store, deployment_id, number)
 
 
 @router.get("/dependants", response_model=s.DependantsOut)
@@ -79,14 +80,14 @@ def dependants(
     """The agents that depend on a tool server backend (`type=tool`, `name` a backend name) or
     on a model alias (`type=model`, `name` an alias). An unknown name is an empty answer, not
     an error."""
-    raise NotImplementedError
+    return queries.dependants(store, cluster, type, name)
 
 
 @router.get("/status", response_model=s.StatusOut)
 def status(store: StoreDep, settings: SettingsDep, at: Now, cluster: str) -> s.StatusOut:
     """Per agent: the owning path, the current release, blockers and next actions. Per tool
     server and model: what is declared, what was observed, and how old the observation is."""
-    raise NotImplementedError
+    return queries.status(store, cluster, at, settings.observation_max_age_seconds)
 
 
 @router.get("/events", response_model=s.EventsOut)
@@ -96,4 +97,4 @@ def events(
     after: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> s.EventsOut:
-    raise NotImplementedError
+    return queries.events(store, deployment, after, limit)
