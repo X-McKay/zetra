@@ -25,6 +25,11 @@ One JSON file, rendered by Kubani from its own files. Example: `tests/fixtures/f
 that every `cluster` named exists in `clusters`, every `tenant` in `tenants`, every `engine`
 in `modelEngines`. A feed that fails a check raises `ValueError` and nothing is written.
 
+The feed has further optional keys: `configDigest` and `contract` on `toolServers`,
+`release` on `modelEngines`, a top-level `modelReleases`, and `move` on `aliases`. They are
+specified in `dependencies.md` (sections 2.2, 2.3, 4.2 and 4.3), with what is checked and what
+is stored. A feed without them is valid and is read exactly as before.
+
 ## 2. `apply_feed(store, feed, *, now=None, actor="feed") -> bool`
 
 One transaction. Each record is written only when it differs from what is stored. When

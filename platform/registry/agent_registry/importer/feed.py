@@ -60,6 +60,9 @@ _KEYS: dict[str, tuple[str, ...]] = {
     "aliases": ("cluster", "alias", "engine", "backend"),
 }
 
+_EFFECTS = ("remote_read", "remote_write")
+_MANIFEST_REQUIRED = ("schemaVersion", "engine", "name", "servedName", "engineImage", "offers")
+
 _REVOCATION_KEYS = (
     "schemaVersion",
     "id",
@@ -120,7 +123,108 @@ def validate_feed(feed: Any) -> None:
                 f"aliases: engine {entry['engine']!r} is not in modelEngines "
                 f"of cluster {entry['cluster']!r}"
             )
+    _validate_contracts(feed.get("toolServers", []))
+    _validate_model_releases(feed)
     _validate_revocations(feed.get("revocations", []))
+
+
+def _validate_contracts(entries: list[dict[str, Any]]) -> None:
+    """`contract/dependencies.md` section 2.2. Both keys are optional; a server with no contract
+    is valid."""
+    for position, entry in enumerate(entries):
+        where = f"toolServers[{position}]"
+        config = entry.get("configDigest", "")
+        if not isinstance(config, str):
+            raise ValueError(f"{where}: configDigest is not a string")
+        contract = entry.get("contract")
+        if contract is None:
+            continue
+        if not isinstance(contract, dict):
+            raise ValueError(f"{where}: contract is not an object")
+        missing = [
+            k for k in ("server", "backend", "image", "configDigest", "tools") if k not in contract
+        ]
+        if missing:
+            raise ValueError(f"{where}: contract lacks {', '.join(missing)}")
+        if contract["server"] != entry["name"]:
+            raise ValueError(f"{where}: contract is for server {contract['server']!r}")
+        if contract["backend"] != entry["backend"]:
+            raise ValueError(f"{where}: contract is for backend {contract['backend']!r}")
+        if contract["configDigest"] != config:
+            raise ValueError(f"{where}: contract was captured with another configDigest")
+        pinned = derive.image_digest(entry["image"])
+        if pinned and derive.image_digest(str(contract["image"])) != pinned:
+            raise ValueError(f"{where}: contract was captured from {contract['image']!r}")
+        tools = contract["tools"]
+        if not isinstance(tools, list) or not all(isinstance(t, dict) for t in tools):
+            raise ValueError(f"{where}: contract tools is not a list of objects")
+        names = [t.get("name") for t in tools]
+        if not all(isinstance(n, str) and n for n in names) or len(set(names)) != len(names):
+            raise ValueError(f"{where}: contract tool names are missing or not unique")
+        for tool in tools:
+            if tool.get("effect") not in _EFFECTS:
+                raise ValueError(
+                    f"{where}: tool {tool['name']!r} has effect {tool.get('effect')!r}"
+                )
+            if not isinstance(tool.get("description"), str) or not isinstance(
+                tool.get("inputSchema"), dict
+            ):
+                raise ValueError(
+                    f"{where}: tool {tool['name']!r} lacks a description or inputSchema"
+                )
+
+
+def _validate_model_releases(feed: dict[str, Any]) -> None:
+    """`contract/dependencies.md` sections 4.2 and 4.3, as far as the feed alone shows. Whether
+    a named release is stored is decided when the feed is applied."""
+    manifests = feed.get("modelReleases", [])
+    if not isinstance(manifests, list):
+        raise ValueError("modelReleases is not a list")
+    engines = {e["name"] for e in feed.get("modelEngines", [])}
+    seen: set[tuple[str, str]] = set()
+    for position, manifest in enumerate(manifests):
+        where = f"modelReleases[{position}]"
+        if not isinstance(manifest, dict):
+            raise ValueError(f"{where} is not an object")
+        missing = [k for k in _MANIFEST_REQUIRED if k not in manifest]
+        weights = manifest.get("weights")
+        if not isinstance(weights, dict) or not weights.get("source"):
+            missing.append("weights.source")
+        if missing:
+            raise ValueError(f"{where} lacks {', '.join(missing)}")
+        if manifest["schemaVersion"] != 1:
+            raise ValueError(f"{where}: schemaVersion {manifest['schemaVersion']!r} is not 1")
+        for key in ("engine", "name", "servedName", "engineImage"):
+            if not isinstance(manifest[key], str) or not manifest[key]:
+                raise ValueError(f"{where}: {key} is not a non-empty string")
+        if not isinstance(manifest["offers"], dict):
+            raise ValueError(f"{where}: offers is not an object")
+        if manifest["name"] != release_slug(manifest["name"]):
+            raise ValueError(f"{where}: name {manifest['name']!r} is not a release name")
+        if manifest["engine"] not in engines:
+            raise ValueError(f"{where}: engine {manifest['engine']!r} is not in modelEngines")
+        key = (manifest["engine"], manifest["name"])
+        if key in seen:
+            raise ValueError(f"{where}: {manifest['engine']}/{manifest['name']} is listed twice")
+        seen.add(key)
+    by_key = {(m["engine"], m["name"]): m for m in manifests}
+    for entry in feed.get("modelEngines", []):
+        name = entry.get("release")
+        if name is None:
+            continue
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"modelEngines: release of {entry['name']!r} is not a name")
+        manifest = by_key.get((entry["name"], name))
+        if manifest is None:
+            if any(n == name for _, n in by_key):
+                raise ValueError(
+                    f"modelEngines: release {name!r} of {entry['name']!r} is a manifest of another engine"
+                )
+        elif manifest["servedName"] != entry["servedName"]:
+            raise ValueError(
+                f"modelEngines: release {name!r} serves {manifest['servedName']!r}, "
+                f"not {entry['servedName']!r}"
+            )
 
 
 def _revocation_time(text: Any, where: str) -> datetime:
@@ -254,6 +358,12 @@ def apply_feed(
                 key: copy.deepcopy(entry[key])
                 for key in ("namespace", "workload", "image", "pinnedByDigest", "registered")
             } | {"backend": entry["backend"]}
+            # An older feed has neither key and is read as "" and None; the document then keeps
+            # the shape it had, so that nothing changes until the feed carries them.
+            if "configDigest" in entry:
+                document["configDigest"] = entry["configDigest"]
+            if "contract" in entry:
+                document["contract"] = derive.contract_record(entry["contract"])
             _infrastructure(tx, changed, "tool-server", entry, document, adopted)
         for entry in feed.get("modelEngines", []):
             name = release_slug(entry["servedName"])
@@ -271,7 +381,10 @@ def apply_feed(
                 key: copy.deepcopy(entry[key])
                 for key in ("namespace", "workload", "servedName", "servedNameFrom", "backend")
             }
+            if entry.get("release"):
+                document["release"] = entry["release"]
             _infrastructure(tx, changed, "model", entry, document, adopted)
+        _model_releases(tx, changed, feed, now)
         have_aliases = {(a.cluster, a.tenant, a.alias): a for a in tx.aliases()}
         for entry in feed.get("aliases", []):
             alias = Alias(
@@ -311,6 +424,56 @@ def apply_feed(
         if changed:
             tx.event("feed-applied", detail={"changed": changed})
     return bool(changed)
+
+
+def _model_releases(tx: Tx, changed: list[str], feed: dict[str, Any], now: datetime) -> None:
+    """Section 4.3: each manifest is a release of kind `model`. A release adopted with only its
+    served name is completed once; after that a manifest stated differently is an error. Then
+    every engine's `release` must name a stored release of that engine with its served name."""
+    for manifest in feed.get("modelReleases", []):
+        record = Release(
+            id=release_id("model", manifest["engine"], manifest["name"]),
+            kind="model",
+            item=manifest["engine"],
+            name=manifest["name"],
+            digest=derive.sha({k: v for k, v in manifest.items() if k != "evidence"}),
+            origin="adopted",
+            document=copy.deepcopy(manifest),
+            recorded_at=now,
+        )
+        have = tx.release(record.id)
+        if have is None:
+            tx.add_release(record)
+        elif list(have.document) == ["servedName"]:
+            if have.document["servedName"] != manifest["servedName"]:
+                raise ValueError(
+                    f"modelReleases: {record.id} was adopted as serving "
+                    f"{have.document['servedName']!r}, not {manifest['servedName']!r}"
+                )
+            tx.complete_release(record)
+        elif have.digest != record.digest:
+            raise ValueError(
+                f"modelReleases: {record.id} is stored differently; a release is never edited"
+            )
+        else:
+            continue
+        changed.append(f"model-release:{manifest['engine']}/{manifest['name']}")
+    for entry in feed.get("modelEngines", []):
+        name = entry.get("release")
+        if not name:
+            continue
+        stored = tx.release(release_id("model", entry["name"], name))
+        if stored is None:
+            other = any(r.name == name for r in tx.releases(kind="model"))
+            raise ValueError(
+                f"modelEngines: release {name!r} of {entry['name']!r} is "
+                + ("a manifest of another engine" if other else "not in modelReleases or stored")
+            )
+        if stored.document.get("servedName") != entry["servedName"]:
+            raise ValueError(
+                f"modelEngines: release {name!r} serves {stored.document.get('servedName')!r}, "
+                f"not {entry['servedName']!r}"
+            )
 
 
 def _infrastructure(

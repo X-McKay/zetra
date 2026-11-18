@@ -34,10 +34,26 @@ def item(store: Reads, kind: str, name: str) -> s.ItemOut:
     found = store.item(kind, name)
     if found is None:
         raise Refusal("not-found", f"there is no {kind} item {name}")
+    deployments = [d for d in store.deployments(kind=kind) if d.item == name]
     return s.ItemOut(
         item=found,
         releases=store.releases(kind, name),
-        deployments=[d for d in store.deployments(kind=kind) if d.item == name],
+        deployments=deployments,
+        contracts={d.id: _contract_status(d) for d in deployments}
+        if kind == "tool-server"
+        else None,
+        served_releases={d.id: d.document.get("release") for d in deployments}
+        if kind == "model"
+        else None,
+    )
+
+
+def _contract_status(server: Deployment) -> s.ContractStatus:
+    contract = server.document.get("contract")
+    if not contract:
+        return s.ContractStatus(state="none")
+    return s.ContractStatus(
+        state="recorded", digest=contract["digest"], tools=len(contract["tools"])
     )
 
 
@@ -493,6 +509,7 @@ def status(store: Reads, cluster: str, now: datetime, max_age_seconds: int) -> s
                 dependants=_agent_names(
                     store, cluster, {backend} if registered and backend else set(), "tool"
                 ),
+                contract=_contract_status(server),
             )
         )
 
@@ -520,6 +537,7 @@ def status(store: Reads, cluster: str, now: datetime, max_age_seconds: int) -> s
                 observed_image=images[0] if images else None,
                 observation=_observed(stored, now, max_age_seconds),
                 dependants=_agent_names(store, cluster, backends, "model"),
+                release=document.get("release"),
             )
         )
 
