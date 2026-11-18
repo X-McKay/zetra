@@ -15,6 +15,20 @@ PROVISIONER = "registry-provisioner"
 EVALUATOR = "registry-evaluator"
 
 
+def _whole(env: Mapping[str, str], name: str, default: int) -> int:
+    """A whole number of at least zero from the environment; the default when unset or empty."""
+    text = env.get(name, "")
+    if text == "":
+        return default
+    try:
+        value = int(text)
+    except ValueError:
+        raise ValueError(f"{name} is not a whole number: {text!r}") from None
+    if value < 0:
+        raise ValueError(f"{name} is negative")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     # PostgreSQL connection string. Comes from a Secret; never logged.
@@ -32,6 +46,9 @@ class Settings:
     github_issuer: str = "https://token.actions.githubusercontent.com"
     github_jwks_url: str = ""  # default: <github_issuer>/.well-known/jwks
     report_audience: str = ""
+    # How long after it is stored a security revocation is offered to the provisioner, which
+    # cancels the release's sessions (contract/delivery.md section 8.3).
+    revocation_cancel_seconds: int = 86400
     host: str = "0.0.0.0"  # noqa: S104 - a container port behind a NetworkPolicy
     port: int = 8080
 
@@ -60,6 +77,9 @@ class Settings:
             github_issuer=env.get("REGISTRY_GITHUB_ISSUER", default.github_issuer),
             github_jwks_url=env.get("REGISTRY_GITHUB_JWKS_URL", ""),
             report_audience=env.get("REGISTRY_REPORT_AUDIENCE", ""),
+            revocation_cancel_seconds=_whole(
+                env, "REGISTRY_REVOCATION_CANCEL_SECONDS", default.revocation_cancel_seconds
+            ),
             host=env.get("REGISTRY_HOST", default.host),
             port=int(env.get("REGISTRY_PORT", default.port)),
         )

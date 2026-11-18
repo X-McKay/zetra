@@ -22,6 +22,7 @@ from agent_registry.models import (
     release_id,
     release_slug,
 )
+from agent_registry.rules import revisions
 from agent_registry.rules import revocation as revocations
 from agent_registry.store import Store, Tx
 
@@ -195,8 +196,9 @@ def _image_release_name(image: str) -> str:
 def apply_feed(
     store: Store, feed: dict[str, Any], *, now: datetime | None = None, actor: str = "feed"
 ) -> bool:
-    """Write the feed's clusters, tenants, trusted repositories, tool servers, model engines
-    and aliases. Returns True when anything changed."""
+    """Write the feed's clusters, tenants, trusted repositories, tool servers, model engines,
+    aliases and revocations, then record a new revision of each registry-owned agent whose
+    requirements now resolve differently. Returns True when anything changed."""
     validate_feed(feed)
     now = now or datetime.now(UTC)
     changed: list[str] = []
@@ -300,6 +302,12 @@ def apply_feed(
                     f"revocations: {revocation.id} is stored differently; a revocation is "
                     "never edited"
                 )
+        # What a release's requirements resolve to may have changed with the feed
+        # (contract/delivery.md section 5.1).
+        for owned in sorted(tx.deployments(kind="agent", authority="registry"), key=lambda d: d.id):
+            number = revisions.re_resolve(tx, owned.id, now=now)
+            if number is not None:
+                changed.append(f"revision:{owned.id}@{number}")
         if changed:
             tx.event("feed-applied", detail={"changed": changed})
     return bool(changed)

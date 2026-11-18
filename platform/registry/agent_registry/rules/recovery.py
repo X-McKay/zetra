@@ -125,8 +125,11 @@ def differences_of(reads: Reads, deployment: Deployment) -> list[Difference]:
             continue
         subject = f"agentrelease/{name}"
         shown = (observed.document.get("spec") or {}).get("approval") or {}
-        block = projection.approval_block(reads, revision)
-        if shown.get("approved") is True and (revision.approval_id is None or block != shown):
+        block = projection.release_approval_block(reads, deployment, revision.release_id)
+        release = reads.release(revision.release_id)
+        revoked = release is not None and revocation.revoked(reads, release) is not None
+        # A revoked release's approval is never adopted: the registry writes it unapproved.
+        if shown.get("approved") is True and block != shown and not revoked:
             add(subject, "approval", block, shown)
         generation = derive.live_generation(observed.document)
         if generation is not None and generation > revision.generation:

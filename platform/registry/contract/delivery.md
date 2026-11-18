@@ -324,7 +324,15 @@ Two revisions then share one AgentRelease object. `projection.md` changes for th
 - One object per release name. Its `revision` annotation and its generation come from the
   newest revision of that release.
 - Its approval block comes from the newest revision of that release that has an approval, and
-  is `{"approved": false}` when none has, or when the release is revoked.
+  is `{"approved": false}` when none has, or when the release is revoked
+  (`projection.release_approval_block`). Hand-over and recovery compare with the same block.
+
+The shared object changes one thing in approval. When another revision of the same release
+has an approval, the object on the cluster is already approved, so two of the approval gates
+cannot hold for the new revision and are left out for it: "live release is not in the
+unapproved state" and "release is not waiting solely on approval"
+(`approval.shares_approved_object`). Every other gate applies as before. A release whose
+object no other revision has approved is checked against all of them.
 
 ## 6. Evaluations
 
@@ -439,6 +447,10 @@ A revision is an **eligible target** when all of these hold:
 | A fresh observation of its AgentRelease exists with a current object | the observation's problem, as in approval |
 | Its release carries a declaration: the gates pass and Ready is True | "revision N is not Ready: <reason>" |
 | Its release carries no declaration: the gates pass with `PolicyDrift` and Ready left out | the first failing gate |
+
+The third check compares with a registry approval only. An approval imported from the cluster
+repository is not one, so a deployment that has no registry approval yet has nothing to
+compare with and the check passes; the other checks still apply.
 
 `POST /v1/deployments/{id}/pin` with `{"revision": N}` keeps its shape and now applies this
 check. It sets `pinned_revision` and `current_revision` to N. Event `pinned`.

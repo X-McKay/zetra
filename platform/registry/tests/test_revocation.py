@@ -5,14 +5,16 @@ from __future__ import annotations
 
 import copy
 import json
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
 
 from agent_registry import canonical, derive
+from agent_registry.config import Settings
 from agent_registry.importer import apply_feed
 from agent_registry.models import Revision, revision_id
-from agent_registry.rules import recovery, revocation
+from agent_registry.rules import recovery
 from tests.store_suite import evaluation
 from tests.test_report import REPORTS, body, reporting, send
 from tests.world import CLUSTER, DEP, FIXTURES, NAMESPACE, T0, TENANT, World, registry_owned
@@ -308,17 +310,25 @@ def test_desired_lists_a_fresh_security_revocation_that_cancels_sessions():
     ]
 
 
-def test_desired_leaves_out_a_revocation_older_than_the_setting(monkeypatch):
+def test_desired_leaves_out_a_revocation_older_than_the_setting():
     world = registry_owned()
     apply(world, entry("a-old", release=release_name(world, 2)))
-    monkeypatch.setenv("REGISTRY_REVOCATION_CANCEL_SECONDS", "60")
+    world.app.state.settings = replace(world.settings, revocation_cancel_seconds=60)
     world.tick(30)
     assert [r["id"] for r in desired(world)["revocations"]] == ["a-old"]
 
     world.tick(31)
 
     assert desired(world)["revocations"] == []
-    assert revocation.cancel_seconds({}) == 86400
+
+
+def test_the_cancel_window_is_read_from_the_environment():
+    name = "REGISTRY_REVOCATION_CANCEL_SECONDS"
+    assert Settings.from_env({}).revocation_cancel_seconds == 86400
+    assert Settings.from_env({name: "60"}).revocation_cancel_seconds == 60
+    for bad in ("soon", "-1"):
+        with pytest.raises(ValueError, match=name):
+            Settings.from_env({name: bad})
 
 
 # -- recovery ----------------------------------------------------------------------------------

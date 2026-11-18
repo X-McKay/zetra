@@ -129,6 +129,14 @@ def _errors_in_this_request(attempts: list[Evaluation]) -> int:
 
 # -- claim ---------------------------------------------------------------------------------
 
+LEASE_MARGIN_SECONDS = 120
+
+
+def lease_limit(suite: dict[str, Any]) -> int:
+    """The longest lease a suite needs: every case to its time limit, and a margin (section
+    6.3). An evaluator that stops is replaced after this long at most."""
+    return int(suite["timeout_seconds"]) * len(suite["cases"]) + LEASE_MARGIN_SECONDS
+
 
 def _claimable(reads: Reads, cluster: str, now: datetime) -> Evaluation | None:
     """The oldest evaluation of a cluster that is pending, or claimed with a lease that has run
@@ -154,7 +162,8 @@ def _claimable(reads: Reads, cluster: str, now: datetime) -> Evaluation | None:
 def claim(
     store: Store, cluster: str, evaluator: str, lease_seconds: int, *, now: datetime
 ) -> tuple[Evaluation, Release, Deployment] | None:
-    """Hand the oldest claimable evaluation of `cluster` to `evaluator` for `lease_seconds`.
+    """Hand the oldest claimable evaluation of `cluster` to `evaluator` for `lease_seconds`,
+    or for what its suite needs when that is shorter.
     Returns it with its release and deployment, or None. Decides on plain reads first, then
     again in the transaction, so that two callers never get the same evaluation."""
     if store.meta().mode == "recovery" or _claimable(store, cluster, now) is None:
@@ -165,7 +174,7 @@ def claim(
         found = _claimable(tx, cluster, now)
         if found is None:
             return None
-        expires = now + timedelta(seconds=lease_seconds)
+        expires = now + timedelta(seconds=min(lease_seconds, lease_limit(found.suite)))
         tx.event(
             "evaluation-claimed",
             deployment_id=found.deployment_id,

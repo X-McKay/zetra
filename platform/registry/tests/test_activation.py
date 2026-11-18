@@ -391,6 +391,16 @@ def test_two_claims_get_different_evaluations_or_null():
     refused(send(world, number, "passed", name="ev-1"), "conflict")
 
 
+def test_a_lease_is_no_longer_than_the_suite_needs():
+    world = registry_owned()
+    evaluating(world)
+
+    found = claim(world, lease=3600).json()["evaluation"]
+
+    # Two cases of 600 seconds and a margin of 120: 22 minutes, not the hour asked for.
+    assert found["claimExpiresAt"].startswith("2026-11-17T12:22")
+
+
 def test_claim_is_for_the_evaluator_of_that_cluster_and_nothing_in_recovery():
     world = registry_owned()
     evaluating(world)

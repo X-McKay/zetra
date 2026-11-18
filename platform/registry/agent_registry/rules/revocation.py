@@ -6,15 +6,11 @@ not its names, from `rules.revisions`: the two modules call each other.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from datetime import datetime
 
 from agent_registry.models import Release, Revocation, release_id
 from agent_registry.rules import revisions
 from agent_registry.store import Reads, Tx
-
-CANCEL_SECONDS_VARIABLE = "REGISTRY_REVOCATION_CANCEL_SECONDS"
-DEFAULT_CANCEL_SECONDS = 86400
 
 
 def revoked(reads: Reads, release: Release) -> Revocation | None:
@@ -28,21 +24,6 @@ def revoked_named(reads: Reads, kind: str, item: str, name: str) -> Revocation |
         if revocation.release == name:
             return revocation
     return None
-
-
-def cancel_seconds(environ: Mapping[str, str]) -> int:
-    """How long after it is stored a security revocation is offered to the provisioner
-    (`REGISTRY_REVOCATION_CANCEL_SECONDS`). Moves into `Settings` when the packages are joined."""
-    text = environ.get(CANCEL_SECONDS_VARIABLE)
-    if text is None or text == "":
-        return DEFAULT_CANCEL_SECONDS
-    try:
-        value = int(text)
-    except ValueError as error:
-        raise ValueError(f"{CANCEL_SECONDS_VARIABLE} is not a whole number: {text!r}") from error
-    if value < 0:
-        raise ValueError(f"{CANCEL_SECONDS_VARIABLE} is negative")
-    return value
 
 
 def apply(tx: Tx, revocation: Revocation, *, now: datetime) -> list[str]:

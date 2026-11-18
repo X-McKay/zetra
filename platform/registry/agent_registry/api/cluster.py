@@ -6,7 +6,6 @@ Rules: `contract/projection.md`. Logic lives in `agent_registry/rules/projection
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta
 from typing import Annotated
 
@@ -18,7 +17,7 @@ from agent_registry.api.auth import Principal, provisioner
 from agent_registry.api.deps import get_settings, get_store, now
 from agent_registry.config import FIELD_MANAGER, Settings
 from agent_registry.models import Observation
-from agent_registry.rules import Refusal, intake, projection, revocation
+from agent_registry.rules import Refusal, intake, projection
 from agent_registry.store import Store
 
 router = APIRouter(prefix="/v1/clusters/{cluster}", tags=["cluster"])
@@ -33,6 +32,7 @@ Now = Annotated[datetime, Depends(now)]
 def desired(
     cluster: str,
     store: StoreDep,
+    settings: SettingsDep,
     who: Provisioner,
     at: Now,
     last_generation: Annotated[int, Query(alias="lastGeneration", ge=0)] = 0,
@@ -87,14 +87,18 @@ def desired(
             )
             for o in projection.observe_of(store, cluster)
         ],
-        revocations=_cancellations(store, cluster, at) if normal else [],
+        revocations=_cancellations(store, cluster, at, settings.revocation_cancel_seconds)
+        if normal
+        else [],
     )
 
 
-def _cancellations(store: Store, cluster: str, at: datetime) -> list[s.DesiredRevocation]:
+def _cancellations(
+    store: Store, cluster: str, at: datetime, seconds: int
+) -> list[s.DesiredRevocation]:
     """Section 8.3: fresh security revocations that cancel sessions, for each registry-owned
     agent of the cluster that has a revision of the revoked release."""
-    window = timedelta(seconds=revocation.cancel_seconds(os.environ))
+    window = timedelta(seconds=seconds)
     found = []
     for stored in store.revocations(kind="agent"):
         if stored.reason != "security" or stored.sessions != "cancel":

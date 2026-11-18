@@ -98,6 +98,19 @@ def agent_object(reads: Reads, deployment: Deployment) -> ProjectedObject:
     )
 
 
+def release_approval_block(reads: Reads, deployment: Deployment, release_id: str) -> dict[str, Any]:
+    """What the one AgentRelease object of a release shows as its approval: the block of the
+    newest revision of the release that has an approval, and `{"approved": false}` when none
+    has or when the release is revoked (`contract/delivery.md` section 5.1)."""
+    release = reads.release(release_id)
+    if release is None or revocation.revoked(reads, release) is not None:
+        return {"approved": False}
+    for revision in reversed(reads.revisions(deployment.id)):
+        if revision.release_id == release_id and revision.approval_id is not None:
+            return approval_block(reads, revision)
+    return {"approved": False}
+
+
 def release_object(reads: Reads, deployment: Deployment, revision: Revision) -> ProjectedObject:
     """The AgentRelease of `revision`'s release, where `revision` is the newest revision of it
     (`contract/delivery.md` section 5.1). The approval block is the one of the newest revision
@@ -110,21 +123,9 @@ def release_object(reads: Reads, deployment: Deployment, revision: Revision) -> 
     annotations = _annotations(deployment, revision.generation)
     annotations[ANNOTATION_PREFIX + "revision"] = str(revision.number)
     revoked = revocation.revoked(reads, release)
-    approver = next(
-        (
-            r
-            for r in reversed(reads.revisions(deployment.id))
-            if r.release_id == revision.release_id and r.approval_id is not None
-        ),
-        None,
-    )
     if revoked is not None:
         annotations[ANNOTATION_PREFIX + "revoked"] = revoked.id
-    block = (
-        approval_block(reads, approver)
-        if approver is not None and revoked is None
-        else {"approved": False}
-    )
+    block = release_approval_block(reads, deployment, revision.release_id)
     spec = {**copy.deepcopy(document.get("spec") or {}), "approval": block}
     return ProjectedObject(
         kind="AgentRelease",

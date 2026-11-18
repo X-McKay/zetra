@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
 from agent_registry.api.app import create_app
-from agent_registry.api.auth import AuthError
+from agent_registry.api.auth import AuthError, evaluator_cluster
 from agent_registry.api.jwks import JwksVerifier
 from agent_registry.config import Settings
 from agent_registry.store.memory import MemoryStore
@@ -123,6 +123,45 @@ def test_a_provisioner_is_known_by_the_cluster_in_its_client_name(key):
     principal = verifier.verify(token)
 
     assert (principal.person, principal.cluster) == (False, "kubani")
+
+
+def test_an_evaluator_is_known_by_its_client_and_never_by_a_user_name(key):
+    verifier = Realm((KID, key)).verifier()
+    roles = {"roles": ["registry-evaluator"]}
+
+    client = verifier.verify(
+        sign(
+            key,
+            client_id="registry-evaluator-kubani",
+            azp="registry-evaluator-kubani",
+            preferred_username=MISSING,
+            email=MISSING,
+            realm_access=roles,
+        )
+    )
+    # A person whose user name looks like an evaluator's service account, signed in with
+    # the command line client.
+    person = verifier.verify(
+        sign(
+            key,
+            azp="agent-cli",
+            preferred_username="registry-evaluator-kubani",
+            realm_access=roles,
+        )
+    )
+    named = verifier.verify(
+        sign(
+            key,
+            client_id="agent-cli",
+            azp="agent-cli",
+            preferred_username="service-account-registry-evaluator-kubani",
+            realm_access=roles,
+        )
+    )
+
+    assert evaluator_cluster(client) == "kubani"
+    assert evaluator_cluster(person) is None
+    assert evaluator_cluster(named) is None
 
 
 def test_a_client_token_as_keycloak_issues_it_carries_client_id_and_no_username(key):

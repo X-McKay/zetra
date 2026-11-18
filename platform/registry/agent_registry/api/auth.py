@@ -108,15 +108,10 @@ def provisioner(cluster: str, request: Request) -> Principal:
 
 
 def evaluator_cluster(principal: Principal) -> str | None:
-    """The cluster named by an evaluator client's `azp`, or None for any other caller.
-
-    A service account's user name is `service-account-<client>`, so it names the client when a
-    token carries no `azp`.
-    """
-    client = principal.azp or principal.username.removeprefix("service-account-")
-    if principal.person or not client.startswith(EVALUATOR_CLIENT_PREFIX):
+    """The cluster named by an evaluator client's `azp`, or None for any other caller."""
+    if principal.person or not principal.azp.startswith(EVALUATOR_CLIENT_PREFIX):
         return None
-    return client.removeprefix(EVALUATOR_CLIENT_PREFIX) or None
+    return principal.azp.removeprefix(EVALUATOR_CLIENT_PREFIX) or None
 
 
 def evaluator_of_any_cluster(request: Request) -> Principal:
