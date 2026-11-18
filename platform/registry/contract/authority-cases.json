@@ -1,0 +1,376 @@
+{
+  "about": "Cases for rules.authority.widens(base, candidate). Each case applies its mutations (JSON Patch operations with JSON Pointer paths) to a copy of `base` to make the candidate, and expects exactly `reasons`, in that order. `base` is the authority of the db-admin fixture. With an empty base ({}), any candidate gives the single reason in `emptyBase`.",
+  "base": {
+    "identity": {
+      "mode": "agent",
+      "onBehalfOf": null
+    },
+    "models": [
+      {
+        "backend": "llm-main",
+        "models": [
+          "Qwen3.6-35B-A3B-NVFP4"
+        ],
+        "budget": {
+          "tokensPerDay": 1000000,
+          "tokensPerSession": 200000
+        }
+      }
+    ],
+    "mcp": [
+      {
+        "backend": "postgres-admin",
+        "effect": "remote_read",
+        "tools": [
+          "execute_sql"
+        ],
+        "delegation": "inherit"
+      }
+    ],
+    "runtime": {
+      "runtimeClass": null,
+      "cpu": "1",
+      "memory": "2Gi",
+      "ttlSeconds": 900,
+      "maxBoundaries": null
+    }
+  },
+  "emptyBase": [
+    "there is no approved authority to compare with"
+  ],
+  "cases": [
+    {
+      "name": "the same",
+      "mutations": [],
+      "reasons": []
+    },
+    {
+      "name": "lower daily budget",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/models/0/budget/tokensPerDay",
+          "value": 500000
+        }
+      ],
+      "reasons": []
+    },
+    {
+      "name": "shorter lifetime",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/runtime/ttlSeconds",
+          "value": 600
+        }
+      ],
+      "reasons": []
+    },
+    {
+      "name": "a tool dropped",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/mcp/0/tools",
+          "value": []
+        }
+      ],
+      "reasons": []
+    },
+    {
+      "name": "the tool backend dropped",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/mcp",
+          "value": []
+        }
+      ],
+      "reasons": []
+    },
+    {
+      "name": "the model backend dropped",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/models",
+          "value": []
+        }
+      ],
+      "reasons": []
+    },
+    {
+      "name": "higher daily budget",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/models/0/budget/tokensPerDay",
+          "value": 2000000
+        }
+      ],
+      "reasons": [
+        "model backend llm-main raises tokensPerDay from 1000000 to 2000000"
+      ]
+    },
+    {
+      "name": "higher session budget",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/models/0/budget/tokensPerSession",
+          "value": 200001
+        }
+      ],
+      "reasons": [
+        "model backend llm-main raises tokensPerSession from 200000 to 200001"
+      ]
+    },
+    {
+      "name": "budget removed",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/models/0/budget/tokensPerDay",
+          "value": null
+        }
+      ],
+      "reasons": [
+        "model backend llm-main raises tokensPerDay from 1000000 to None"
+      ]
+    },
+    {
+      "name": "budget is not a number",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/models/0/budget/tokensPerDay",
+          "value": "1000000"
+        }
+      ],
+      "reasons": [
+        "model backend llm-main raises tokensPerDay from 1000000 to '1000000'"
+      ]
+    },
+    {
+      "name": "a model added",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/models/0/models",
+          "value": [
+            "Qwen/Qwen3.5-0.8B",
+            "Qwen3.6-35B-A3B-NVFP4"
+          ]
+        }
+      ],
+      "reasons": [
+        "model backend llm-main adds models Qwen/Qwen3.5-0.8B"
+      ]
+    },
+    {
+      "name": "a model backend added",
+      "mutations": [
+        {
+          "op": "add",
+          "path": "/models/1",
+          "value": {
+            "backend": "llm-fast",
+            "models": [
+              "Qwen/Qwen3.5-0.8B"
+            ],
+            "budget": {
+              "tokensPerDay": 1,
+              "tokensPerSession": 1
+            }
+          }
+        }
+      ],
+      "reasons": [
+        "model backend llm-fast is new"
+      ]
+    },
+    {
+      "name": "a tool added",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/mcp/0/tools",
+          "value": [
+            "execute_sql",
+            "explain_query"
+          ]
+        }
+      ],
+      "reasons": [
+        "tool backend postgres-admin adds tools explain_query"
+      ]
+    },
+    {
+      "name": "a tool backend added",
+      "mutations": [
+        {
+          "op": "add",
+          "path": "/mcp/0",
+          "value": {
+            "backend": "kubernetes",
+            "effect": "remote_read",
+            "tools": [
+              "pods_list"
+            ],
+            "delegation": "inherit"
+          }
+        }
+      ],
+      "reasons": [
+        "tool backend kubernetes is new"
+      ]
+    },
+    {
+      "name": "effect changes",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/mcp/0/effect",
+          "value": "remote_write"
+        }
+      ],
+      "reasons": [
+        "tool backend postgres-admin changes effect from 'remote_read' to 'remote_write'"
+      ]
+    },
+    {
+      "name": "delegation changes",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/mcp/0/delegation",
+          "value": "required"
+        }
+      ],
+      "reasons": [
+        "tool backend postgres-admin changes delegation from 'inherit' to 'required'"
+      ]
+    },
+    {
+      "name": "identity mode changes",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/identity/mode",
+          "value": "on-behalf-of"
+        }
+      ],
+      "reasons": [
+        "identity mode changes from 'agent' to 'on-behalf-of'"
+      ]
+    },
+    {
+      "name": "on behalf of changes",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/identity/onBehalfOf",
+          "value": {
+            "required": true
+          }
+        }
+      ],
+      "reasons": [
+        "identity onBehalfOf changes from None to {'required': True}"
+      ]
+    },
+    {
+      "name": "longer lifetime",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/runtime/ttlSeconds",
+          "value": 1800
+        }
+      ],
+      "reasons": [
+        "runtime ttlSeconds rises from 900 to 1800"
+      ]
+    },
+    {
+      "name": "a boundary limit where there was none",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/runtime/maxBoundaries",
+          "value": 4
+        }
+      ],
+      "reasons": [
+        "runtime maxBoundaries rises from None to 4"
+      ]
+    },
+    {
+      "name": "more memory",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/runtime/memory",
+          "value": "4Gi"
+        }
+      ],
+      "reasons": [
+        "runtime memory changes from '2Gi' to '4Gi'"
+      ]
+    },
+    {
+      "name": "less cpu is still a change",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/runtime/cpu",
+          "value": "500m"
+        }
+      ],
+      "reasons": [
+        "runtime cpu changes from '1' to '500m'"
+      ]
+    },
+    {
+      "name": "another runtime class",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/runtime/runtimeClass",
+          "value": "kata"
+        }
+      ],
+      "reasons": [
+        "runtime runtimeClass changes from None to 'kata'"
+      ]
+    },
+    {
+      "name": "several at once, in order",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": "/runtime/ttlSeconds",
+          "value": 1800
+        },
+        {
+          "op": "replace",
+          "path": "/mcp/0/tools",
+          "value": [
+            "execute_sql",
+            "explain_query"
+          ]
+        },
+        {
+          "op": "replace",
+          "path": "/models/0/budget/tokensPerDay",
+          "value": 2000000
+        }
+      ],
+      "reasons": [
+        "model backend llm-main raises tokensPerDay from 1000000 to 2000000",
+        "tool backend postgres-admin adds tools explain_query",
+        "runtime ttlSeconds rises from 900 to 1800"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "cluster": "kubani",
+  "mode": "normal",
+  "generation": 3,
+  "fieldManager": "agent-registry-provisioner",
+  "namespaces": [
+    "tenant-test"
+  ],
+  "fluxInventories": [
+    {
+      "namespace": "flux-system",
+      "name": "apps"
+    }
+  ],
+  "deployments": [
+    {
+      "deployment": "agent:kubani:tenant-test:db-admin",
+      "agent": "db-admin",
+      "tenant": "tenant-test",
+      "namespace": "tenant-test",
+      "objects": [
+        {
+          "kind": "Agent",
+          "namespace": "tenant-test",
+          "name": "db-admin",
+          "generation": 3,
+          "document": {
+            "apiVersion": "agentplatform.io/v1alpha1",
+            "kind": "Agent",
+            "metadata": {
+              "name": "db-admin",
+              "namespace": "tenant-test",
+              "annotations": {
+                "registry.agentplatform.io/deployment": "agent:kubani:tenant-test:db-admin",
+                "registry.agentplatform.io/cluster": "kubani",
+                "registry.agentplatform.io/generation": "3",
+                "registry.agentplatform.io/current-release": "db-admin-2026-11-13-33c8acb2"
+              }
+            },
+            "spec": {
+              "owner": "4785437+X-McKay@users.noreply.github.com",
+              "description": "Read-only database health adviser using redacted monitoring views through agentgateway",
+              "identity": {
+                "mode": "agent"
+              },
+              "capabilities": {
+                "models": [
+                  {
+                    "backend": "llm-main",
+                    "models": [
+                      "Qwen3.6-35B-A3B-NVFP4"
+                    ],
+                    "budget": {
+                      "tokensPerDay": 1000000,
+                      "tokensPerSession": 200000
+                    }
+                  }
+                ],
+                "mcp": [
+                  {
+                    "backend": "postgres-admin",
+                    "effect": "remote_read",
+                    "tools": [
+                      "execute_sql"
+                    ],
+                    "delegation": "inherit"
+                  }
+                ]
+              },
+              "runtime": {
+                "cpu": "1",
+                "memory": "2Gi",
+                "ttlSeconds": 900
+              },
+              "enabled": true
+            }
+          }
+        },
+        {
+          "kind": "AgentRelease",
+          "namespace": "tenant-test",
+          "name": "db-admin-2026-11-07-3e94dc5e",
+          "generation": 2,
+          "document": {
+            "apiVersion": "agentplatform.io/v1alpha1",
+            "kind": "AgentRelease",
+            "metadata": {
+              "name": "db-admin-2026-11-07-3e94dc5e",
+              "namespace": "tenant-test",
+              "annotations": {
+                "registry.agentplatform.io/deployment": "agent:kubani:tenant-test:db-admin",
+                "registry.agentplatform.io/cluster": "kubani",
+                "registry.agentplatform.io/generation": "2",
+                "registry.agentplatform.io/revision": "1"
+              }
+            },
+            "spec": {
+              "agent": "db-admin",
+              "image": "registry.almckay.io/agents/db-admin@sha256:3e94dc5e3a8d97a24142993e2eb5c0a20c1b262e30910b937ca3466175092039",
+              "manifestSha256": "722f4e0faa59568a0ab42b558d6d48caefed2d585a625fdeac096d0edaa8c6b1",
+              "policySha256": "952f9f6c558bf68c0f4f097e4d702b30d71df9dfca64c74725677e05eab3d8d5",
+              "lockSha256": "1586753932976165b8daf41bd0ba52cc9cf24e584f81e9b51a254ea9b27c9ab2",
+              "buildRevision": "cf08c2ba24652263b6313a2010a51dd500719cba",
+              "approval": {
+                "approved": true,
+                "approvedBy": "4785437+X-McKay@users.noreply.github.com",
+                "approvedAt": "2026-11-07T02:04:48Z"
+              }
+            }
+          }
+        },
+        {
+          "kind": "AgentRelease",
+          "namespace": "tenant-test",
+          "name": "db-admin-2026-11-13-33c8acb2",
+          "generation": 2,
+          "document": {
+            "apiVersion": "agentplatform.io/v1alpha1",
+            "kind": "AgentRelease",
+            "metadata": {
+              "name": "db-admin-2026-11-13-33c8acb2",
+              "namespace": "tenant-test",
+              "annotations": {
+                "registry.agentplatform.io/deployment": "agent:kubani:tenant-test:db-admin",
+                "registry.agentplatform.io/cluster": "kubani",
+                "registry.agentplatform.io/generation": "2",
+                "registry.agentplatform.io/revision": "2"
+              }
+            },
+            "spec": {
+              "agent": "db-admin",
+              "image": "registry.almckay.io/agents/db-admin@sha256:33c8acb2a381839f0c4ff322d56a7e4949bc34e36f5eb89cbcb140fcd83df67e",
+              "manifestSha256": "722f4e0faa59568a0ab42b558d6d48caefed2d585a625fdeac096d0edaa8c6b1",
+              "policySha256": "426a95900f02422d0b95013319e7b081282e83098372b5ce4eb926b392698fd8",
+              "lockSha256": "76b52911ab431bf148bbf003b4f5afff86b9179a6b464447d155b3c21ca6b985",
+              "buildRevision": "ef9de7b5f8fd1da3dfd4928051fb5c9f8b137bb2",
+              "approval": {
+                "approved": true,
+                "approvedBy": "4785437+X-McKay@users.noreply.github.com",
+                "approvedAt": "2026-11-13T21:58:12Z"
+              }
+            }
+          }
+        },
+        {
+          "kind": "AgentRelease",
+          "namespace": "tenant-test",
+          "name": "db-admin-2026-11-18-aaaaaaaa",
+          "generation": 3,
+          "document": {
+            "apiVersion": "agentplatform.io/v1alpha1",
+            "kind": "AgentRelease",
+            "metadata": {
+              "name": "db-admin-2026-11-18-aaaaaaaa",
+              "namespace": "tenant-test",
+              "annotations": {
+                "registry.agentplatform.io/deployment": "agent:kubani:tenant-test:db-admin",
+                "registry.agentplatform.io/cluster": "kubani",
+                "registry.agentplatform.io/generation": "3",
+                "registry.agentplatform.io/revision": "3"
+              }
+            },
+            "spec": {
+              "agent": "db-admin",
+              "image": "registry.almckay.io/agents/db-admin@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "manifestSha256": "63b27894f5d0723337cc7dfdb64ab8a4c421e80649199eb6dc3a8219099a3c95",
+              "policySha256": "54038a26fa048b753c6de189a9818d6a14a0830762859a1c38243a93c0f0c3a2",
+              "lockSha256": "ffce7248823835935e987637ca549c21b4656d3ad1e66f7f47f7bdc3d9468a33",
+              "buildRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "approval": {
+                "approved": false
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "observe": [
+    {
+      "subjectKind": "tool-server",
+      "name": "postgres-admin-mcp",
+      "namespace": "mcp",
+      "workload": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "namespace": "mcp",
+        "name": "postgres-admin-mcp"
+      }
+    },
+    {
+      "subjectKind": "model-engine",
+      "name": "main",
+      "namespace": "vllm",
+      "workload": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "namespace": "vllm",
+        "name": "vllm"
+      },
+      "servedNameFrom": {
+        "kind": "ConfigMap",
+        "name": "model-config",
+        "key": "LLM_MODEL_NAME"
+      }
+    }
+  ]
+}

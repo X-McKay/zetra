@@ -1,0 +1,355 @@
+{
+  "observedAt": "2026-11-17T12:00:30Z",
+  "lastGeneration": 3,
+  "complete": [
+    {
+      "subjectKind": "agent",
+      "namespace": "tenant-test"
+    },
+    {
+      "subjectKind": "agentrelease",
+      "namespace": "tenant-test"
+    }
+  ],
+  "objects": [
+    {
+      "subjectKind": "agent",
+      "namespace": "tenant-test",
+      "name": "db-admin",
+      "inFluxInventory": false,
+      "document": {
+        "metadata": {
+          "name": "db-admin",
+          "namespace": "tenant-test",
+          "annotations": {
+            "registry.agentplatform.io/deployment": "agent:kubani:tenant-test:db-admin",
+            "registry.agentplatform.io/cluster": "kubani",
+            "registry.agentplatform.io/generation": "3",
+            "registry.agentplatform.io/current-release": "db-admin-2026-11-13-33c8acb2"
+          },
+          "uid": "uid-db-admin",
+          "resourceVersion": "1003"
+        },
+        "spec": {
+          "owner": "4785437+X-McKay@users.noreply.github.com",
+          "description": "Read-only database health adviser using redacted monitoring views through agentgateway",
+          "identity": {
+            "mode": "agent"
+          },
+          "capabilities": {
+            "models": [
+              {
+                "backend": "llm-main",
+                "models": [
+                  "Qwen3.6-35B-A3B-NVFP4"
+                ],
+                "budget": {
+                  "tokensPerDay": 1000000,
+                  "tokensPerSession": 200000
+                }
+              }
+            ],
+            "mcp": [
+              {
+                "backend": "postgres-admin",
+                "effect": "remote_read",
+                "tools": [
+                  "execute_sql"
+                ],
+                "delegation": "inherit"
+              }
+            ]
+          },
+          "runtime": {
+            "cpu": "1",
+            "memory": "2Gi",
+            "ttlSeconds": 900
+          },
+          "enabled": true
+        },
+        "status": {}
+      }
+    },
+    {
+      "subjectKind": "agentrelease",
+      "namespace": "tenant-test",
+      "name": "db-admin-2026-11-07-3e94dc5e",
+      "inFluxInventory": false,
+      "document": {
+        "metadata": {
+          "name": "db-admin-2026-11-07-3e94dc5e",
+          "namespace": "tenant-test",
+          "annotations": {
+            "registry.agentplatform.io/deployment": "agent:kubani:tenant-test:db-admin",
+            "registry.agentplatform.io/cluster": "kubani",
+            "registry.agentplatform.io/generation": "2",
+            "registry.agentplatform.io/revision": "1"
+          },
+          "uid": "uid-db-admin-2026-11-07-3e94dc5e",
+          "resourceVersion": "1002"
+        },
+        "spec": {
+          "agent": "db-admin",
+          "image": "registry.almckay.io/agents/db-admin@sha256:3e94dc5e3a8d97a24142993e2eb5c0a20c1b262e30910b937ca3466175092039",
+          "manifestSha256": "722f4e0faa59568a0ab42b558d6d48caefed2d585a625fdeac096d0edaa8c6b1",
+          "policySha256": "952f9f6c558bf68c0f4f097e4d702b30d71df9dfca64c74725677e05eab3d8d5",
+          "lockSha256": "1586753932976165b8daf41bd0ba52cc9cf24e584f81e9b51a254ea9b27c9ab2",
+          "buildRevision": "cf08c2ba24652263b6313a2010a51dd500719cba",
+          "approval": {
+            "approved": true,
+            "approvedBy": "4785437+X-McKay@users.noreply.github.com",
+            "approvedAt": "2026-11-07T02:04:48Z"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "type": "PolicyDrift",
+              "status": "False",
+              "reason": "NoDrift",
+              "message": ""
+            },
+            {
+              "type": "Ready",
+              "status": "True",
+              "reason": "Ready",
+              "message": ""
+            },
+            {
+              "type": "SignatureVerified",
+              "status": "True",
+              "reason": "Verified",
+              "message": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/db-admin/v0.1.1"
+            }
+          ],
+          "identityMode": "agent",
+          "delegationRequired": false,
+          "policyDigest": "sha256:952f9f6c558bf68c0f4f097e4d702b30d71df9dfca64c74725677e05eab3d8d5",
+          "policyDrift": false,
+          "ready": true,
+          "signatureVerified": true,
+          "verifiedSigner": {
+            "issuer": "https://token.actions.githubusercontent.com",
+            "subject": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/db-admin/v0.1.1",
+            "attestations": [
+              "https://slsa.dev/provenance/v1",
+              "https://spdx.dev/Document",
+              "https://cosign.sigstore.dev/attestation/vuln/v1",
+              "https://agentplatform.io/eval/v1",
+              "https://agentplatform.io/attestations/release/v1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "subjectKind": "agentrelease",
+      "namespace": "tenant-test",
+      "name": "db-admin-2026-11-13-33c8acb2",
+      "inFluxInventory": false,
+      "document": {
+        "metadata": {
+          "name": "db-admin-2026-11-13-33c8acb2",
+          "namespace": "tenant-test",
+          "annotations": {
+            "registry.agentplatform.io/deployment": "agent:kubani:tenant-test:db-admin",
+            "registry.agentplatform.io/cluster": "kubani",
+            "registry.agentplatform.io/generation": "2",
+            "registry.agentplatform.io/revision": "2"
+          },
+          "uid": "uid-db-admin-2026-11-13-33c8acb2",
+          "resourceVersion": "1002"
+        },
+        "spec": {
+          "agent": "db-admin",
+          "image": "registry.almckay.io/agents/db-admin@sha256:33c8acb2a381839f0c4ff322d56a7e4949bc34e36f5eb89cbcb140fcd83df67e",
+          "manifestSha256": "722f4e0faa59568a0ab42b558d6d48caefed2d585a625fdeac096d0edaa8c6b1",
+          "policySha256": "426a95900f02422d0b95013319e7b081282e83098372b5ce4eb926b392698fd8",
+          "lockSha256": "76b52911ab431bf148bbf003b4f5afff86b9179a6b464447d155b3c21ca6b985",
+          "buildRevision": "ef9de7b5f8fd1da3dfd4928051fb5c9f8b137bb2",
+          "approval": {
+            "approved": true,
+            "approvedBy": "4785437+X-McKay@users.noreply.github.com",
+            "approvedAt": "2026-11-13T21:58:12Z"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "type": "PolicyDrift",
+              "status": "False",
+              "reason": "NoDrift",
+              "message": ""
+            },
+            {
+              "type": "Ready",
+              "status": "True",
+              "reason": "Ready",
+              "message": ""
+            },
+            {
+              "type": "SignatureVerified",
+              "status": "True",
+              "reason": "Verified",
+              "message": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/db-admin/v0.1.2"
+            }
+          ],
+          "identityMode": "agent",
+          "delegationRequired": false,
+          "policyDigest": "sha256:426a95900f02422d0b95013319e7b081282e83098372b5ce4eb926b392698fd8",
+          "policyDrift": false,
+          "ready": true,
+          "signatureVerified": true,
+          "verifiedSigner": {
+            "issuer": "https://token.actions.githubusercontent.com",
+            "subject": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/db-admin/v0.1.2",
+            "attestations": [
+              "https://slsa.dev/provenance/v1",
+              "https://spdx.dev/Document",
+              "https://cosign.sigstore.dev/attestation/vuln/v1",
+              "https://agentplatform.io/eval/v1",
+              "https://agentplatform.io/attestations/release/v1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "subjectKind": "agentrelease",
+      "namespace": "tenant-test",
+      "name": "db-admin-2026-11-18-aaaaaaaa",
+      "inFluxInventory": false,
+      "document": {
+        "metadata": {
+          "name": "db-admin-2026-11-18-aaaaaaaa",
+          "namespace": "tenant-test",
+          "annotations": {
+            "registry.agentplatform.io/deployment": "agent:kubani:tenant-test:db-admin",
+            "registry.agentplatform.io/cluster": "kubani",
+            "registry.agentplatform.io/generation": "3",
+            "registry.agentplatform.io/revision": "3"
+          },
+          "uid": "uid-db-admin-2026-11-18-aaaaaaaa",
+          "resourceVersion": "1003"
+        },
+        "spec": {
+          "agent": "db-admin",
+          "image": "registry.almckay.io/agents/db-admin@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "manifestSha256": "63b27894f5d0723337cc7dfdb64ab8a4c421e80649199eb6dc3a8219099a3c95",
+          "policySha256": "54038a26fa048b753c6de189a9818d6a14a0830762859a1c38243a93c0f0c3a2",
+          "lockSha256": "ffce7248823835935e987637ca549c21b4656d3ad1e66f7f47f7bdc3d9468a33",
+          "buildRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "approval": {
+            "approved": false
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "type": "PolicyDrift",
+              "status": "False",
+              "reason": "NoDrift",
+              "message": ""
+            },
+            {
+              "type": "Ready",
+              "status": "False",
+              "reason": "NotApproved",
+              "message": ""
+            },
+            {
+              "type": "SignatureVerified",
+              "status": "True",
+              "reason": "Verified",
+              "message": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/db-admin/v0.1.3"
+            }
+          ],
+          "identityMode": "agent",
+          "delegationRequired": false,
+          "policyDigest": "sha256:54038a26fa048b753c6de189a9818d6a14a0830762859a1c38243a93c0f0c3a2",
+          "policyDrift": false,
+          "ready": false,
+          "signatureVerified": true,
+          "verifiedSigner": {
+            "issuer": "https://token.actions.githubusercontent.com",
+            "subject": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/db-admin/v0.1.3",
+            "attestations": [
+              "https://slsa.dev/provenance/v1",
+              "https://spdx.dev/Document",
+              "https://cosign.sigstore.dev/attestation/vuln/v1",
+              "https://agentplatform.io/eval/v1",
+              "https://agentplatform.io/attestations/release/v1"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "subjects": [
+    {
+      "subjectKind": "tool-server",
+      "namespace": "mcp",
+      "name": "postgres-admin-mcp",
+      "present": true,
+      "document": {
+        "images": [
+          "docker.io/crystaldba/postgres-mcp@sha256:dbbd346860d29f1543e991f30f3284bf4ab5f096d049ecc3426528f20b1b6e6b"
+        ],
+        "replicas": 1,
+        "readyReplicas": 1
+      }
+    },
+    {
+      "subjectKind": "model-engine",
+      "namespace": "vllm",
+      "name": "main",
+      "present": true,
+      "document": {
+        "images": [
+          "vllm/vllm-openai:v0.30.0"
+        ],
+        "replicas": 1,
+        "readyReplicas": 1,
+        "servedName": "Qwen3.6-35B-A3B-NVFP4"
+      }
+    }
+  ],
+  "projections": [
+    {
+      "deployment": "agent:kubani:tenant-test:db-admin",
+      "kind": "Agent",
+      "namespace": "tenant-test",
+      "name": "db-admin",
+      "generation": 3,
+      "result": "applied",
+      "message": ""
+    },
+    {
+      "deployment": "agent:kubani:tenant-test:db-admin",
+      "kind": "AgentRelease",
+      "namespace": "tenant-test",
+      "name": "db-admin-2026-11-07-3e94dc5e",
+      "generation": 2,
+      "result": "unchanged",
+      "message": ""
+    },
+    {
+      "deployment": "agent:kubani:tenant-test:db-admin",
+      "kind": "AgentRelease",
+      "namespace": "tenant-test",
+      "name": "db-admin-2026-11-13-33c8acb2",
+      "generation": 2,
+      "result": "unchanged",
+      "message": ""
+    },
+    {
+      "deployment": "agent:kubani:tenant-test:db-admin",
+      "kind": "AgentRelease",
+      "namespace": "tenant-test",
+      "name": "db-admin-2026-11-18-aaaaaaaa",
+      "generation": 3,
+      "result": "applied",
+      "message": ""
+    }
+  ]
+}
