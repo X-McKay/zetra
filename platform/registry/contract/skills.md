@@ -303,7 +303,9 @@ code can do in its container.
 In the image the pinned skills are at `/app/skills/<name>/` and the lock at
 `/app/skills.lock`; in code, `app_dir() / "skills"` and `app_dir() / "skills.lock"`. Both
 are read-only there. The local harness (`zetra-agents run`) lays its app directory out the
-same way.
+same way, and sets `AGENT_EFFECTS` from what the agent requests: there is no tenant on a
+developer's machine to grant or refuse, so an agent that requests the effect runs its skill
+scripts there, as the developer.
 
 When the manifest lists skills, the step refuses to load the agent (an agent error, exit 3)
 unless every listed skill is a directory there, the lock pins exactly the listed skills, and
@@ -314,7 +316,8 @@ Nothing is fetched at run time. Every skill tool reads the image and nothing els
 
 ### 8.2 Discovery
 
-When at least one skill is listed, the system prompt is the agent's instructions followed by:
+When at least one skill is listed, the system prompt is the agent's instructions, without
+the line breaks at their end, followed by:
 
 ```text
 
@@ -352,21 +355,43 @@ any other, and its result is bounded like any other tool result.
 where `body` is `SKILL.md` after its front matter, `files` is every file of the skill except
 `SKILL.md` and `zetra.yaml`, sorted, and `scripts` is what `skill_run` would accept for this
 skill in this session (empty when the skill is undeclared, declares none, or the launcher is
-not offered). `SKILL.md` may be at most 32768 bytes; `check` fails a larger one.
+not offered). `SKILL.md` may be at most 32768 bytes; `check` fails a larger one, and the
+tool refuses one with `too_large`.
 
 `skill_file` returns `{"skill", "path", "content", "next_offset"}`: up to 24000 characters of
 a UTF-8 text file of the skill from character `offset` (default 0), and the offset to ask
-for next, or `null` at the end. The path is confined as section 9.2 says.
-
-A refusal is a result, not an error: `{"refused": code, "message": text}` with the codes of
-section 9.3, plus `not_text` for a file that is not UTF-8.
+for next, or `null` at the end. The path is confined as section 9.2 says, and any regular
+file of the skill can be read, `SKILL.md` and `zetra.yaml` included. An offset that is not a
+non-negative integer is refused with `arguments`.
 
 `skill_run` takes a skill name, a script name and a list of arguments. It does not take a
-command line.
+command line. It returns
+
+```json
+{"exit_status": 0, "limits_hit": [], "stdout": "42\n", "stderr": "", "duration_ms": 41}
+```
+
+A refusal is a result, not an error: `{"refused": code, "message": text}` with the codes of
+section 9.3, plus `not_text` for a file that is not UTF-8 and `too_large` for the `SKILL.md`
+above.
+
+The result of a skill tool reaches the model whole when it is at most 60000 bytes as JSON
+(a string in any other tool's result is cut at 16384 characters). `skill_file` shortens its window until its result
+fits, so `next_offset` is always where the content stopped.
+
+`AGENT_EFFECTS` is read as names separated by commas or spaces. Where `skill_run` is not
+offered, a call of it is a call of a tool the agent does not have: an agent error (exit 3)
+like any other, with the record of section 10.
 
 ## 9. The launcher
 
-`agent_runtime/skills/launcher.py`. It needs Linux and `/proc`; anywhere else it refuses.
+`agent_runtime/skills/launcher.py`. It needs Linux, a readable `/proc` and the null device;
+anywhere else it refuses.
+
+The runtime's optional Landlock rules (`agent_runtime/confine.py`, the `landlock` extra, which
+no agent image installs today) allow neither `/proc` nor the null device. A step confined by
+them therefore refuses every script with `unsupported`. Running scripts under those rules
+needs a decision about the rules, and waits for it.
 
 ### 9.1 Interface
 
@@ -382,7 +407,8 @@ class Limits:
 class Run:
     skill: str | None               # None when the name given was not a listed skill
     script: str | None              # None when the name given was not a listed script
-    digest: str | None              # of the skill directory as it was run
+    digest: str | None              # of the skill directory as it was run; None when the
+                                    # run was refused before the digest was computed
     arguments: tuple[str, ...]      # in full
     refused: str | None             # a code of 9.3, or None when the script was started
     exit_status: int | None         # None when refused or stopped; negative N: signal N
@@ -432,9 +458,14 @@ replaces the sandbox.
 | `interpreter` | The interpreter is not found. |
 | `digest` | The skill directory is not what the lock pins. |
 | `workspace` | The workspace is not a real directory. |
-| `unsupported` | Not Linux, or no `/proc`. |
+| `unsupported` | Not Linux, or `/proc` or the null device cannot be read. |
 
-A refused run starts no process.
+A refused run starts no process. The checks are made in this order, and the first that fails
+is the refusal: `unsupported`; `unknown_skill`; `path` for a skill directory that is missing
+or holds a link or a special file; `digest` for a sidecar that no longer reads; `undeclared`;
+`unknown_script`; `path` for the script; `arguments`; `workspace`; `interpreter`; `digest`
+for a directory the lock does not pin. An interpreter that is found and cannot be started is
+`interpreter` as well.
 
 ### 9.4 Supervision, limits and the end of a run
 
@@ -505,7 +536,15 @@ boundary and on no other:
 ```
 
 - `skill` and `script` are `null` when the name the model gave was not a listed one, so the
-  record never carries text the model made up. `digest` is `null` when there is no skill.
+  record never carries text the model made up. `digest` is the digest of the directory as
+  the launcher computed it, and `null` when the run was refused before that (the digest is
+  the last check of section 9.3).
+- A call where `skill_run` is not offered (section 8.3) never reaches the launcher. The step
+  records it itself: `refused` is `not_offered`, `skill`, `script`, `digest` and
+  `exit_status` are `null`, `argument_count` is 0, `arguments_sha256` is the hash of the
+  empty list, `limits_hit` is empty and `duration_ms` is 0. Nothing the model sent is in it.
+- When the launcher raises `LauncherFailure` the step exits 6 with no `script_run`; the
+  runner does not read the output of that exit (section 9.1).
 - `arguments_sha256` is the hex SHA-256 of the arguments as compact JSON
   (`json.dumps(list, ensure_ascii=False, separators=(",", ":"))`, UTF-8). The arguments
   themselves are task content. They stay in the session's transcript, in the tool call the
@@ -516,9 +555,10 @@ The runner accepts `script_run` as an optional key of the boundary output and va
 strictly: exactly these nine keys; `skill` a skill name or null; `script` a script path of
 section 5 or null; `digest` a digest or null; `argument_count` 0 to 32; `arguments_sha256`
 64 hex characters; `exit_status` an integer from -64 to 255 or null; `limits_hit` a sorted
-list without repeats of the four limit names; `refused` a code of section 9.3 or null;
-`duration_ms` a non-negative integer. `script_run` on a boundary whose `tool` is not
-`skill_run`, or a `skill_run` boundary without it, is a protocol error.
+list without repeats of the four limit names; `refused` a code of section 9.3,
+`not_offered` or null; `duration_ms` a non-negative integer. `script_run` on a boundary
+whose `tool` is not `skill_run`, or a `skill_run` boundary without it, is a protocol error.
+A `script_run` that is `null` is read as absent.
 
 It then emits one audit record, `script_run`, with `session_id`, `generation`, `boundary`
 and the nine keys. The local harness reads the key the same way and prints the record.
@@ -553,7 +593,9 @@ The key is absent for an agent with no skills. The resource definition describes
 (at most 16 entries). It is the pipeline's statement of what the image holds; the image
 digest covers the content. Neither the controller nor the policy reads it. The registry
 keeps it in the release's document, so a release it writes to a cluster carries it
-unchanged.
+unchanged. The routes that record a release refuse a `spec.skills` that is not a list of
+such entries, and `skills` is one of the keys the approval gates compare between the
+release and the object on the cluster (`rules/gates.SPEC_KEYS`).
 
 ### 11.2 The catalog
 

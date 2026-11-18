@@ -287,7 +287,7 @@ The newest revision N, on a usable observation:
 
 | # | N is | And | Then |
 | --- | --- | --- | --- |
-| D1 | `awaiting-runtime`, no approval | A gate fails | Stays. Reason is the first failure. Event `runtime-verdict`, once per reason. |
+| D1 | `awaiting-runtime`, no approval | A gate fails | Stays. Reason is the first failure; when that is "release is not waiting solely on approval" and the object's Ready condition gives a reason other than `NotApproved`, that reason and its message follow in brackets, as in "… (EffectNotGranted: effects not granted: sandbox_execute)". Event `runtime-verdict`, once per reason. |
 | D2 | `awaiting-runtime`, no approval | Gates pass; an approval covers it (`lifecycle.md` section 7) | Approval carried forward. Stays `awaiting-runtime`, reason "approved; waiting for Ready". The Agent in force becomes N's. |
 | D3 | `awaiting-runtime`, no approval | Gates pass; no approval covers it | `pending-approval` with the reason. Event `approval-needed`. |
 | D4 | `pending-approval` or `awaiting-runtime` | A person approves (`lifecycle.md` section 8) | `awaiting-runtime` with the approval. The Agent in force becomes N's. |
