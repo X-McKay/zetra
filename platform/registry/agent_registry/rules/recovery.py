@@ -10,6 +10,7 @@ from typing import Any
 
 from agent_registry import canonical, derive
 from agent_registry.config import ANNOTATION_PREFIX
+from agent_registry.importer.skills import record_skills
 from agent_registry.models import (
     Approval,
     Deployment,
@@ -235,12 +236,13 @@ def _recover_release(
         "spec": spec,
     }
     release = derive.agent_release_record(document, recorded_at=now)
-    requirements = derive.requirements_of(release.id, agent)
+    requirements = derive.requirements_of(release.id, agent, spec.get("skills"))
     authority = canonical.authority_of(agent)
     number = max((r.number for r in tx.revisions(deployment.id)), default=0) + 1
     tenant = tx.tenant(deployment.cluster, deployment.tenant or "")
     approved = block.get("approved") is True
     tx.add_release(release)
+    record_skills(tx, release)
     tx.add_requirements(release.id, requirements)
     tx.add_revision(
         Revision(

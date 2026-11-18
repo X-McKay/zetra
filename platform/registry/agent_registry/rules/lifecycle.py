@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from agent_registry import canonical, derive
+from agent_registry.importer.skills import record_skills
 from agent_registry.models import RELEASE_NAME, Revision, revision_id
 from agent_registry.rules import Refusal, activation, alias_move, revocation
 from agent_registry.rules import approval as approvals
@@ -102,7 +103,9 @@ def record_release(
 
     agent_doc = canonical.agent_document(agent)
     authority = canonical.authority_of(agent_doc)
-    requirements = derive.requirements_of(release.id, agent_doc)
+    requirements = derive.requirements_of(
+        release.id, agent_doc, release.document["spec"].get("skills")
+    )
     number = max((r.number for r in revisions), default=0) + 1
     seq = tx.event(
         "release-recorded",
@@ -114,6 +117,7 @@ def record_release(
         },
     ).seq
     tx.add_release(release)
+    record_skills(tx, release)
     tx.add_requirements(release.id, requirements)
     tx.add_revision(
         Revision(

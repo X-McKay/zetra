@@ -91,10 +91,14 @@ def agent_release_record(
     )
 
 
-def requirements_of(rid: str, agent_document: dict[str, Any]) -> list[Requirement]:
-    """What a release needs, read from the Agent document published with it (milestone 1).
+def requirements_of(
+    rid: str, agent_document: dict[str, Any], skills: list[dict[str, Any]] | None = None
+) -> list[Requirement]:
+    """What a release needs, read from the Agent document published with it (milestone 1) and
+    the release's `spec.skills`.
 
-    One row per tool backend and one per model backend, sorted by type and then target.
+    One row per tool backend, model backend, requested effect and skill, sorted by type and
+    then target. A skill row names its one digest.
     """
     capabilities = (agent_document.get("spec") or {}).get("capabilities") or {}
     rows = [
@@ -114,6 +118,13 @@ def requirements_of(rid: str, agent_document: dict[str, Any]) -> list[Requiremen
             names=sorted(m.get("models") or []),
         )
         for m in capabilities.get("models") or []
+    ]
+    rows += [
+        Requirement(release_id=rid, type="effect", target=effect)
+        for effect in sorted(set(capabilities.get("effects") or []))
+    ] + [
+        Requirement(release_id=rid, type="skill", target=str(k.get("name")), names=[k["digest"]])
+        for k in skills or []
     ]
     return sorted(rows, key=lambda r: (r.type, r.target))
 

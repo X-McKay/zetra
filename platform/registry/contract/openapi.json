@@ -1283,7 +1283,8 @@
           "type": {
             "enum": [
               "tool",
-              "model"
+              "model",
+              "skill"
             ],
             "title": "Type",
             "type": "string"
@@ -4676,7 +4677,8 @@
             "schema": {
               "enum": [
                 "tool",
-                "model"
+                "model",
+                "skill"
               ],
               "title": "Type",
               "type": "string"
