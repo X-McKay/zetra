@@ -28,6 +28,40 @@ WORKER_POOLS = ("legacy", "governed-v1")
 MAX_TASK_BYTES = 65536
 MAX_BOUNDARIES = 64
 MAX_SUMMARY = 512
+# Skills contract section 10: the record of a skill_run boundary. The vocabularies are the
+# contract's (sections 2, 3, 5, 9.3, 9.4); the runner does not import agent_runtime.
+SCRIPT_RUN_KEYS = frozenset(
+    {
+        "skill",
+        "script",
+        "digest",
+        "argument_count",
+        "arguments_sha256",
+        "exit_status",
+        "limits_hit",
+        "refused",
+        "duration_ms",
+    }
+)
+SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")  # section 2, at most 64 characters
+SCRIPT_PATH_RE = re.compile(
+    r"^scripts/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$"
+)  # section 5, at most 128
+SKILL_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")  # section 3
+SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+SCRIPT_LIMITS = ("memory", "output", "processes", "time")  # section 9.4
+SCRIPT_REFUSALS = (  # section 9.3
+    "unknown_skill",
+    "undeclared",
+    "unknown_script",
+    "path",
+    "arguments",
+    "interpreter",
+    "digest",
+    "workspace",
+    "unsupported",
+)
+SKILL_RUN_TOOL = "skill_run"
 
 
 class InvalidInput(ValueError):
@@ -150,18 +184,14 @@ class BoundaryOut:
     tool: str | None
     usage: Usage | None
     summary: str
+    # Skills contract section 10: present on a skill_run boundary and on no other.
+    script_run: dict[str, Any] | None = None
 
     @classmethod
     def parse_strict(cls, doc: Any) -> BoundaryOut:
         """Section 10.4 schema. Unknown or missing fields and wrong types are rejected."""
-        if not isinstance(doc, dict) or set(doc) != {
-            "boundary",
-            "kind",
-            "done",
-            "tool",
-            "usage",
-            "summary",
-        }:
+        base = {"boundary", "kind", "done", "tool", "usage", "summary"}
+        if not isinstance(doc, dict) or set(doc) not in (base, base | {"script_run"}):
             raise ValueError("boundary output fields")
         if not _is_int(doc["boundary"]) or doc["boundary"] < 0:
             raise ValueError("boundary")
@@ -181,7 +211,15 @@ class BoundaryOut:
             usage = Usage(usage["input_tokens"], usage["output_tokens"])
         if not isinstance(doc["summary"], str) or len(doc["summary"]) > MAX_SUMMARY:
             raise ValueError("summary")
-        return cls(doc["boundary"], doc["kind"], doc["done"], tool, usage, doc["summary"])
+        # A null script_run is the same as an absent one: asdict() of a record writes it.
+        script_run = doc.get("script_run")
+        if (tool == SKILL_RUN_TOOL) != (script_run is not None):
+            raise ValueError("script_run belongs to skill_run boundaries only")
+        if script_run is not None:
+            _check_script_run(script_run)
+        return cls(
+            doc["boundary"], doc["kind"], doc["done"], tool, usage, doc["summary"], script_run
+        )
 
     @property
     def tokens(self) -> int:
@@ -190,6 +228,46 @@ class BoundaryOut:
 
 def _is_int(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _check_script_run(run: Any) -> None:
+    """Section 10: exactly nine keys, each in its own vocabulary."""
+    if not isinstance(run, dict) or set(run) != SCRIPT_RUN_KEYS:
+        raise ValueError("script_run fields")
+    skill, script, digest = run["skill"], run["script"], run["digest"]
+    if skill is not None and not (
+        isinstance(skill, str) and len(skill) <= 64 and SKILL_NAME_RE.fullmatch(skill)
+    ):
+        raise ValueError("script_run skill")
+    if script is not None and not (
+        isinstance(script, str)
+        and len(script) <= 128
+        and SCRIPT_PATH_RE.fullmatch(script)
+        and not any(part in (".", "..") for part in script.split("/"))
+    ):
+        raise ValueError("script_run script")
+    if digest is not None and not (isinstance(digest, str) and SKILL_DIGEST_RE.fullmatch(digest)):
+        raise ValueError("script_run digest")
+    if not _is_int(run["argument_count"]) or not 0 <= run["argument_count"] <= 32:
+        raise ValueError("script_run argument_count")
+    sha = run["arguments_sha256"]
+    if not (isinstance(sha, str) and SHA256_HEX_RE.fullmatch(sha)):
+        raise ValueError("script_run arguments_sha256")
+    status = run["exit_status"]
+    if status is not None and not (_is_int(status) and -64 <= status <= 255):
+        raise ValueError("script_run exit_status")
+    hit = run["limits_hit"]
+    if (
+        not isinstance(hit, list)
+        or not all(isinstance(h, str) and h in SCRIPT_LIMITS for h in hit)
+        or hit != sorted(set(hit))
+    ):
+        raise ValueError("script_run limits_hit")
+    refused = run["refused"]
+    if refused is not None and not (isinstance(refused, str) and refused in SCRIPT_REFUSALS):
+        raise ValueError("script_run refused")
+    if not _is_int(run["duration_ms"]) or run["duration_ms"] < 0:
+        raise ValueError("script_run duration_ms")
 
 
 @dataclass

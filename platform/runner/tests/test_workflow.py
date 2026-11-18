@@ -11,7 +11,7 @@ from temporalio.exceptions import ApplicationError
 from runner import activities as act
 from runner import records
 from runner import workflow as wf
-from runner.types import SessionInput
+from runner.types import BoundaryOut, SessionInput
 from tests.fakes import FakeAPS, FakeCore, FakeCustom, FakeNet, FakeStream
 from tests.harness import (
     FakeActivities,
@@ -436,3 +436,19 @@ def test_out_helper_is_valid_protocol():
     from runner.types import BoundaryOut
 
     assert BoundaryOut.parse_strict(asdict(out(1))) == out(1)
+
+
+async def test_runner_emits_one_script_run_record(go, caplog):
+    from tests.test_script_run import run_doc
+
+    run = run_doc()
+    skill_out = BoundaryOut(1, "tool", False, "skill_run", None, "ran", run)
+    fake = FakeActivities(done_at=2, boundary_plan=lambda gen, n: skill_out if n == 1 else None)
+    inp = session_input()
+    r = await go(fake, inp)
+    assert r.outcome == "COMPLETED"
+    lines = [rec.getMessage() for rec in caplog.records if rec.name == "runner.records"]
+    found = [json.loads(line) for line in lines if '"script_run"' in line]
+    assert found == [
+        {"event": "script_run", "session_id": inp.session_id, "generation": 1, "boundary": 1} | run
+    ]
