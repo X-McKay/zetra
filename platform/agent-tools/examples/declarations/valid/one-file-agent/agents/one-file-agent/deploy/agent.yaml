@@ -1,0 +1,29 @@
+# Written by `zetra-agents render` from agent.yaml; not edited by hand.
+apiVersion: agentplatform.io/v1alpha1
+kind: Agent
+metadata:
+  name: one-file-agent
+  namespace: tenant-example
+spec:
+  owner: dev@example.com
+  description: Reads one report.
+  identity:
+    mode: agent
+  capabilities:
+    models:
+    - backend: llm-main
+      models:
+      - main
+      budget:
+        tokensPerDay: 1000000
+        tokensPerSession: 200000
+    mcp:
+    - backend: postgres-admin
+      effect: remote_read
+      tools:
+      - execute_sql
+      delegation: inherit
+  runtime:
+    cpu: '1'
+    memory: 2Gi
+    ttlSeconds: 900
