@@ -186,6 +186,25 @@ def a4_acknowledge(tx: Tx, move_id: str, deployment: str, running: int, *, now: 
     return True
 
 
+def acknowledge(
+    store: Store, cluster: str, reports: list[tuple[str, str, int]], *, now: datetime, actor: str
+) -> int:
+    """A4 for each `(move, deployment, running)` an observation report carries. Decides on
+    plain reads first; a report that changes nothing opens no transaction. Returns how many
+    holds changed."""
+    changed = 0
+    for move_id, deployment, running in reports:
+        move = store.alias_move(move_id)
+        hold = next(iter(store.holds(move_id=move_id, deployment_id=deployment)), None)
+        if move is None or move.cluster != cluster or hold is None or hold.state not in IN_FORCE:
+            continue
+        if hold.running == running and (running != 0 or hold.state != "holding"):
+            continue
+        with store.transaction(actor) as tx:
+            changed += a4_acknowledge(tx, move_id, deployment, running, now=now)
+    return changed
+
+
 # -- A5 ------------------------------------------------------------------------------------
 
 

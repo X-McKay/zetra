@@ -22,7 +22,7 @@ from agent_registry.models import (
     release_id,
     release_slug,
 )
-from agent_registry.rules import revisions
+from agent_registry.rules import alias_move, assessment, revisions
 from agent_registry.rules import revocation as revocations
 from agent_registry.store import Store, Tx
 
@@ -307,6 +307,7 @@ def apply_feed(
     now = now or datetime.now(UTC)
     changed: list[str] = []
     with store.transaction(actor) as tx:
+        pairs_before = assessment.pairs(tx)
         for entry in feed.get("clusters", []):
             cluster = Cluster(
                 name=entry["name"],
@@ -397,6 +398,7 @@ def apply_feed(
             if have_aliases.get((alias.cluster, None, alias.alias)) != alias:
                 tx.put_alias(alias)
                 changed.append(f"alias:{alias.cluster}/{alias.alias}")
+        alias_move.note_feed(tx, pairs_before, now=now)
         for kind, section in (("tool-server", "toolServers"), ("model", "modelEngines")):
             named = {entry["name"] for entry in feed.get(section, [])}
             for item in tx.items(kind):

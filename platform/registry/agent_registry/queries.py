@@ -19,6 +19,7 @@ from agent_registry.models import (
     Revision,
 )
 from agent_registry.rules import Refusal, activation, assessment, revocation
+from agent_registry.rules import alias_move as alias_move_rules
 from agent_registry.rules.revisions import candidate
 from agent_registry.store import Reads
 
@@ -541,6 +542,7 @@ def _agent_status(
     if current is not None and ready is False:
         blockers.append(f"current release {release_name(current)} is not Ready: {not_ready}")
 
+    hold = alias_move_rules.hold_in_force(store, deployment.id)
     return s.AgentStatus(
         deployment=deployment.id,
         agent=deployment.item,
@@ -558,6 +560,13 @@ def _agent_status(
         blockers=blockers,
         next_actions=actions,
         observation=_observed(agent_observation, at, max_age),
+        held=s.HeldStatus(
+            move=hold.move_id,
+            state=hold.state,
+            reason=hold.reason or alias_move_rules.held_reason(hold.move_id),
+        )
+        if hold
+        else None,
         **extra,
     )
 
@@ -646,4 +655,5 @@ def status(store: Reads, cluster: str, now: datetime, max_age_seconds: int) -> s
         agents=agents,
         tool_servers=servers,
         models=engines,
+        alias_moves=[move_out(store, m) for m in store.alias_moves(cluster=cluster, open=True)],
     )

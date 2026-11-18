@@ -84,6 +84,16 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "held": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "lastRefused": {
             "anyOf": [
               {
@@ -1489,6 +1499,50 @@
         "title": "DesiredDeployment",
         "type": "object"
       },
+      "DesiredHold": {
+        "additionalProperties": false,
+        "description": "An agent to hold for an alias move: the provisioner writes its Agent with the `held`\nannotation, stops its sessions when `sessions` is `cancel`, and reports how many task\nsessions still run (`contract/dependencies.md` section 7).",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "move": {
+            "title": "Move",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "sessions": {
+            "enum": [
+              "finish",
+              "cancel"
+            ],
+            "title": "Sessions",
+            "type": "string"
+          },
+          "tenant": {
+            "title": "Tenant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "move",
+          "deployment",
+          "tenant",
+          "namespace",
+          "agent",
+          "sessions"
+        ],
+        "title": "DesiredHold",
+        "type": "object"
+      },
       "DesiredOut": {
         "additionalProperties": false,
         "properties": {
@@ -1520,6 +1574,13 @@
           "generation": {
             "title": "Generation",
             "type": "integer"
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/DesiredHold"
+            },
+            "title": "Holds",
+            "type": "array"
           },
           "mode": {
             "enum": [
@@ -1894,6 +1955,35 @@
         "title": "Health",
         "type": "object"
       },
+      "HeldStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "move": {
+            "title": "Move",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "holding",
+              "held",
+              "suspended"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "move",
+          "state",
+          "reason"
+        ],
+        "title": "HeldStatus",
+        "type": "object"
+      },
       "HoldOut": {
         "additionalProperties": false,
         "properties": {
@@ -1966,6 +2056,32 @@
           "endedAt"
         ],
         "title": "HoldOut",
+        "type": "object"
+      },
+      "HoldReport": {
+        "additionalProperties": false,
+        "description": "The task sessions the provisioner counted for one hold it was asked for.",
+        "properties": {
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "move": {
+            "title": "Move",
+            "type": "string"
+          },
+          "running": {
+            "minimum": 0.0,
+            "title": "Running",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "move",
+          "deployment",
+          "running"
+        ],
+        "title": "HoldReport",
         "type": "object"
       },
       "Item": {
@@ -2341,6 +2457,20 @@
             },
             "title": "Complete",
             "type": "array"
+          },
+          "holds": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HoldReport"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holds"
           },
           "lastGeneration": {
             "title": "Lastgeneration",
@@ -3574,6 +3704,13 @@
               "$ref": "#/components/schemas/AgentStatus"
             },
             "title": "Agents",
+            "type": "array"
+          },
+          "aliasMoves": {
+            "items": {
+              "$ref": "#/components/schemas/AliasMoveOut"
+            },
+            "title": "Aliasmoves",
             "type": "array"
           },
           "cluster": {

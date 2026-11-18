@@ -10,7 +10,7 @@ from typing import Any
 
 from agent_registry import canonical, derive
 from agent_registry.models import RELEASE_NAME, Revision, revision_id
-from agent_registry.rules import Refusal, activation, revocation
+from agent_registry.rules import Refusal, activation, alias_move, revocation
 from agent_registry.rules import approval as approvals
 from agent_registry.rules import revisions as shared
 from agent_registry.rules.approval import APPROVED_WAITING, owned
@@ -152,6 +152,8 @@ def set_enabled(tx: Tx, deployment_id: str, enabled: bool, reason: str) -> bool:
     deployment = owned(tx, deployment_id)
     if deployment.enabled == enabled:
         return False
+    if enabled:
+        alias_move.refuse_enable(tx, deployment)
     seq = tx.event(
         "enabled" if enabled else "disabled",
         deployment_id=deployment.id,
@@ -343,6 +345,9 @@ def _decide(reads: Reads, deployment_id: str, now: datetime, max_age_seconds: in
         ready = derive.condition(observed, "Ready")
         approved = ((observed.get("spec") or {}).get("approval") or {}).get("approved") is True
         if approved and ready.get("status") == "True":
+            waiting = alias_move.waiting_for(reads, deployment_id)
+            if waiting is not None:
+                return _held_by(newest, waiting)
             return _decide_ready(reads, deployment, newest, found.release)
         reason = ready.get("reason")
         if not reason or f"waiting for Ready: {reason}" == newest.reason:
@@ -384,6 +389,15 @@ def _decide(reads: Reads, deployment_id: str, now: datetime, max_age_seconds: in
         {"reason": reason},
         {"phase": "pending-approval", "reason": reason},
     )
+
+
+def _held_by(newest: Revision, move_id: str) -> _Plan | None:
+    """D6 and D8 wait while the agent is held for an alias move (`contract/dependencies.md`
+    section 6.2): the revision stays `awaiting-runtime` and says why, once."""
+    reason = alias_move.held_reason(move_id)
+    if newest.reason == reason:
+        return None
+    return _Plan(newest.number, "held-by-alias-move", {"move": move_id}, {"reason": reason})
 
 
 def _decide_ready(reads: Reads, deployment, newest: Revision, release) -> _Plan:
