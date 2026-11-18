@@ -7,6 +7,13 @@ for the authority and recovery routes (`agent_registry/api/handover.py`, package
 Examples that validate against the schemas: `contract/examples/desired.json` and
 `contract/examples/observations.json`.
 
+> **Milestone 2.** `delivery.md` changes sections 3 and 4 below: the Agent is the Agent in
+> force (`delivery.md` section 4), there is one AgentRelease object per release name (its
+> `revision` annotation and generation from the newest revision of the release, its approval
+> block from the newest revision of it that has an approval, `{approved: false}` when none has
+> or when the release is revoked, with the annotation `registry.agentplatform.io/revoked`),
+> and `desired` carries `revocations` (`delivery.md` sections 5.1, 8 and 9).
+
 ## 1. What is projected
 
 Only agents whose deployment has authority `registry`, and only two kinds of object in the

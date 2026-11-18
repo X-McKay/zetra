@@ -12,6 +12,7 @@ ANNOTATION_PREFIX = "registry.agentplatform.io/"
 READER = "registry-reader"
 OPERATOR = "registry-operator"
 PROVISIONER = "registry-provisioner"
+EVALUATOR = "registry-evaluator"
 
 
 @dataclass(frozen=True)

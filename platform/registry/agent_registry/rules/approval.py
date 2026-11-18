@@ -10,7 +10,7 @@ from typing import Any
 
 from agent_registry import canonical, derive
 from agent_registry.models import Approval, Deployment, Observation, Release, Revision, Tenant
-from agent_registry.rules import Refusal, gates
+from agent_registry.rules import Refusal, gates, revisions
 from agent_registry.rules.authority import widens
 from agent_registry.store import Reads, Tx
 
@@ -18,6 +18,14 @@ APPROVED_WAITING = "approved; waiting for Ready"
 NOT_OBSERVED = "the release has not been observed on the cluster"
 TOO_OLD = "the last observation of the release is too old"
 NOT_YET = "the cluster does not have this revision yet"
+
+# What an approved release's object says about itself, which a gate for an unapproved one
+# reads as a failure.
+APPROVAL_STATE_GATES = (
+    "live release is not in the unapproved state",
+    "release is not waiting solely on approval",
+)
+DRIFT_GATE = "policy digest drift is not clear"
 
 
 def owned(reads: Reads, deployment_id: str) -> Deployment:
@@ -152,13 +160,55 @@ def problem_for(found: Seen, revision: Revision) -> str | None:
     return None
 
 
-def gate_failures_of(store: Reads, deployment: Deployment, found: Seen) -> list[str]:
+def shares_approved_object(store: Reads, deployment: Deployment, revision: Revision) -> bool:
+    """Another revision of the same release has an approval, so the one object the cluster
+    has for the release already says "approved" (`contract/delivery.md` section 5.1)."""
+    return any(
+        other.release_id == revision.release_id
+        and other.number != revision.number
+        and other.approval_id is not None
+        for other in store.revisions(deployment.id)
+    )
+
+
+def gate_failures_of(
+    store: Reads, deployment: Deployment, found: Seen, revision: Revision | None = None
+) -> list[str]:
+    """The gates of an unapproved release. With `revision`, the two that read the object's
+    approval state are left out when the object is shared with an approved revision."""
     assert found.observation is not None
-    return gates.gate_failures(
+    failures = gates.gate_failures(
         found.release.document,
         found.observation.document,
         derive.pin_for(store, deployment.cluster, deployment.tenant, deployment.item),
     )
+    if revision is not None and shares_approved_object(store, deployment, revision):
+        failures = [f for f in failures if f not in APPROVAL_STATE_GATES]
+    return failures
+
+
+def gate_failures_in_force(
+    store: Reads, deployment: Deployment, found: Seen, *, drift: bool
+) -> list[str]:
+    """The gates of a release that was approved: everything but what the approval changes.
+    `drift` False leaves out PolicyDrift as well (a release with no carried declaration drifts
+    whenever the live Agent changes)."""
+    left_out = (*APPROVAL_STATE_GATES, *(() if drift else (DRIFT_GATE,)))
+    return [f for f in gate_failures_of(store, deployment, found) if f not in left_out]
+
+
+def not_in_force(store: Reads, deployment: Deployment, revision: Revision) -> str | None:
+    """Why the newest active approval does not allow `revision`, or None when it does
+    (`contract/delivery.md` section 7). With no registry approval there is nothing to compare."""
+    active = registry_approvals(store, deployment.id)
+    if not active:
+        return None
+    newest = active[-1]
+    if newest.policy_revision != policy_revision(store, deployment):
+        return "the tenant policy changed since the last approval"
+    base = _authority_of_revision(store, deployment.id, newest.revision)
+    wider = widens(base, revision.authority)
+    return wider[0] if wider else None
 
 
 def evidence(found: Seen) -> dict[str, Any]:
@@ -217,7 +267,7 @@ def approve(
     unreadable = problem_for(found, target)
     if unreadable:
         raise Refusal("refused", unreadable)
-    failures = gate_failures_of(tx, deployment, found)
+    failures = gate_failures_of(tx, deployment, found, target)
     if failures:
         raise Refusal("refused", "the release may not be approved: " + "; ".join(failures))
 
@@ -259,3 +309,4 @@ def approve(
         reason=APPROVED_WAITING,
         generation=seq,
     )
+    revisions.settle_agent(tx, deployment.id, seq)
