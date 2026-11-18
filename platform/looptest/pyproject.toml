@@ -1,0 +1,35 @@
+[project]
+name = "agent-platform-looptest"
+version = "0.1.0"
+description = "Loop tests: the registry, the provisioner and the Registry Controller together, with no cluster"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "agent-platform-contracts",
+    "agent-platform-controller",
+    "agent-platform-provisioner",
+    "agent-platform-registry",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+agent-platform-contracts = { path = "../contracts", editable = true }
+agent-platform-controller = { path = "../controller", editable = true }
+agent-platform-provisioner = { path = "../provisioner", editable = true }
+agent-platform-registry = { path = "../registry", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest==8.4.2",
+    "ruff==0.14.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["postgres: needs a PostgreSQL named by REGISTRY_TEST_DSN"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
