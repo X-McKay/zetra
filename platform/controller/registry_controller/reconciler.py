@@ -41,6 +41,17 @@ def _live(obj: dict[str, Any] | None) -> bool:
     return bool(obj) and not obj["metadata"].get("deletionTimestamp")
 
 
+def _agent_for(agent: dict[str, Any], release_spec: dict[str, Any]) -> dict[str, Any]:
+    """The Agent a release compiles from: its carried declaration if it has one, else the live Agent.
+
+    Only `spec` is replaced; `metadata` and `status` stay the live Agent's.
+    """
+    declaration = release_spec.get("declaration")
+    if declaration is None:
+        return agent
+    return {**agent, "spec": copy.deepcopy(declaration)}
+
+
 def _differs(want: dict[str, Any], have: dict[str, Any]) -> bool:
     for key, value in want.items():
         if key in ("apiVersion", "kind", "metadata", "status"):
@@ -317,9 +328,10 @@ class Reconciler:
             return self._finish(status, regenerate)
 
         pcfg = self.cfg.platform
+        built_from = _agent_for(agent, spec)
         try:
             bundle = compile_bundle(
-                agent,
+                built_from,
                 release,
                 mcp_resource_base=pcfg.mcp_resource_base,
                 trust_domain=pcfg.trust_domain,
@@ -342,7 +354,7 @@ class Reconciler:
             digest = "sha256:" + spec["policySha256"]
             policy_cm = desired.policy_configmap(release, bundle)
             self.ensure(policy_cm)
-            pod = render_pod_template(agent, release, bundle, digest, pcfg)
+            pod = render_pod_template(built_from, release, bundle, digest, pcfg)
             template_cm = desired.podtemplate_configmap(release, pod)
             self.ensure(template_cm)
             status.update(
@@ -412,10 +424,19 @@ class Reconciler:
 
     def regenerate_ratelimit(self) -> None:
         budgets: dict[str, int] = {}
-        for release in self.kube.list(GROUP_VERSION, "AgentRelease"):
-            if not _live(release) or (release.get("status") or {}).get("ready") is not True:
-                continue
+        ready = [
+            r
+            for r in self.kube.list(GROUP_VERSION, "AgentRelease")
+            if _live(r) and (r.get("status") or {}).get("ready") is True
+        ]
+        # (tenant, release) -> agent, for the ready releases only.
+        ready_names = {
+            (r["metadata"]["namespace"], r["metadata"]["name"]): r["spec"]["agent"] for r in ready
+        }
+        for release in ready:
             tenant, name = release["metadata"]["namespace"], release["metadata"]["name"]
+            if not self._speaks_for_agent(release, ready_names):
+                continue
             cm = self.kube.get("v1", "ConfigMap", tenant, naming.policy_configmap(name))
             try:
                 bundle = json.loads(cm["data"][POLICY_BUNDLE_KEY])
@@ -425,6 +446,17 @@ class Reconciler:
             except (TypeError, KeyError, ValueError):
                 log.warning("ready release %s/%s has no readable bundle", tenant, name)
         self.ensure(desired.ratelimit_configmap(budgets))
+
+    def _speaks_for_agent(self, release: dict[str, Any], ready: dict[tuple[str, str], str]) -> bool:
+        """False when the Agent names another ready release as its current one."""
+        tenant = release["metadata"]["namespace"]
+        agent = self.kube.get(GROUP_VERSION, "Agent", tenant, release["spec"]["agent"])
+        current = ((agent or {}).get("metadata", {}).get("annotations") or {}).get(
+            desired.ANNOTATION_CURRENT_RELEASE
+        )
+        if not current or ready.get((tenant, current)) != release["spec"]["agent"]:
+            return True
+        return current == release["metadata"]["name"]
 
 
 def _not_ready_reason(f: desired.ReleaseFacts) -> str:
