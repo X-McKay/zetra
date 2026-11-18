@@ -14,6 +14,22 @@ a field the registry's document lacks), the result is `error`, not a repair on e
 It gets a Keycloak access token by presenting its projected service-account token as a client
 assertion (no client secret), re-reading the token file at every refresh.
 
+An `AgentRelease` document is written whole, `spec.declaration` included; nothing is dropped or
+defaulted. If the API server refuses a write (a stored declaration may not change), that is the
+object's `error` and the pass goes on.
+
+## Revocations
+
+The desired answer may list `revocations` (`delivery.md` section 8.3). For each one, after this
+pass has written that release's `AgentRelease` (result `applied` or `unchanged`), the
+provisioner calls `POST {PROVISIONER_SESSION_API_URL with tenant}/v1/tenants/<tenant>/sessions/cancel`
+with `{"agent", "release", "reason": "release revoked: <id>"}`, sending the same bearer token it
+sends the registry. Never before the write, and not in a pass where the write failed or the
+object was not in the answer. A failed call, or a non-empty `failed` list, is logged (no token)
+and tried again next pass; it does not fail the pass. One log line per call gives the id, the
+release and the number cancelled. With the setting unset, nothing is called and each revocation
+is logged as "not cancelled: no session interface configured".
+
 ## Settings (environment)
 
 | Variable | |
@@ -26,6 +42,7 @@ assertion (no client secret), re-reading the token file at every refresh.
 | `PROVISIONER_CLIENT_ID` | default `registry-provisioner-<cluster>` |
 | `PROVISIONER_INTERVAL_SECONDS` | default 30 |
 | `PROVISIONER_CA_FILE` | optional CA bundle for both HTTPS calls |
+| `PROVISIONER_SESSION_API_URL` | optional: a template holding `{tenant}`, e.g. `http://session-api-{tenant}.agent-platform.svc:8080`; the same URL rules as above |
 | `PROVISIONER_HEARTBEAT_FILE` | optional; touched at the end of every pass, whatever its result |
 
 `registry-provisioner --once` runs one pass: exit 0 when the registry answered and accepted

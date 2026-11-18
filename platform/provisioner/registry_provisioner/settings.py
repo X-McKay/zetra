@@ -45,6 +45,7 @@ class Settings:
     token_path: str | None = None
     ca_file: str | None = None
     heartbeat_file: str | None = None
+    session_api_url: str | None = None  # a template holding {tenant}
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> Settings:
@@ -65,6 +66,11 @@ class Settings:
             raise SettingsError("PROVISIONER_INTERVAL_SECONDS must be above zero")
         for name in ("REGISTRY_URL", "TOKEN_URL"):
             check_url(f"PROVISIONER_{name}", get(name))
+        template = get("SESSION_API_URL")
+        if template:
+            if "{tenant}" not in template:
+                raise SettingsError("PROVISIONER_SESSION_API_URL must contain {tenant}")
+            check_url("PROVISIONER_SESSION_API_URL", template.replace("{tenant}", "tenant"))
         return cls(
             cluster=cluster,
             registry_url=get("REGISTRY_URL").rstrip("/"),
@@ -75,4 +81,5 @@ class Settings:
             token_path=get("TOKEN_PATH"),
             ca_file=get("CA_FILE"),
             heartbeat_file=get("HEARTBEAT_FILE"),
+            session_api_url=template,
         )
