@@ -11,9 +11,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from agent_registry.models import Deployment, Revision
+from agent_registry import derive
+from agent_registry.models import Deployment, Resolution, Revision, revision_id
 from agent_registry.rules import revocation
 from agent_registry.store import Reads, Tx
+
+WAITING = "waiting for the controller's verdict"
 
 # A revision in one of these phases is the deployment's candidate when it is the newest.
 OPEN_PHASES = ("awaiting-runtime", "pending-approval", "evaluating")
@@ -82,3 +85,100 @@ def cancel_open_evaluations(tx: Tx, deployment_id: str, number: int, *, now: dat
             tx.set_evaluation_progress(evaluation.id, state="cancelled", finished_at=now)
             cancelled.append(evaluation.id)
     return cancelled
+
+
+def _resolution_key(row: Resolution) -> tuple[str, str, str | None, str | None, str]:
+    return (
+        row.type,
+        row.target,
+        row.resolved_deployment,
+        row.resolved_release,
+        repr(sorted(row.detail.items())),
+    )
+
+
+def _changes(old: list[Resolution], new: list[Resolution]) -> list[dict[str, Any]]:
+    """What differs between two sets of resolutions, one entry per requirement."""
+    before = {(r.type, r.target): r for r in old}
+    found = []
+    for row in new:
+        was = before.get((row.type, row.target))
+        if was is None or _resolution_key(was) != _resolution_key(row):
+            found.append(
+                {
+                    "type": row.type,
+                    "target": row.target,
+                    "from": was.resolved_deployment if was else None,
+                    "to": row.resolved_deployment,
+                }
+            )
+    return found
+
+
+def re_resolve(tx: Tx, deployment_id: str, *, now: datetime) -> int | None:
+    """Record a new revision of the newest revision's release when what its requirements
+    resolve to has changed (section 5.1). Returns the new revision's number, or None.
+
+    The new revision goes through the phases like any other: its approval is carried forward
+    when it is covered, and its evaluation is required again. Nothing is done in recovery, on
+    the pull request path, or for a revoked release (the revocation is the record).
+    """
+    deployment = tx.deployment(deployment_id)
+    if (
+        tx.meta().mode == "recovery"
+        or deployment is None
+        or deployment.kind != "agent"
+        or deployment.authority != "registry"
+    ):
+        return None
+    revisions = tx.revisions(deployment.id)
+    if not revisions:
+        return None
+    newest = revisions[-1]
+    release = tx.release(newest.release_id)
+    if release is None or revocation.revoked(tx, release) is not None:
+        return None
+    tenant = tx.tenant(deployment.cluster, deployment.tenant or "")
+    if tenant is None:
+        return None
+    resolutions = derive.resolutions_of(
+        tx, deployment.cluster, deployment.id, newest.number + 1, tx.requirements(release.id)
+    )
+    changes = _changes(tx.resolutions(newest.id), resolutions)
+    if not changes:
+        return None
+
+    number = newest.number + 1
+    seq = tx.event(
+        "revision-recorded",
+        deployment_id=deployment.id,
+        detail={
+            "release": release.name,
+            "revision": number,
+            "from": newest.number,
+            "changed": changes,
+        },
+    ).seq
+    tx.add_revision(
+        Revision(
+            id=revision_id(deployment.id, number),
+            deployment_id=deployment.id,
+            number=number,
+            release_id=release.id,
+            origin="registry",
+            agent_document=newest.agent_document,
+            authority=newest.authority,
+            authority_digest=newest.authority_digest,
+            policy_revision=tenant.policy_revision,
+            created_at=now,
+            phase="awaiting-runtime",
+            reason=WAITING,
+            generation=seq,
+        )
+    )
+    tx.add_resolutions(revision_id(deployment.id, number), resolutions)
+    if newest.phase in OPEN_PHASES:
+        tx.set_revision_progress(deployment.id, newest.number, phase="superseded")
+        cancel_open_evaluations(tx, deployment.id, newest.number, now=now)
+    settle_agent(tx, deployment.id, seq)
+    return number

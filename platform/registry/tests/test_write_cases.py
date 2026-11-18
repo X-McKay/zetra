@@ -158,8 +158,9 @@ def test_record_a_release_with_the_same_authority():
     revision = world.store.revision(DEP, 3)
     deployment = world.store.deployment(DEP)
     assert revision.generation == event.seq
-    assert deployment.generation == event.seq > before.generation
-    assert deployment.document["agent"] == canonical.agent_document(body["agent"])
+    # A candidate without an approval replaces nothing that runs (delivery.md section 4).
+    assert deployment.generation == before.generation
+    assert deployment.document["agent"] == before.document["agent"]
     assert deployment.current_revision == 2  # nothing is live until it is approved and Ready
     assert revision.authority == canonical.authority_of(body["agent"])
     assert revision.policy_revision == world.store.tenant(CLUSTER, TENANT).policy_revision

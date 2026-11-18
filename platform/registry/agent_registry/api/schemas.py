@@ -14,9 +14,11 @@ from agent_registry.derive import Freshness
 from agent_registry.models import (
     Approval,
     Deployment,
+    Evaluation,
     Event,
     Item,
     Mode,
+    Phase,
     Provision,
     Record,
     Release,
@@ -92,6 +94,7 @@ class RevisionOut(Record):
     release: Release
     resolutions: list[Resolution]
     approval: Approval | None
+    evaluations: list[Evaluation] = Field(default_factory=list)  # oldest first
 
 
 class Dependant(Record):
@@ -112,6 +115,46 @@ class DependantsOut(Record):
     dependants: list[Dependant]
 
 
+class CurrentStatus(Record):
+    release: str
+    revision: int
+    since: datetime | None
+    admitted_by: str | None  # the evaluation id, or null when no evaluation admitted it
+
+
+class CandidateEvaluation(Record):
+    attempt: int
+    state: str
+
+
+class CandidateStatus(Record):
+    release: str
+    revision: int
+    phase: str
+    reason: str
+    evaluation: CandidateEvaluation | None
+
+
+class RefusedEvaluation(Record):
+    verdict: str
+    summary: str
+
+
+class RefusedStatus(Record):
+    release: str
+    revision: int
+    reason: str
+    at: datetime | None
+    evaluation: RefusedEvaluation | None
+
+
+class RevokedStatus(Record):
+    id: str
+    release: str
+    reason: str
+    at: datetime
+
+
 class AgentStatus(Record):
     deployment: str
     agent: str
@@ -129,6 +172,12 @@ class AgentStatus(Record):
     blockers: list[str]  # why it is not running what was last published, in plain words
     next_actions: list[str]  # commands a person can run, in order
     observation: Observed  # of the Agent object
+    current: CurrentStatus | None = None
+    candidate: CandidateStatus | None = None
+    last_refused: RefusedStatus | None = None  # the newest refused revision, if newer than current
+    acknowledged: bool | None = None  # the cluster has the Agent at the registry's generation
+    pinned: int | None = None
+    revoked: list[RevokedStatus] = Field(default_factory=list)  # newest first
 
 
 class ToolServerStatus(Record):
@@ -176,6 +225,12 @@ class EventsOut(Record):
 # ---- write -------------------------------------------------------------------------------
 
 
+class SuiteIn(Record):
+    """The evaluation suite the release carries (`contract/delivery.md` section 1.3)."""
+
+    suite: dict[str, Any]
+
+
 class RecordReleaseIn(Record):
     """A published release: the two documents the release workflow attached to the tag."""
 
@@ -183,6 +238,7 @@ class RecordReleaseIn(Record):
     agent_release: dict[str, Any]
     # Where it came from, for the record: repository, tag, asset checksums. Not interpreted.
     lineage: dict[str, Any] = Field(default_factory=dict)
+    evaluation: SuiteIn | None = None
 
 
 class RecordReleaseOut(Record):
@@ -238,6 +294,20 @@ class DeploymentChangeOut(Record):
     changed: bool  # False: it was already so, and nothing was written
 
 
+class RollbackIn(Record):
+    revision: int | None = None  # None: the newest earlier activated revision
+    reason: str = ""
+
+
+class EvaluationRequestIn(Record):
+    reason: str = ""
+
+
+class EvaluationRequestOut(Record):
+    evaluation: Evaluation
+    revision: Revision
+
+
 class ReturnOut(Record):
     """The documents to write back to git when authority returns to the pull request path."""
 
@@ -274,6 +344,52 @@ class LeaveRecoveryOut(Record):
     mode: Mode
     generation: int
     adopted: list[Difference]
+
+
+# ---- evaluations -------------------------------------------------------------------------
+
+
+class ClaimIn(Record):
+    evaluator: str = Field(min_length=1, max_length=128)
+    lease_seconds: int = Field(default=900, ge=60, le=3600)
+
+
+class ClaimedEvaluation(Record):
+    deployment: str
+    revision: int
+    attempt: int
+    agent: str
+    tenant: str
+    namespace: str
+    release: str  # the release name
+    suite: dict[str, Any]
+    suite_digest: str
+    claim_expires_at: datetime
+
+
+class ClaimOut(Record):
+    evaluation: ClaimedEvaluation | None
+
+
+class CaseResultIn(Record):
+    id: str
+    passed: bool
+    session_id: str = ""
+    outcome: str = ""
+    detail: str = ""
+
+
+class ResultIn(Record):
+    evaluator: str = Field(min_length=1, max_length=128)
+    evaluator_version: str = ""
+    verdict: Literal["passed", "failed", "error"]
+    summary: str = ""
+    cases: list[CaseResultIn] = Field(default_factory=list)
+
+
+class ResultOut(Record):
+    recorded: bool  # False: nothing was written
+    phase: Phase  # of the revision now
 
 
 # ---- cluster -----------------------------------------------------------------------------

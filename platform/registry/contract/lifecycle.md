@@ -13,6 +13,14 @@ Two pure rule modules are part of the contract and already written:
 Shared helpers are in `agent_registry/derive.py`: `freshness`, `condition`,
 `live_generation`, `pin_for`, `agent_release_record`, `requirements_of`, `resolutions_of`.
 
+> **Milestone 2.** `delivery.md` changes this file where it says so, and is right where the two
+> differ: a recorded release no longer replaces the Agent at once (sections 4 and 5 of
+> `delivery.md`, which replace step 6 of section 5 below); the phases and moves of section 6
+> below are the table D1 to D15 of `delivery.md` section 5, with evaluations (section 6) and
+> the `evaluating` and `refused` phases; `pin` applies the eligible-target check of `delivery.md`
+> section 7, and `rollback` is new there. Events and status fields are in `delivery.md`
+> sections 10 and 11.
+
 ## 1. Words
 
 - **Deployment**: an agent on a cluster for a tenant. Id `agent:<cluster>:<tenant>:<name>`.

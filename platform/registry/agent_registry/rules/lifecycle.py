@@ -10,15 +10,25 @@ from typing import Any
 
 from agent_registry import canonical, derive
 from agent_registry.models import RELEASE_NAME, Revision, revision_id
-from agent_registry.rules import Refusal
+from agent_registry.rules import Refusal, activation, revocation
 from agent_registry.rules import approval as approvals
+from agent_registry.rules import revisions as shared
 from agent_registry.rules.approval import APPROVED_WAITING, owned
+from agent_registry.rules.revisions import OPEN_PHASES, WAITING
 from agent_registry.store import Reads, Store, Tx
 
 API_VERSION = "agentplatform.io/v1alpha1"
-WAITING = "waiting for the controller's verdict"
+NO_SUITE = "the release carries no evaluation suite and the current release was admitted by one"
 
-__all__ = ["advance", "advance_cluster", "owned", "pin", "record_release", "set_enabled"]
+__all__ = [
+    "advance",
+    "advance_cluster",
+    "owned",
+    "pin",
+    "record_release",
+    "rollback",
+    "set_enabled",
+]
 
 
 # -- record a release ----------------------------------------------------------------------
@@ -66,7 +76,8 @@ def record_release(
     *,
     now: datetime,
 ) -> tuple[str, int, bool]:
-    """Record a published release as the next revision (section 5).
+    """Record a published release as the next revision (section 5). It replaces nothing that
+    runs: the Agent in force is settled afterwards (`contract/delivery.md` section 4).
 
     Returns the release id, the revision number and whether anything was written.
     """
@@ -82,6 +93,9 @@ def record_release(
     for revision in revisions:
         if revision.release_id == release.id:
             return release.id, revision.number, False
+    found = revocation.revoked(tx, release)
+    if found is not None:
+        raise Refusal("refused", f"release {release.name} is revoked ({found.id})")
     tenant = approvals.tenant_of(tx, deployment)
     if tenant is None:
         raise Refusal("refused", f"tenant {deployment.tenant} is not in the feed")
@@ -123,13 +137,10 @@ def record_release(
         derive.resolutions_of(tx, deployment.cluster, deployment.id, number, requirements),
     )
     for earlier in revisions:
-        if earlier.phase in ("awaiting-runtime", "pending-approval"):
+        if earlier.phase in OPEN_PHASES:
             tx.set_revision_progress(deployment.id, earlier.number, phase="superseded")
-    tx.put_deployment(
-        deployment.model_copy(
-            update={"document": {**deployment.document, "agent": agent_doc}, "generation": seq}
-        )
-    )
+            shared.cancel_open_evaluations(tx, deployment.id, earlier.number, now=now)
+    shared.settle_agent(tx, deployment.id, seq)
     return release.id, number, True
 
 
@@ -150,6 +161,63 @@ def set_enabled(tx: Tx, deployment_id: str, enabled: bool, reason: str) -> bool:
     return True
 
 
+def _refuse_target(reads: Reads, deployment, target: Revision, *, now, max_age_seconds) -> None:
+    """Raise `Refusal` unless `target` may hold the pointer (`contract/delivery.md` section 7)."""
+    number = target.number
+    if target.phase != "activated":
+        raise Refusal("refused", f"revision {number} has not been activated")
+    release = reads.release(target.release_id)
+    assert release is not None  # a revision always has its release
+    revoked = revocation.revoked(reads, release)
+    if revoked is not None:
+        raise Refusal("refused", f"release {release.name} is revoked ({revoked.id})")
+    wider = approvals.not_in_force(reads, deployment, target)
+    if wider is not None:
+        raise Refusal(
+            "refused", f"revision {number} needs an approval that is no longer in force: {wider}"
+        )
+    found = approvals.seen(reads, deployment, target, now=now, max_age_seconds=max_age_seconds)
+    problem = approvals.problem_for(found, target)
+    if problem is not None:
+        raise Refusal("refused", problem)
+    carries = "declaration" in (release.document.get("spec") or {})
+    failures = approvals.gate_failures_in_force(reads, deployment, found, drift=carries)
+    if failures:
+        raise Refusal("refused", f"revision {number} is not usable: {failures[0]}")
+    if carries:
+        assert found.observation is not None
+        ready = derive.condition(found.observation.document, "Ready")
+        if ready.get("status") != "True":
+            raise Refusal(
+                "refused", f"revision {number} is not Ready: {ready.get('reason') or 'unknown'}"
+            )
+
+
+def _hold(
+    tx: Tx,
+    deployment_id: str,
+    number: int,
+    *,
+    now: datetime,
+    max_age_seconds: int,
+    event: str,
+    detail: dict[str, Any],
+) -> bool:
+    """Pin the pointer to a revision that may hold it. False when it already does."""
+    deployment = owned(tx, deployment_id)
+    target = tx.revision(deployment.id, number)
+    if target is None:
+        raise Refusal("not-found", f"{deployment.id} has no revision {number}")
+    if deployment.pinned_revision == target.number == deployment.current_revision:
+        return False
+    _refuse_target(tx, deployment, target, now=now, max_age_seconds=max_age_seconds)
+    update = {"pinned_revision": target.number, "current_revision": target.number}
+    seq = tx.event(event, deployment_id=deployment.id, detail=detail).seq
+    tx.put_deployment(deployment.model_copy(update=update | {"generation": seq}))
+    shared.settle_agent(tx, deployment.id, seq)
+    return True
+
+
 def pin(
     tx: Tx,
     deployment_id: str,
@@ -158,37 +226,81 @@ def pin(
     now: datetime,
     max_age_seconds: int,
 ) -> bool:
-    """Hold the pointer on an activated revision, or (None) let it go. Returns whether it
+    """Hold the pointer on an eligible revision, or (None) let it go. Returns whether it
     changed."""
+    if revision is not None:
+        return _hold(
+            tx,
+            deployment_id,
+            revision,
+            now=now,
+            max_age_seconds=max_age_seconds,
+            event="pinned",
+            detail={"revision": revision},
+        )
+    deployment = owned(tx, deployment_id)
+    if deployment.pinned_revision is None:
+        return False
+    usable = [
+        r.number
+        for r in tx.revisions(deployment.id)
+        if r.phase == "activated" and not _revoked(tx, r)
+    ]
+    seq = tx.event(
+        "unpinned", deployment_id=deployment.id, detail={"was": deployment.pinned_revision}
+    ).seq
+    tx.put_deployment(
+        deployment.model_copy(
+            update={
+                "pinned_revision": None,
+                "current_revision": max(usable, default=None),
+                "generation": seq,
+            }
+        )
+    )
+    shared.settle_agent(tx, deployment.id, seq)
+    return True
+
+
+def _revoked(reads: Reads, revision: Revision) -> bool:
+    release = reads.release(revision.release_id)
+    return release is not None and revocation.revoked(reads, release) is not None
+
+
+def rollback(
+    tx: Tx,
+    deployment_id: str,
+    revision: int | None,
+    reason: str,
+    *,
+    now: datetime,
+    max_age_seconds: int,
+) -> bool:
+    """Return to an earlier release: a pin of the target, recorded as `rolled-back`. With no
+    revision the target is the newest activated one below the current, whose release is not
+    revoked. Returns whether it changed."""
     deployment = owned(tx, deployment_id)
     if revision is None:
-        if deployment.pinned_revision is None:
-            return False
-        activated = [r.number for r in tx.revisions(deployment.id) if r.phase == "activated"]
-        update = {"pinned_revision": None, "current_revision": max(activated, default=None)}
-        event, detail = "unpinned", {"was": deployment.pinned_revision}
-    else:
-        target = tx.revision(deployment.id, revision)
-        if target is None:
-            raise Refusal("not-found", f"{deployment.id} has no revision {revision}")
-        if deployment.pinned_revision == target.number == deployment.current_revision:
-            return False
-        if target.phase != "activated":
-            raise Refusal("refused", f"revision {target.number} has not been activated")
-        found = approvals.seen(tx, deployment, target, now=now, max_age_seconds=max_age_seconds)
-        ready: dict[str, Any] = {}
-        if found.observation is not None:
-            ready = derive.condition(found.observation.document, "Ready")
-        if found.state != "fresh" or ready.get("status") != "True":
-            raise Refusal(
-                "refused",
-                f"revision {target.number} is not Ready on a recent observation of the cluster",
-            )
-        update = {"pinned_revision": target.number, "current_revision": target.number}
-        event, detail = "pinned", {"revision": target.number}
-    seq = tx.event(event, deployment_id=deployment.id, detail=detail).seq
-    tx.put_deployment(deployment.model_copy(update=update | {"generation": seq}))
-    return True
+        below = deployment.current_revision
+        earlier = [
+            r.number
+            for r in tx.revisions(deployment.id)
+            if r.phase == "activated"
+            and (below is None or r.number < below)
+            and not _revoked(tx, r)
+        ]
+        if not earlier:
+            raise Refusal("refused", "there is no earlier release to return to")
+        revision = max(earlier)
+    return _hold(
+        tx,
+        deployment.id,
+        revision,
+        now=now,
+        max_age_seconds=max_age_seconds,
+        event="rolled-back",
+        detail={"from": deployment.current_revision, "to": revision, "reason": reason},
+    )
 
 
 # -- advance -------------------------------------------------------------------------------
@@ -196,14 +308,15 @@ def pin(
 
 @dataclass(frozen=True)
 class _Plan:
-    """What one decision says to write: an event and the revision's progress."""
+    """What one decision says to write. `action` is one of: `progress` (an event and the
+    revision's progress), `carry` (the same, with the revision's generation raised), `activate`,
+    `evaluate` (D8) and `refuse`."""
 
     revision: int
     event: str
     detail: dict[str, Any]
     progress: dict[str, Any] = field(default_factory=dict)
-    raise_revision_generation: bool = False
-    set_current: bool = False
+    action: str = "progress"
 
 
 def _decide(reads: Reads, deployment_id: str, now: datetime, max_age_seconds: int) -> _Plan | None:
@@ -230,13 +343,7 @@ def _decide(reads: Reads, deployment_id: str, now: datetime, max_age_seconds: in
         ready = derive.condition(observed, "Ready")
         approved = ((observed.get("spec") or {}).get("approval") or {}).get("approved") is True
         if approved and ready.get("status") == "True":
-            return _Plan(
-                newest.number,
-                "revision-activated",
-                {"revision": newest.number, "pinned": deployment.pinned_revision is not None},
-                {"phase": "activated", "activated_at": now, "reason": ""},
-                set_current=deployment.pinned_revision is None,
-            )
+            return _decide_ready(reads, deployment, newest, found.release)
         reason = ready.get("reason")
         if not reason or f"waiting for Ready: {reason}" == newest.reason:
             return None
@@ -247,7 +354,7 @@ def _decide(reads: Reads, deployment_id: str, now: datetime, max_age_seconds: in
             {"reason": f"waiting for Ready: {reason}"},
         )
 
-    failures = approvals.gate_failures_of(reads, deployment, found)
+    failures = approvals.gate_failures_of(reads, deployment, found, newest)
     if failures:
         if (newest.phase, newest.reason) == ("awaiting-runtime", failures[0]):
             return None
@@ -265,7 +372,7 @@ def _decide(reads: Reads, deployment_id: str, now: datetime, max_age_seconds: in
             "approval-carried-forward",
             {"approval": covered.id, "revision": newest.number},
             {"phase": "awaiting-runtime", "approval_id": covered.id, "reason": APPROVED_WAITING},
-            raise_revision_generation=True,
+            action="carry",
         )
 
     reason = approvals.why_not_covered(reads, deployment, newest)
@@ -279,18 +386,38 @@ def _decide(reads: Reads, deployment_id: str, now: datetime, max_age_seconds: in
     )
 
 
-def _apply(tx: Tx, deployment_id: str, plan: _Plan) -> None:
+def _decide_ready(reads: Reads, deployment, newest: Revision, release) -> _Plan:
+    """D6 to D8: an approved revision the cluster shows Ready."""
+    if activation.required(release):
+        return _Plan(newest.number, "evaluation-requested", {}, action="evaluate")
+    if activation.admission(reads, deployment.id, deployment.current_revision) is not None:
+        return _Plan(
+            newest.number,
+            "revision-refused",
+            {},
+            {"reason": NO_SUITE},
+            action="refuse",
+        )
+    return _Plan(newest.number, "revision-activated", {}, action="activate")
+
+
+def _apply(tx: Tx, deployment_id: str, plan: _Plan, now: datetime) -> int:
+    """Write a plan. Returns the sequence number of the last event."""
+    if plan.action == "activate":
+        return activation.activate(tx, deployment_id, plan.revision, now=now, evaluation=None)
+    if plan.action == "refuse":
+        return activation.refuse(tx, deployment_id, plan.revision, plan.progress["reason"], now=now)
+    if plan.action == "evaluate":
+        revision = tx.revision(deployment_id, plan.revision)
+        release = tx.release(revision.release_id)
+        assert release is not None
+        return activation.request(tx, deployment_id, revision, release, now=now)[1]
     seq = tx.event(plan.event, deployment_id=deployment_id, detail=plan.detail).seq
     progress = dict(plan.progress)
-    if plan.raise_revision_generation:
+    if plan.action == "carry":
         progress["generation"] = seq
     tx.set_revision_progress(deployment_id, plan.revision, **progress)
-    if plan.set_current:
-        deployment = tx.deployment(deployment_id)
-        assert deployment is not None
-        tx.put_deployment(
-            deployment.model_copy(update={"current_revision": plan.revision, "generation": seq})
-        )
+    return seq
 
 
 def advance(
@@ -313,7 +440,8 @@ def advance(
         plan = _decide(tx, deployment_id, now, max_age_seconds)
         if plan is None:
             return False
-        _apply(tx, deployment_id, plan)
+        seq = _apply(tx, deployment_id, plan, now)
+        shared.settle_agent(tx, deployment_id, seq)
     return True
 
 

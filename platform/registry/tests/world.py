@@ -22,7 +22,14 @@ from fastapi.testclient import TestClient
 from agent_registry import canonical, derive
 from agent_registry.api.app import create_app
 from agent_registry.api.auth import Principal, StaticVerifier
-from agent_registry.config import ANNOTATION_PREFIX, OPERATOR, PROVISIONER, READER, Settings
+from agent_registry.config import (
+    ANNOTATION_PREFIX,
+    EVALUATOR,
+    OPERATOR,
+    PROVISIONER,
+    READER,
+    Settings,
+)
 from agent_registry.models import (
     Approval,
     Cluster,
@@ -68,6 +75,20 @@ TOKENS = {
         roles=frozenset({PROVISIONER}),
         person=False,
         cluster=CLUSTER,
+    ),
+    "evaluator": Principal(
+        subject="sa-3",
+        username="service-account-registry-evaluator-kubani",
+        roles=frozenset({EVALUATOR}),
+        person=False,
+        azp="registry-evaluator-kubani",
+    ),
+    "evaluator-elsewhere": Principal(
+        subject="sa-4",
+        username="service-account-registry-evaluator-other",
+        roles=frozenset({EVALUATOR}),
+        person=False,
+        azp="registry-evaluator-other",
     ),
     "nobody": Principal(subject="u-3", username="nobody", roles=frozenset(), person=True),
 }
@@ -132,19 +153,32 @@ def verdict(
     }
 
 
+SUITE: dict[str, Any] = {
+    "schema_version": 1,
+    "timeout_seconds": 600,
+    "acceptance": {"min_passed": "all"},
+    "cases": [
+        {"id": "summary", "task": "Report the server version.", "expect": {}},
+        {"id": "blocking", "task": "Report any blocking queries.", "expect": {}},
+    ],
+}
+
+
 def published(
-    letter: str, change: Callable[[dict[str, Any]], None] | None = None
+    letter: str,
+    change: Callable[[dict[str, Any]], None] | None = None,
+    suite: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The body of `POST .../releases` for a new release of db-admin.
 
     `letter` is one hex digit; it makes the name and the digests. `change` edits the Agent's
-    spec, for a release that asks for something else.
+    spec, for a release that asks for something else. `suite` is the evaluation suite it carries.
     """
     agent, _ = fixture_documents()
     agent = canonical.agent_document(agent)
     if change is not None:
         change(agent["spec"])
-    return {
+    body = {
         "agent": agent,
         "agentRelease": {
             "apiVersion": "agentplatform.io/v1alpha1",
@@ -161,6 +195,9 @@ def published(
         },
         "lineage": {"repository": REPOSITORY, "tag": f"{AGENT}/v0.2.{int(letter, 16)}"},
     }
+    if suite is not None:
+        body["evaluation"] = {"suite": suite}
+    return body
 
 
 def approval_block(store, revision: Revision) -> dict[str, Any]:
@@ -356,7 +393,7 @@ class World:
         """
         revision = self.store.revision(DEP, number)
         release = self.store.release(revision.release_id)
-        block = {"approved": False} if behind else approval_block(self.store, revision)
+        block = {"approved": False} if behind else self.object_block(revision)
         if generation is None:
             generation = revision.generation - 1 if behind else revision.generation
         if ready is None:
@@ -387,6 +424,14 @@ class World:
         )
         self.store.put_observations(CLUSTER, [observation])
         return observation
+
+    def object_block(self, revision: Revision) -> dict[str, Any]:
+        """`spec.approval` of the one object a release has: the newest revision of the release
+        that has an approval decides it (delivery.md section 5.1)."""
+        for other in reversed(self.store.revisions(DEP)):
+            if other.release_id == revision.release_id and other.approval_id is not None:
+                return approval_block(self.store, other)
+        return {"approved": False}
 
     def cluster_shows_agent(self) -> Observation:
         """The provisioner reports the Agent as the registry last projected it."""

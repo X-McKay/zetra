@@ -19,7 +19,7 @@ from agent_registry.api import schemas as s
 from agent_registry.api.auth import Principal, operator
 from agent_registry.api.deps import get_settings, get_store, now, writable
 from agent_registry.config import Settings
-from agent_registry.rules import Refusal, lifecycle
+from agent_registry.rules import Refusal, lifecycle, report
 from agent_registry.rules import approval as approvals
 from agent_registry.rules.authority import widens
 from agent_registry.store import Store
@@ -40,9 +40,16 @@ def record_release(
     deployment_id: str, body: s.RecordReleaseIn, store: StoreDep, who: Operator, at: Now
 ) -> s.RecordReleaseOut:
     """Record a published release and create the next revision, projected unapproved."""
+    approvals.owned(store, deployment_id)  # in recovery, not found, the pull request path
+    if body.evaluation is not None:
+        report.check_suite(body.evaluation.suite)
+    report.check_declaration(body.agent, body.agent_release)
+    lineage = dict(body.lineage)
+    if body.evaluation is not None:
+        lineage["evaluation"] = {"suite": body.evaluation.suite}
     with store.transaction(who.actor) as tx:
         release_id, number, created = lifecycle.record_release(
-            tx, deployment_id, body.agent, body.agent_release, body.lineage, now=at
+            tx, deployment_id, body.agent, body.agent_release, lineage, now=at
         )
     return s.RecordReleaseOut(
         release=store.release(release_id),
@@ -72,7 +79,11 @@ def approval_preview(
         store, deployment, revision, now=at, max_age_seconds=settings.observation_max_age_seconds
     )
     unreadable = approvals.problem_for(found, revision)
-    failures = [unreadable] if unreadable else approvals.gate_failures_of(store, deployment, found)
+    failures = (
+        [unreadable]
+        if unreadable
+        else approvals.gate_failures_of(store, deployment, found, revision)
+    )
     base = approvals.current_authority(store, deployment)
     approved = revision.approval_id is not None
     newest = max(r.number for r in store.revisions(deployment.id))
@@ -151,6 +162,28 @@ def pin(
             tx,
             deployment_id,
             body.revision,
+            now=at,
+            max_age_seconds=settings.observation_max_age_seconds,
+        )
+    return s.DeploymentChangeOut(deployment=store.deployment(deployment_id), changed=changed)
+
+
+@router.post("/deployments/{deployment_id}/rollback", response_model=s.DeploymentChangeOut)
+def rollback(
+    deployment_id: str,
+    body: s.RollbackIn,
+    store: StoreDep,
+    settings: SettingsDep,
+    who: Operator,
+    at: Now,
+) -> s.DeploymentChangeOut:
+    """Return to an earlier release: the given revision, or the newest earlier activated one."""
+    with store.transaction(who.actor) as tx:
+        changed = lifecycle.rollback(
+            tx,
+            deployment_id,
+            body.revision,
+            body.reason,
             now=at,
             max_age_seconds=settings.observation_max_age_seconds,
         )
