@@ -1,0 +1,146 @@
+{
+  "about": "Evaluation suites for delivery.md section 1.3. The registry and the tooling each check a suite; both must accept every `valid` suite and refuse every `invalid` one with a message that contains `mentions`.",
+  "valid": [
+    {
+      "name": "smallest",
+      "suite": {
+        "schema_version": 1,
+        "timeout_seconds": 600,
+        "acceptance": {"min_passed": "all"},
+        "cases": [{"id": "one", "task": "Say hello."}]
+      }
+    },
+    {
+      "name": "every-check",
+      "suite": {
+        "schema_version": 1,
+        "timeout_seconds": 30,
+        "acceptance": {"min_passed": 1},
+        "cases": [
+          {
+            "id": "instance-summary",
+            "task": "Report the server version and the number of databases.",
+            "expect": {
+              "outcome": "completed",
+              "report_contains": ["PostgreSQL"],
+              "report_matches": ["databases?:\\s+\\d+"],
+              "report_excludes": ["Traceback"]
+            }
+          },
+          {"id": "second-2", "task": "A second task.", "expect": {}}
+        ]
+      }
+    },
+    {
+      "name": "longest-timeout",
+      "suite": {
+        "schema_version": 1,
+        "timeout_seconds": 3600,
+        "acceptance": {"min_passed": 2},
+        "cases": [{"id": "a", "task": "x"}, {"id": "b", "task": "y"}]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "wrong-schema-version",
+      "mentions": "schema_version",
+      "suite": {"schema_version": 2, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x"}]}
+    },
+    {
+      "name": "no-cases",
+      "mentions": "cases",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": []}
+    },
+    {
+      "name": "timeout-too-short",
+      "mentions": "timeout_seconds",
+      "suite": {"schema_version": 1, "timeout_seconds": 29, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x"}]}
+    },
+    {
+      "name": "timeout-too-long",
+      "mentions": "timeout_seconds",
+      "suite": {"schema_version": 1, "timeout_seconds": 3601, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x"}]}
+    },
+    {
+      "name": "timeout-missing",
+      "mentions": "timeout_seconds",
+      "suite": {"schema_version": 1, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x"}]}
+    },
+    {
+      "name": "acceptance-missing",
+      "mentions": "acceptance",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "cases": [{"id": "one", "task": "x"}]}
+    },
+    {
+      "name": "min-passed-above-cases",
+      "mentions": "min_passed",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": 2}, "cases": [{"id": "one", "task": "x"}]}
+    },
+    {
+      "name": "min-passed-zero",
+      "mentions": "min_passed",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": 0}, "cases": [{"id": "one", "task": "x"}]}
+    },
+    {
+      "name": "min-passed-true",
+      "mentions": "min_passed",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": true}, "cases": [{"id": "one", "task": "x"}]}
+    },
+    {
+      "name": "duplicate-case-id",
+      "mentions": "one",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x"}, {"id": "one", "task": "y"}]}
+    },
+    {
+      "name": "case-id-not-a-name",
+      "mentions": "id",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "Not A Name", "task": "x"}]}
+    },
+    {
+      "name": "task-missing",
+      "mentions": "task",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one"}]}
+    },
+    {
+      "name": "task-not-a-string",
+      "mentions": "task",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": {"prompt": "x"}}]}
+    },
+    {
+      "name": "task-empty",
+      "mentions": "task",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": ""}]}
+    },
+    {
+      "name": "outcome-unknown",
+      "mentions": "outcome",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x", "expect": {"outcome": "failed"}}]}
+    },
+    {
+      "name": "pattern-does-not-compile",
+      "mentions": "report_matches",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x", "expect": {"report_matches": ["(unclosed"]}}]}
+    },
+    {
+      "name": "check-not-a-list",
+      "mentions": "report_contains",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x", "expect": {"report_contains": "PostgreSQL"}}]}
+    },
+    {
+      "name": "unknown-key-at-top",
+      "mentions": "judge",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "judge": "model", "cases": [{"id": "one", "task": "x"}]}
+    },
+    {
+      "name": "unknown-key-in-case",
+      "mentions": "weight",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x", "weight": 2}]}
+    },
+    {
+      "name": "unknown-key-in-expect",
+      "mentions": "report_equals",
+      "suite": {"schema_version": 1, "timeout_seconds": 600, "acceptance": {"min_passed": "all"}, "cases": [{"id": "one", "task": "x", "expect": {"report_equals": "x"}}]}
+    }
+  ]
+}

@@ -119,9 +119,10 @@ cases:
       report_excludes: ["Traceback"]         # no string is in the report
 ```
 
-Rules: 1 to 20 cases; a task is 1 to 4000 characters; each list has at most 20 entries of at
+Rules: 1 to 20 cases; a task is a string of 1 to 4000 characters; each list has at most 20 entries of at
 most 500 characters; a pattern must compile; an unknown key anywhere is an error. `check`
-applies these rules and so does the registry when a release is reported. Scoring is these
+applies these rules and so does the registry when a release is reported;
+`suite-cases.json` holds suites both must accept and suites both must refuse. Scoring is these
 checks and nothing else in milestone 2: no model judges an answer.
 
 ## 2. The carried declaration
@@ -580,7 +581,8 @@ Not part of this repository; listed so that nothing is assumed.
 | --- | --- | --- |
 | Store | `store/memory.py`, `store/pg.py`, `tests/store_suite.py`, `tests/test_migrations.py`, `tests/world.py` (helpers for the new records only) | The protocol in `store/__init__.py` and `migrations/0002_delivery.sql`, as written |
 | 2.2 Controller | `platform/controller/`, `deploy/platform/crds/` | 2, and the rate limit from `current-release` |
-| 2.3 Report | `agent_registry/api/intake.py`, `agent_registry/api/github.py`, `agent_registry/config.py`, the wiring in `api/app.py`, `.github/actions/agent-release/` | 3.1 to 3.3 |
+| 2.1 Session interface | `platform/session-api/`, and the `memo` argument in `platform/runner/runner/submit.py` | `platform/session-api/contract/sessions.md` |
+| 2.3 Report | `agent_registry/api/intake.py`, `agent_registry/api/github.py`, `agent_registry/rules/report.py` (the suite and declaration checks, which 2.4 then also calls), `agent_registry/config.py`, the wiring in `api/app.py`, `.github/actions/agent-release/` | 1.3 (the registry's check), 3.1 to 3.3 |
 | 2.4 Activation | `rules/activation.py`, `rules/revisions.py`, `rules/lifecycle.py`, `rules/approval.py`, `rules/projection.py`, `api/write.py`, `api/evaluations.py`, `queries.py`, `api/schemas.py`, `contract/lifecycle.md`, `contract/projection.md`, `contract/openapi.json` | 4, 5, 6.1, 6.2, 7, 9, 10, 11 |
 | 2.5 Evaluator | `platform/evaluator/` | 6.3 |
 | 2.6 Provisioner | `platform/provisioner/` | 2 (the object is written whole), 8.3, 9 |
