@@ -32,6 +32,12 @@ ship with the action), verify, publish the release assets. It is a composite act
 not a reusable workflow so that the certificate subject stays the calling repository's
 workflow on the tag, the shape every tenant pin matches.
 
+`zetra-agents check --contracts DIR` also reads the tool contracts in `DIR` (copies of the
+cluster repository's `infrastructure/mcp/contracts/<server>.json`). Each tool grant of an
+agent whose backend a contract names must list its tools there, with the grant's effect.
+A grant whose backend no contract names is reported as not checked, not failed. Without the
+option `check` is unchanged.
+
 The conformance fixtures in `layout.FIXTURES` are the only agents built with the
 Dockerfile's `fixture` target, which replaces the installed SDK boundary driver with the
 agent package's `step.py` and runs the agent's `verify_image.py`. `check` refuses those

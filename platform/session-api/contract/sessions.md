@@ -89,11 +89,15 @@ Checks, in this order. The first that fails answers.
 | 3 | The Agent exists in the tenant's namespace | `not-found` |
 | 4 | The Agent carries the annotation `registry.agentplatform.io/deployment` | `wrong-path`: "db-admin is not owned by the registry; use the pull request path's run command" |
 | 5 | `spec.enabled` is not false | `refused`: "the agent is disabled" |
+| 5a | The caller is the evaluator, or the Agent does not carry `registry.agentplatform.io/held` | `refused` (409): "the agent is held by alias move <id>" |
 | 6 | The release is named, or the Agent carries `registry.agentplatform.io/current-release` | `refused`: "the agent has no current release" |
 | 7 | The release is the current one, or the caller is the evaluator | 403 `refused`: "only the evaluator may name a release that is not current" |
 | 8 | The AgentRelease exists in the namespace and its `spec.agent` is the agent | `not-found` |
 | 9 | Its `Ready` condition is True | `refused`: "release R is not Ready: <reason>: <message>" |
 | 10 | The identity mode is `agent`. It is read from the release's `spec.declaration` when it has one, otherwise from the Agent. | `refused`: "this agent acts for a person and needs that person's consent; it cannot be started here" |
+
+Check 5a is the alias-move hold (`registry/contract/dependencies.md` section 7.2): the
+evaluator is not refused, so the agent can be evaluated on the new model.
 
 Then the session is submitted with `grant_handle` none, the pool from the settings, and a
 Temporal memo `{"release": ..., "startedBy": <the caller's name>, "purpose": ...}`.
@@ -169,9 +173,13 @@ that a session started another way is still found by its release.
 ### 4.5 Cancel by release
 
 `POST /v1/tenants/{tenant}/sessions/cancel` with
-`{"agent": "db-admin", "release": "...", "reason": "..."}`. Operator; provisioner.
+`{"agent": "db-admin", "release": "...", "purpose": "task", "reason": "..."}`. Operator;
+provisioner. `release` and `purpose` are optional; `purpose` is `task` or `evaluation`
+(otherwise `invalid-arguments`).
 
-Cancels every running session of that agent and release, including those with no memo.
+Cancels every running session of that agent and release, including those with no memo. With
+`purpose`, only sessions of that purpose. Without `release`, the sessions of every release of
+the agent. A request with neither new field behaves as before.
 
 ```json
 {"cancelled": ["<sessionId>", "..."], "failed": [{"sessionId": "...", "message": "..."}]}

@@ -1,7 +1,7 @@
 """The records of the registry.
 
-One class per table of `migrations/0001_init.sql` and `migrations/0002_delivery.sql`. Python names are snake_case; JSON names are
-camelCase. The same classes are what the store returns and what the HTTP interface carries.
+One class per table of `migrations/0001_init.sql`, `migrations/0002_delivery.sql` and
+`migrations/0003_alias_moves.sql`. Python names are snake_case; JSON names are camelCase. The same classes are what the store returns and what the HTTP interface carries.
 
 Identifiers are text and built by the functions at the end of this file. Nothing else builds one.
 """
@@ -41,6 +41,8 @@ Phase = Literal[
 EvaluationState = Literal["pending", "claimed", "passed", "failed", "error", "cancelled"]
 RevocationReason = Literal["security", "quality"]
 RevocationSessions = Literal["cancel", "finish"]
+MoveState = Literal["holding", "held", "moving", "evaluating", "completed", "cancelled"]
+HoldState = Literal["holding", "held", "suspended", "resumed", "released"]
 
 NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 RELEASE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
@@ -271,6 +273,67 @@ class Revocation(Record):
     revoked_by: str
     revoked_at: datetime
     indexed_at: datetime  # when this registry first saw it; not compared on a second write
+
+
+class Assessment(Record):
+    """What moving an alias to a candidate would touch (`contract/dependencies.md` section 5),
+    as it was computed. Written once. `pair` is the `{engine, release}` behind the alias then,
+    `candidate` the one asked about, and each dependant is the object of section 5 (its keys
+    are camelCase, as they are on the wire)."""
+
+    id: str
+    cluster: str
+    alias: str
+    pair: dict[str, Any]
+    candidate: dict[str, Any]
+    dependants: list[dict[str, Any]] = Field(default_factory=list)
+    blocked: bool
+    digest: str  # sha256:<hex>, `derive.sha` of the fields section 5 names
+    created_by: str
+    created_at: datetime
+
+
+class AliasMove(Record):
+    """One move of an alias (`contract/dependencies.md` section 6). `id` to `started_at` are
+    written once. The fields after the marker are progress; the store changes them only through
+    `Tx.set_alias_move_progress`."""
+
+    id: str
+    assessment_id: str
+    cluster: str
+    alias: str
+    candidate: dict[str, Any]
+    sessions: RevocationSessions
+    evaluation_seconds: int
+    started_by: str
+    started_at: datetime
+    # progress
+    state: MoveState = "holding"
+    held_at: datetime | None = None
+    moved_at: datetime | None = None
+    evaluating_at: datetime | None = None
+    deadline: datetime | None = None
+    finished_at: datetime | None = None
+    reason: str = ""
+
+
+class Hold(Record):
+    """The hold of one agent deployment for one move. `move_id` and `deployment_id` are written
+    once; the rest is progress, changed only through `Tx.set_hold_progress`. A hold is in force
+    while it is `holding`, `held` or `suspended`."""
+
+    move_id: str
+    deployment_id: str
+    # progress
+    state: HoldState = "holding"
+    reason: str = ""
+    running: int | None = None  # the last reported number of running task sessions
+    acknowledged_at: datetime | None = None
+    ended_at: datetime | None = None
+
+
+IN_FORCE = ("holding", "held", "suspended")
+OPEN_MOVE = ("holding", "held", "moving", "evaluating")
 
 
 def deployment_id(kind: str, cluster: str, tenant: str | None, name: str) -> str:

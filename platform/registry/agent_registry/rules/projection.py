@@ -10,7 +10,7 @@ from typing import Any
 
 from agent_registry.config import ANNOTATION_PREFIX
 from agent_registry.models import Deployment, Revision
-from agent_registry.rules import revocation
+from agent_registry.rules import alias_move, revocation
 from agent_registry.store import Reads
 
 
@@ -84,6 +84,9 @@ def agent_object(reads: Reads, deployment: Deployment) -> ProjectedObject:
     release = reads.release(current.release_id) if current else None
     if release is not None:
         annotations[ANNOTATION_PREFIX + "current-release"] = release.name
+    hold = alias_move.hold_in_force(reads, deployment.id)
+    if hold is not None:
+        annotations[ANNOTATION_PREFIX + "held"] = hold.move_id
     return ProjectedObject(
         kind="Agent",
         namespace=meta["namespace"],
@@ -161,6 +164,28 @@ def without_annotations(document: dict[str, Any]) -> dict[str, Any]:
     result = copy.deepcopy(document)
     result["metadata"].pop("annotations", None)
     return result
+
+
+def holds_of(reads: Reads, cluster: str) -> list[dict[str, str]]:
+    """The holds the provisioner is asked to confirm: those in state `holding`
+    (`contract/dependencies.md` section 7.1), by move and then deployment."""
+    found = []
+    for move in reads.alias_moves(cluster=cluster, open=True):
+        for hold in reads.holds(move_id=move.id):
+            deployment = reads.deployment(hold.deployment_id)
+            if hold.state != "holding" or deployment is None:
+                continue
+            found.append(
+                {
+                    "move": move.id,
+                    "deployment": deployment.id,
+                    "tenant": deployment.tenant or "",
+                    "namespace": deployment.namespace,
+                    "agent": deployment.item,
+                    "sessions": move.sessions,
+                }
+            )
+    return sorted(found, key=lambda h: (h["move"], h["deployment"]))
 
 
 def registry_owned(reads: Reads, cluster: str) -> list[Deployment]:

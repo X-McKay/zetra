@@ -9,9 +9,11 @@ Rules both implementations keep, each covered by `tests/store_suite.py`:
 3. An exception inside the `with` block leaves the store exactly as it was.
 4. Write transactions are serialised: two never interleave.
 5. Releases, requirements, provisions, revisions (apart from progress), resolutions, approvals
-   (apart from state), evaluations (apart from progress), revocations and events are written
-   once. Writing the same content again is a no-op; writing different content under the same
+   (apart from state), evaluations (apart from progress), revocations, assessments, alias
+   moves and holds (apart from progress) and events are written once. Writing the same content again is a no-op; writing different content under the same
    key raises `Conflict`.
+   An alias has at most one open move, and a deployment at most one hold in force; a write
+   that would make a second raises `Conflict`.
 6. Nothing is deleted. There is no delete operation.
 7. Event sequence numbers only grow. `generation()` is the highest one recorded.
 8. Observations are not desired state: `put_observations` needs no transaction and no event.
@@ -25,16 +27,21 @@ from typing import Any, Protocol
 
 from agent_registry.models import (
     Alias,
+    AliasMove,
     Approval,
     ApprovalState,
+    Assessment,
     Cluster,
     Deployment,
     Evaluation,
     EvaluationState,
     Event,
+    Hold,
+    HoldState,
     Item,
     Meta,
     Mode,
+    MoveState,
     Observation,
     Phase,
     Provision,
@@ -66,6 +73,22 @@ class Unavailable(StoreError):
 
 class Unevented(StoreError):
     """A transaction changed state without an event, or recorded an event without a change."""
+
+
+def completion_is_new(have: Release, release: Release) -> bool:
+    """Whether `release` completes the stored `have` (True), is the same content (False), or
+    cannot replace it (`Conflict`). Only a release adopted with just a served name is completed."""
+    if have.model_dump(exclude={"recorded_at"}) == release.model_dump(exclude={"recorded_at"}):
+        return False
+    served = release.document.get("servedName")
+    if (
+        have.origin != "adopted"
+        or have.document != {"servedName": served}
+        or (have.kind, have.item, have.name) != (release.kind, release.item, release.name)
+        or release.origin != "adopted"
+    ):
+        raise Conflict(f"release {release.id} exists with other content")
+    return True
 
 
 class Reads(Protocol):
@@ -121,6 +144,19 @@ class Reads(Protocol):
         ...
 
     def revocation(self, revocation_id: str) -> Revocation | None: ...
+    def assessment(self, assessment_id: str) -> Assessment | None: ...
+    def alias_moves(
+        self, *, cluster: str | None = None, alias: str | None = None, open: bool | None = None
+    ) -> list[AliasMove]:
+        """Newest first. `open` True: only moves that are not completed or cancelled; False:
+        only those; None: all."""
+        ...
+
+    def alias_move(self, move_id: str) -> AliasMove | None: ...
+    def holds(self, *, move_id: str | None = None, deployment_id: str | None = None) -> list[Hold]:
+        """In ascending order of move id, then deployment id."""
+        ...
+
     def events(
         self, *, deployment_id: str | None = None, after: int = 0, limit: int = 200
     ) -> list[Event]:
@@ -150,6 +186,13 @@ class Tx(Reads, Protocol):
 
     def add_release(self, release: Release) -> None:
         """Write once. `recorded_at` is not compared when deciding whether content is the same."""
+        ...
+
+    def complete_release(self, release: Release) -> None:
+        """Give an adopted release that was recorded with only `{"servedName": ...}` its full
+        document and digest, once (`contract/dependencies.md` section 4.3). `Conflict` when the
+        stored release is anything else or has another served name; `Missing` when none is
+        stored. The same content again is not a change."""
         ...
 
     def add_requirements(self, release_id: str, rows: list[Requirement]) -> None:
@@ -204,6 +247,52 @@ class Tx(Reads, Protocol):
 
     def add_revocation(self, revocation: Revocation) -> None:
         """Write once. `indexed_at` is not compared when deciding whether content is the same."""
+        ...
+
+    def add_assessment(self, assessment: Assessment) -> None:
+        """Write once. The same content again is a no-op; other content under the id raises
+        `Conflict`."""
+        ...
+
+    def add_alias_move(self, move: AliasMove) -> None:
+        """Write once, with its progress fields as given. `Missing` when its assessment is not
+        stored; `Conflict` when the alias has another open move."""
+        ...
+
+    def set_alias_move_progress(
+        self,
+        move_id: str,
+        *,
+        state: MoveState | None = None,
+        held_at: datetime | None = None,
+        moved_at: datetime | None = None,
+        evaluating_at: datetime | None = None,
+        deadline: datetime | None = None,
+        finished_at: datetime | None = None,
+        reason: str | None = None,
+    ) -> AliasMove:
+        """Change only the fields given (None leaves a field as it is). Raises `Missing` when
+        there is no such move."""
+        ...
+
+    def add_hold(self, hold: Hold) -> None:
+        """Write once, with its progress fields as given. `Missing` when the move or the
+        deployment is not stored; `Conflict` when the deployment has another hold in force."""
+        ...
+
+    def set_hold_progress(
+        self,
+        move_id: str,
+        deployment_id: str,
+        *,
+        state: HoldState | None = None,
+        reason: str | None = None,
+        running: int | None = None,
+        acknowledged_at: datetime | None = None,
+        ended_at: datetime | None = None,
+    ) -> Hold:
+        """Change only the fields given (None leaves a field as it is). Raises `Missing` when
+        there is no such hold."""
         ...
 
     def event(

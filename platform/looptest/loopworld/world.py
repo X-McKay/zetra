@@ -277,6 +277,33 @@ class World:
             }
         )
 
+    def engine_serves(self, name: str, served: str, *, ready: int = 1) -> None:
+        """A model engine on the cluster: the workload the feed names for it, and the ConfigMap
+        its served name is read from, saying `served`."""
+        engine = next(e for e in self.feed_document["modelEngines"] if e["name"] == name)
+        source = engine["servedNameFrom"]
+        self.cluster.put(
+            {
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": {"name": engine["namespace"], "namespace": None},
+            }
+        )
+        self.workload(
+            engine["namespace"],
+            engine["workload"]["name"],
+            "vllm/vllm-openai:v0.30.0-aarch64",
+            ready=ready,
+        )
+        self.cluster.put(
+            {
+                "apiVersion": "v1",
+                "kind": source["kind"],
+                "metadata": {"name": source["name"], "namespace": engine["namespace"]},
+                "data": {source["key"]: served},
+            }
+        )
+
     # -- time ------------------------------------------------------------------------------
 
     def tick(self, seconds: float = 1) -> None:

@@ -49,6 +49,9 @@ class Settings:
     # How long after it is stored a security revocation is offered to the provisioner, which
     # cancels the release's sessions (contract/delivery.md section 8.3).
     revocation_cancel_seconds: int = 86400
+    # How long a move's agents are evaluated on the new model before those still held are
+    # suspended (contract/dependencies.md section 6.3). A request may ask for 60 to 86400.
+    alias_move_evaluation_seconds: int = 1800
     host: str = "0.0.0.0"  # noqa: S104 - a container port behind a NetworkPolicy
     port: int = 8080
 
@@ -79,6 +82,11 @@ class Settings:
             report_audience=env.get("REGISTRY_REPORT_AUDIENCE", ""),
             revocation_cancel_seconds=_whole(
                 env, "REGISTRY_REVOCATION_CANCEL_SECONDS", default.revocation_cancel_seconds
+            ),
+            alias_move_evaluation_seconds=_whole(
+                env,
+                "REGISTRY_ALIAS_MOVE_EVALUATION_SECONDS",
+                default.alias_move_evaluation_seconds,
             ),
             host=env.get("REGISTRY_HOST", default.host),
             port=int(env.get("REGISTRY_PORT", default.port)),

@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from typing import Any, Literal
 
+from agent_registry import canonical
 from agent_registry.canonical import release_document
 from agent_registry.config import ANNOTATION_PREFIX
 from agent_registry.models import (
@@ -16,6 +17,7 @@ from agent_registry.models import (
     Resolution,
     TrustedRepository,
     release_id,
+    release_slug,
     revision_id,
 )
 from agent_registry.store import Reads
@@ -29,6 +31,41 @@ def image_digest(image: str) -> str:
     """`sha256:<hex>` of an image reference pinned by digest, or "" when it is pinned by tag."""
     found = IMAGE_DIGEST.search(image or "")
     return found.group(1) if found else ""
+
+
+def sha(value: Any) -> str:
+    """`sha256:<hex>` of the canonical form: the shape every digest of a contract or a model
+    release takes."""
+    return "sha256:" + canonical.digest(value)
+
+
+def contract_record(contract: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A tool contract file as the registry keeps it (`contract/dependencies.md` section 2.3),
+    or None when the server has no contract. A tool's digest covers its four other fields; the
+    contract's covers the map of tool name to tool digest."""
+    if contract is None:
+        return None
+    tools = {}
+    for tool in contract["tools"]:
+        fields = {
+            "description": tool["description"],
+            "effect": tool["effect"],
+            "inputSchema": tool["inputSchema"],
+            "outputSchema": tool.get("outputSchema"),
+        }
+        tools[tool["name"]] = fields | {"digest": sha(fields)}
+    return {
+        "digest": sha({name: tool["digest"] for name, tool in tools.items()}),
+        "image": contract["image"],
+        "configDigest": contract["configDigest"],
+        "tools": tools,
+    }
+
+
+def engine_release(document: dict[str, Any]) -> str:
+    """The name of the release a model engine serves: the one its document names, else the one
+    adopted for its served name."""
+    return document.get("release") or release_slug(document["servedName"])
 
 
 def agent_release_record(
@@ -99,10 +136,16 @@ def resolutions_of(
     aliases = {a.backend: a for a in store.aliases(cluster)}
     rows = []
     for requirement in requirements:
-        target, detail = None, {}
+        target, detail, resolved_release = None, {}, None
         if requirement.type == "tool" and requirement.target in servers:
             target = servers[requirement.target].id
-            detail = {"image": servers[requirement.target].document.get("image")}
+            document = servers[requirement.target].document
+            detail = {"image": document.get("image")}
+            if document.get("contract"):
+                tools = document["contract"]["tools"]
+                detail["contract"] = sha(
+                    {name: (tools.get(name) or {}).get("digest") for name in requirement.names}
+                )
         elif requirement.type == "model" and requirement.target in aliases:
             alias = aliases[requirement.target]
             target = alias.deployment_id
@@ -111,12 +154,16 @@ def resolutions_of(
                 "alias": alias.alias,
                 "servedName": model.document.get("servedName") if model else None,
             }
+            if model and model.document.get("release"):
+                detail["release"] = engine_release(model.document)
+                resolved_release = release_id("model", model.item, detail["release"])
         rows.append(
             Resolution(
                 revision_id=revision_id(deployment, number),
                 type=requirement.type,
                 target=requirement.target,
                 resolved_deployment=target,
+                resolved_release=resolved_release,
                 detail=detail,
             )
         )

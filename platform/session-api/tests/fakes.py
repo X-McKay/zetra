@@ -80,12 +80,16 @@ class FakeReports:
             raise ValueError("report missing") from None
 
 
-def agent(name="db-admin", *, current="db-admin-r1", enabled=True, owned=True, mode="agent"):
+def agent(
+    name="db-admin", *, current="db-admin-r1", enabled=True, owned=True, mode="agent", held=None
+):
     annotations = {}
     if owned:
         annotations["registry.agentplatform.io/deployment"] = "kubani"
     if current:
         annotations["registry.agentplatform.io/current-release"] = current
+    if held:
+        annotations["registry.agentplatform.io/held"] = held
     spec = {"identity": {"mode": mode}}
     if enabled is not None:
         spec["enabled"] = enabled

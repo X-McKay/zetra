@@ -90,6 +90,7 @@ def desired(
         revocations=_cancellations(store, cluster, at, settings.revocation_cancel_seconds)
         if normal
         else [],
+        holds=[s.DesiredHold(**h) for h in projection.holds_of(store, cluster)] if normal else [],
     )
 
 
@@ -184,6 +185,7 @@ def observations(
         objects=len(body.objects),
         observed_at=body.observed_at,
         last_generation=body.last_generation,
+        holds=[(h.move, h.deployment, h.running) for h in body.holds or []],
         now=at,
         max_age_seconds=settings.observation_max_age_seconds,
         actor=who.actor,

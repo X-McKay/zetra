@@ -16,17 +16,23 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from agent_registry.models import (
+    OPEN_MOVE,
     Alias,
+    AliasMove,
     Approval,
     ApprovalState,
+    Assessment,
     Cluster,
     Deployment,
     Evaluation,
     EvaluationState,
     Event,
+    Hold,
+    HoldState,
     Item,
     Meta,
     Mode,
+    MoveState,
     Observation,
     Phase,
     Provision,
@@ -38,7 +44,14 @@ from agent_registry.models import (
     Tenant,
     TrustedRepository,
 )
-from agent_registry.store import Conflict, Missing, StoreError, Unavailable, Unevented
+from agent_registry.store import (
+    Conflict,
+    Missing,
+    StoreError,
+    Unavailable,
+    Unevented,
+    completion_is_new,
+)
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
@@ -282,6 +295,36 @@ class _Reads:
     def revocation(self, revocation_id: str) -> Revocation | None:
         return self._one(Revocation, "revocations", id=revocation_id)
 
+    def assessment(self, assessment_id: str) -> Assessment | None:
+        return self._one(Assessment, "assessments", id=assessment_id)
+
+    def alias_moves(
+        self, *, cluster: str | None = None, alias: str | None = None, open: bool | None = None
+    ) -> list[AliasMove]:
+        where, params = _where({"cluster": cluster, "alias": alias})
+        if open is not None:
+            where += (" AND" if where else " WHERE") + (
+                " state = ANY(%s)" if open else " NOT state = ANY(%s)"
+            )
+            params.append(list(OPEN_MOVE))
+        sql = (
+            f"SELECT {_columns(AliasMove)} FROM alias_moves{where}"
+            f" ORDER BY started_at DESC, id {_C} DESC"
+        )
+        return [_load(AliasMove, row) for row in self._rows(sql, params)]
+
+    def alias_move(self, move_id: str) -> AliasMove | None:
+        return self._one(AliasMove, "alias_moves", id=move_id)
+
+    def holds(self, *, move_id: str | None = None, deployment_id: str | None = None) -> list[Hold]:
+        return self._select(
+            Hold,
+            "holds",
+            f"move_id {_C}, deployment_id {_C}",
+            move_id=move_id,
+            deployment_id=deployment_id,
+        )
+
     def events(
         self, *, deployment_id: str | None = None, after: int = 0, limit: int = 200
     ) -> list[Event]:
@@ -327,6 +370,15 @@ _EVALUATION_PROGRESS = {
     "evaluator_version",
     "result",
     "finished_at",
+}
+_MOVE_PROGRESS = {
+    "state",
+    "held_at",
+    "moved_at",
+    "evaluating_at",
+    "deadline",
+    "finished_at",
+    "reason",
 }
 
 
@@ -402,6 +454,17 @@ class _Tx(_Reads):
             self.changed = True
         elif not _same_release(have, release):
             raise Conflict(f"release {release.id} exists with other content")
+
+    def complete_release(self, release: Release) -> None:
+        have = self.release(release.id)
+        if have is None:
+            raise Missing(f"release {release.id} does not exist")
+        if completion_is_new(have, release):
+            self._conn.execute(
+                "UPDATE releases SET digest = %s, document = %s WHERE id = %s",
+                (release.digest, Jsonb(release.document), release.id),
+            )
+            self.changed = True
 
     def _add_rows(
         self, table: str, what: str, release_id: str, rows: list[Any], have: list[Any]
@@ -591,6 +654,101 @@ class _Tx(_Reads):
             exclude={"indexed_at"}
         ):
             raise Conflict(f"revocation {revocation.id} exists with other content")
+
+    def add_assessment(self, assessment: Assessment) -> None:
+        have = self.assessment(assessment.id)
+        if have is None:
+            self._insert("assessments", assessment)
+            self.changed = True
+        elif have != assessment:
+            raise Conflict(f"assessment {assessment.id} exists with other content")
+
+    def add_alias_move(self, move: AliasMove) -> None:
+        if self.assessment(move.assessment_id) is None:
+            raise Missing(f"assessment {move.assessment_id} does not exist")
+        have = self.alias_move(move.id)
+        if have is not None:
+            if have.model_dump(exclude=_MOVE_PROGRESS) != move.model_dump(exclude=_MOVE_PROGRESS):
+                raise Conflict(f"alias move {move.id} exists with other content")
+            return
+        self._insert("alias_moves", move)
+        self.changed = True
+
+    def set_alias_move_progress(
+        self,
+        move_id: str,
+        *,
+        state: MoveState | None = None,
+        held_at: datetime | None = None,
+        moved_at: datetime | None = None,
+        evaluating_at: datetime | None = None,
+        deadline: datetime | None = None,
+        finished_at: datetime | None = None,
+        reason: str | None = None,
+    ) -> AliasMove:
+        have = self.alias_move(move_id)
+        if have is None:
+            raise Missing(f"alias move {move_id} does not exist")
+        given = {
+            "state": state,
+            "held_at": held_at,
+            "moved_at": moved_at,
+            "evaluating_at": evaluating_at,
+            "deadline": deadline,
+            "finished_at": finished_at,
+            "reason": reason,
+        }
+        given = {k: v for k, v in given.items() if v is not None}
+        updated = have.model_copy(update=given)
+        if updated != have:
+            sets = ", ".join(f"{k} = %s" for k in given)
+            self._conn.execute(
+                f"UPDATE alias_moves SET {sets} WHERE id = %s", [*given.values(), move_id]
+            )
+            self.changed = True
+        return updated
+
+    def add_hold(self, hold: Hold) -> None:
+        if self.alias_move(hold.move_id) is None:
+            raise Missing(f"alias move {hold.move_id} does not exist")
+        if self.deployment(hold.deployment_id) is None:
+            raise Missing(f"deployment {hold.deployment_id} does not exist")
+        if self._one(Hold, "holds", move_id=hold.move_id, deployment_id=hold.deployment_id):
+            return
+        self._insert("holds", hold)
+        self.changed = True
+
+    def set_hold_progress(
+        self,
+        move_id: str,
+        deployment_id: str,
+        *,
+        state: HoldState | None = None,
+        reason: str | None = None,
+        running: int | None = None,
+        acknowledged_at: datetime | None = None,
+        ended_at: datetime | None = None,
+    ) -> Hold:
+        have = self._one(Hold, "holds", move_id=move_id, deployment_id=deployment_id)
+        if have is None:
+            raise Missing(f"hold {move_id}/{deployment_id} does not exist")
+        given = {
+            "state": state,
+            "reason": reason,
+            "running": running,
+            "acknowledged_at": acknowledged_at,
+            "ended_at": ended_at,
+        }
+        given = {k: v for k, v in given.items() if v is not None}
+        updated = have.model_copy(update=given)
+        if updated != have:
+            sets = ", ".join(f"{k} = %s" for k in given)
+            self._conn.execute(
+                f"UPDATE holds SET {sets} WHERE move_id = %s AND deployment_id = %s",
+                [*given.values(), move_id, deployment_id],
+            )
+            self.changed = True
+        return updated
 
     def _insert_event(self, event: Event) -> None:
         self._insert("events", event)

@@ -25,6 +25,7 @@ CODES: dict[str, tuple[int, bool]] = {
     "wrong-path": (409, False),  # the agent is owned by the other path
     "stale-approval": (409, False),  # the approval names something that is no longer so
     "replayed-approval": (409, False),  # this approval id was used before
+    "stale-assessment": (409, False),  # the assessment no longer describes the cluster
     "in-recovery": (409, True),  # nothing is written until recovery is left
     "unavailable": (503, True),
 }

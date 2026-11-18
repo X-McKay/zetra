@@ -166,6 +166,9 @@ class FakeSessions:
         self.calls: list[tuple[str, str, str, str]] = []  # tenant, agent, release, reason
         self.error: Exception | None = None
         self.cancelled = 2
+        self.running: list[dict] = []  # what list_running answers
+        self.list_error: Exception | None = None
+        self.purpose_calls: list[tuple[str, str, str, str]] = []  # tenant, agent, purpose, reason
 
     def cancel_release(self, tenant, agent, release, reason) -> int:
         self.calls.append((tenant, agent, release, reason))
@@ -174,6 +177,22 @@ class FakeSessions:
         if self.error:
             raise self.error
         return self.cancelled
+
+    def cancel_sessions(self, tenant, agent, purpose, reason) -> int:
+        self.purpose_calls.append((tenant, agent, purpose, reason))
+        if self.kube is not None:
+            self.kube.log.append(("cancel-sessions", agent))
+        if self.error:
+            raise self.error
+        self.running = [s for s in self.running if s.get("purpose") != purpose]
+        return self.cancelled
+
+    def list_running(self, tenant, agent) -> list[dict]:
+        if self.kube is not None:
+            self.kube.log.append(("list", agent))
+        if self.list_error:
+            raise self.list_error
+        return list(self.running)
 
 
 class Stopper(threading.Event):
