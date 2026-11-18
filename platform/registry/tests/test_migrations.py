@@ -110,3 +110,19 @@ def test_the_second_migration_applies_on_a_database_holding_the_first(empty, tmp
     assert second in recorded(empty)
     assert {"evaluations", "revocations"} <= tables(empty)
     assert migrate(empty) == []
+
+
+def test_the_alias_move_migration_applies_on_a_database_holding_the_first_two(
+    empty, tmp_path, monkeypatch
+):
+    names = [p.name for p in sorted(migrations_dir().glob("*.sql"))]
+    assert names[:3] == ["0001_init.sql", "0002_delivery.sql", "0003_alias_moves.sql"]
+    for name in names[:2]:
+        (tmp_path / name).write_text((migrations_dir() / name).read_text())
+    monkeypatch.setattr(pg_module, "migrations_dir", lambda: tmp_path)
+    assert migrate(empty) == names[:2]
+    assert "alias_moves" not in tables(empty)
+    monkeypatch.undo()
+    assert migrate(empty) == names[2:]
+    assert {"assessments", "alias_moves", "holds"} <= tables(empty)
+    assert migrate(empty) == []

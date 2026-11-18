@@ -15,10 +15,13 @@ import pytest
 
 from agent_registry.models import (
     Alias,
+    AliasMove,
     Approval,
+    Assessment,
     Cluster,
     Deployment,
     Evaluation,
+    Hold,
     Item,
     Observation,
     Provision,
@@ -163,6 +166,41 @@ def observation(name: str, at: datetime = T0, **changes) -> Observation:
         "document": {"spec": {}, "status": {}},
     }
     return Observation(**(values | changes))
+
+
+def assessment(aid: str = "asm-1", **changes) -> Assessment:
+    values = {
+        "id": aid,
+        "cluster": "kubani",
+        "alias": "fast",
+        "pair": {"engine": "fast", "release": "r1"},
+        "candidate": {"engine": "fast", "release": "r2"},
+        "dependants": [{"deployment": DEP, "authority": "registry", "enabled": True}],
+        "blocked": False,
+        "digest": "sha256:" + "d" * 64,
+        "created_by": "al@example.com",
+        "created_at": T0,
+    }
+    return Assessment(**(values | changes))
+
+
+def move(mid: str = "mv-1", **changes) -> AliasMove:
+    values = {
+        "id": mid,
+        "assessment_id": "asm-1",
+        "cluster": "kubani",
+        "alias": "fast",
+        "candidate": {"engine": "fast", "release": "r2"},
+        "sessions": "finish",
+        "evaluation_seconds": 600,
+        "started_by": "al@example.com",
+        "started_at": T0,
+    }
+    return AliasMove(**(values | changes))
+
+
+def hold(mid: str = "mv-1", dep: str = DEP, **changes) -> Hold:
+    return Hold(**({"move_id": mid, "deployment_id": dep} | changes))
 
 
 def seed(store: Store) -> None:
@@ -686,6 +724,161 @@ class StoreSuite:
         assert [r.id for r in store.revocations(item="lookup")] == ["m"]
         assert [r.id for r in store.revocations(kind="agent", item="db-admin")] == ["z", "a", "b"]
         assert store.revocations(kind="model") == []
+
+    def test_assessment_is_written_once(self, store: Store):
+        with store.transaction("test") as tx:
+            tx.add_assessment(assessment())
+            tx.event("assessment-created")
+        assert store.assessment("asm-1") == assessment()
+        assert store.assessment("nope") is None
+        before = store.generation()
+        with store.transaction("test") as tx:
+            tx.add_assessment(assessment())
+        assert store.generation() == before
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.add_assessment(assessment(blocked=True))
+        assert store.assessment("asm-1") == assessment()
+
+    def test_alias_move_is_added_and_needs_its_assessment(self, store: Store):
+        with pytest.raises(Missing), store.transaction("test") as tx:
+            tx.add_alias_move(move())
+        with store.transaction("test") as tx:
+            tx.add_assessment(assessment())
+            tx.add_alias_move(move())
+            tx.event("alias-move-started")
+        assert store.alias_move("mv-1") == move()
+        assert store.alias_move("nope") is None
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.add_alias_move(move(sessions="cancel"))
+
+    def test_alias_move_progress_changes_only_what_is_given(self, store: Store):
+        with store.transaction("test") as tx:
+            tx.add_assessment(assessment())
+            tx.add_alias_move(move())
+            tx.event("alias-move-started")
+        with store.transaction("test") as tx:
+            got = tx.set_alias_move_progress("mv-1", state="held", held_at=T0 + timedelta(1))
+            tx.event("alias-move-held")
+        assert (got.state, got.held_at, got.moved_at, got.reason) == (
+            "held",
+            T0 + timedelta(1),
+            None,
+            "",
+        )
+        with store.transaction("test") as tx:
+            done = tx.set_alias_move_progress("mv-1", state="cancelled", reason="changed my mind")
+            tx.event("alias-move-cancelled")
+        assert done.held_at == T0 + timedelta(1)
+        assert store.alias_move("mv-1") == done
+        assert done.model_dump(include={"id", "candidate", "started_at"}) == move().model_dump(
+            include={"id", "candidate", "started_at"}
+        )
+        before = store.generation()
+        with store.transaction("test") as tx:
+            tx.set_alias_move_progress("mv-1", state="cancelled")
+        assert store.generation() == before
+        with pytest.raises(Missing), store.transaction("test") as tx:
+            tx.set_alias_move_progress("nope", state="held")
+
+    def test_an_alias_has_one_open_move(self, store: Store):
+        with store.transaction("test") as tx:
+            tx.add_assessment(assessment())
+            tx.add_alias_move(move())
+            tx.event("alias-move-started")
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.add_alias_move(move("mv-2"))
+        with store.transaction("test") as tx:
+            tx.add_alias_move(move("mv-3", alias="main"))
+            tx.set_alias_move_progress("mv-1", state="completed")
+            tx.event("alias-move-completed")
+        with store.transaction("test") as tx:
+            tx.add_alias_move(move("mv-2", started_at=T0 + timedelta(1)))
+            tx.event("alias-move-started")
+        assert [m.id for m in store.alias_moves(cluster="kubani", alias="fast", open=True)] == [
+            "mv-2"
+        ]
+
+    def test_alias_moves_filter_and_order_newest_first(self, store: Store):
+        with store.transaction("test") as tx:
+            tx.add_assessment(assessment())
+            tx.add_alias_move(move("a", started_at=T0, state="completed"))
+            tx.add_alias_move(move("b", started_at=T0 + timedelta(1), state="cancelled"))
+            tx.add_alias_move(move("c", started_at=T0 + timedelta(2), state="moving"))
+            tx.add_alias_move(move("d", alias="main", started_at=T0 + timedelta(1)))
+            tx.add_alias_move(move("e", cluster="other", started_at=T0 + timedelta(3)))
+            tx.event("alias-move-started")
+        assert [m.id for m in store.alias_moves()] == ["e", "c", "d", "b", "a"]
+        assert [m.id for m in store.alias_moves(cluster="kubani")] == ["c", "d", "b", "a"]
+        assert [m.id for m in store.alias_moves(cluster="kubani", alias="fast")] == ["c", "b", "a"]
+        assert [m.id for m in store.alias_moves(cluster="kubani", open=True)] == ["c", "d"]
+        assert [m.id for m in store.alias_moves(cluster="kubani", open=False)] == ["b", "a"]
+
+    def test_hold_is_added_and_needs_its_move_and_deployment(self, store: Store):
+        seed(store)
+        with store.transaction("test") as tx:
+            tx.add_assessment(assessment())
+            tx.add_alias_move(move())
+            tx.event("alias-move-started")
+        with pytest.raises(Missing), store.transaction("test") as tx:
+            tx.add_hold(hold("nope"))
+        with pytest.raises(Missing), store.transaction("test") as tx:
+            tx.add_hold(hold(dep="agent:kubani:tenant-test:unknown"))
+        with store.transaction("test") as tx:
+            tx.add_hold(hold())
+            tx.event("alias-move-started")
+        assert store.holds() == [hold()]
+        assert store.holds(move_id="mv-1", deployment_id=DEP) == [hold()]
+        assert store.holds(move_id="mv-2") == []
+        assert store.holds(deployment_id="other") == []
+        before = store.generation()
+        with store.transaction("test") as tx:
+            tx.add_hold(hold())
+        assert store.generation() == before
+
+    def test_hold_progress_changes_only_what_is_given(self, store: Store):
+        seed(store)
+        with store.transaction("test") as tx:
+            tx.add_assessment(assessment())
+            tx.add_alias_move(move())
+            tx.add_hold(hold())
+            tx.event("alias-move-started")
+        with store.transaction("test") as tx:
+            got = tx.set_hold_progress("mv-1", DEP, running=1)
+            tx.event("hold-counted", deployment_id=DEP)
+        assert (got.state, got.running, got.acknowledged_at) == ("holding", 1, None)
+        with store.transaction("test") as tx:
+            done = tx.set_hold_progress(
+                "mv-1", DEP, state="held", running=0, acknowledged_at=T0 + timedelta(1)
+            )
+            tx.event("hold-held", deployment_id=DEP)
+        assert (done.state, done.running, done.acknowledged_at) == ("held", 0, T0 + timedelta(1))
+        assert store.holds() == [done]
+        with pytest.raises(Missing), store.transaction("test") as tx:
+            tx.set_hold_progress("mv-1", "nope", state="released")
+
+    def test_a_deployment_has_one_hold_in_force(self, store: Store):
+        seed(store)
+        with store.transaction("test") as tx:
+            tx.add_assessment(assessment())
+            tx.add_alias_move(move("mv-1"))
+            tx.add_alias_move(move("mv-2", alias="main"))
+            tx.add_hold(hold("mv-1"))
+            tx.event("alias-move-started")
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.add_hold(hold("mv-2"))
+        with store.transaction("test") as tx:
+            tx.set_hold_progress("mv-1", DEP, state="suspended")
+            tx.event("hold-suspended", deployment_id=DEP)
+        with pytest.raises(Conflict), store.transaction("test") as tx:
+            tx.add_hold(hold("mv-2"))
+        with store.transaction("test") as tx:
+            tx.set_hold_progress("mv-1", DEP, state="resumed")
+            tx.add_hold(hold("mv-2"))
+            tx.event("hold-resumed", deployment_id=DEP)
+        assert [(h.move_id, h.state) for h in store.holds(deployment_id=DEP)] == [
+            ("mv-1", "resumed"),
+            ("mv-2", "holding"),
+        ]
 
     # -- 6. nothing is deleted -------------------------------------------------------------
 
