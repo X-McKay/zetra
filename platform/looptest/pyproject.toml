@@ -6,8 +6,11 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "agent-platform-contracts",
     "agent-platform-controller",
+    "agent-platform-evaluator",
     "agent-platform-provisioner",
     "agent-platform-registry",
+    "agent-platform-runner",
+    "agent-platform-session-api",
 ]
 
 [tool.uv]
@@ -16,8 +19,11 @@ package = false
 [tool.uv.sources]
 agent-platform-contracts = { path = "../contracts", editable = true }
 agent-platform-controller = { path = "../controller", editable = true }
+agent-platform-evaluator = { path = "../evaluator", editable = true }
 agent-platform-provisioner = { path = "../provisioner", editable = true }
 agent-platform-registry = { path = "../registry", editable = true }
+agent-platform-runner = { path = "../runner", editable = true }
+agent-platform-session-api = { path = "../session-api", editable = true }
 
 [dependency-groups]
 dev = [
