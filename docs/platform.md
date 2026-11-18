@@ -20,10 +20,15 @@ supported until the platform's Phase B conformance tests pass on a cluster.
 | `platform/runner` | 10 | Session Runner, cleanup reconciler, AES-GCM payload codec |
 | `platform/capture` | 15.2, 15.4 | Conformance capture proxy: records method, path, status, `x-agent-*` headers and identifying JWT claims, never the token or a body. An optional mounted static key adds only a `backend_key_match` boolean for T7. |
 | `platform/runner` (`runner/conformance.py`) | 15 | Phase B conformance harness: `agent-conformance` submits conformance sessions, reads committed boundaries, APS/gateway logs and upstream captures, and writes a JSON report (T4, T5, T6, T7, T8, T11, T12, T19, T26). |
+| `platform/registry` | — | Agent Registry: the service that records what is released and deployed on each cluster, who approved it and what the cluster last reported. PostgreSQL store; `agent-registry serve`, `migrate`, `import`, `recover`. |
+| `platform/provisioner` | — | Registry provisioner, one per cluster: reports what the cluster runs and applies the `Agent` and `AgentRelease` objects the registry owns. It refuses to write an object Flux still lists. |
+| `platform/looptest` | — | One test per milestone with no cluster: the registry, the provisioner and the Registry Controller's reconciler on one in-memory cluster. No image is built from it. |
 
 Each directory is its own project with its own lock. `just platform-check` runs
 every project's lint and tests; tests that need a cluster are marked `cluster`
-and are named after the conformance test they cover. Nothing here has run on a
+and are named after the conformance test they cover. The registry's store tests
+and the loop test also run on PostgreSQL when `REGISTRY_TEST_DSN` names one
+(they are skipped without it; CI sets it). Nothing here has run on a
 cluster yet; the items in spec 17.3 must be confirmed there before Phase A is
 accepted. Deployment manifests live in Kubani.
 

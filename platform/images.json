@@ -8,6 +8,20 @@
     "rebuild": "2026-11-12: first build of every image by the release workflow"
   },
   {
+    "repository": "agent-registry",
+    "dockerfile": "platform/registry/Dockerfile",
+    "context": "platform/registry",
+    "inputs": [
+      "platform/registry/pyproject.toml",
+      "platform/registry/uv.lock",
+      "platform/registry/agent_registry",
+      "platform/registry/migrations"
+    ],
+    "platform": "linux/amd64",
+    "buildArgs": {},
+    "rebuild": "2026-11-17: first build, with the Agent Registry"
+  },
+  {
     "repository": "budget-backend",
     "dockerfile": "platform/budget-backend/Dockerfile",
     "context": "platform/budget-backend",
@@ -63,6 +77,19 @@
       "COSIGN_SHA256": "064954c5d8c7e3b28188eee5b1727b31c411550bc5fefd41aa672d3c761d103a"
     },
     "rebuild": "2026-11-12: first build of every image by the release workflow"
+  },
+  {
+    "repository": "registry-provisioner",
+    "dockerfile": "platform/provisioner/Dockerfile",
+    "context": "platform/provisioner",
+    "inputs": [
+      "platform/provisioner/pyproject.toml",
+      "platform/provisioner/uv.lock",
+      "platform/provisioner/registry_provisioner"
+    ],
+    "platform": "linux/amd64",
+    "buildArgs": {},
+    "rebuild": "2026-11-17: first build, with the Agent Registry"
   },
   {
     "repository": "session-runner",

@@ -1,0 +1,531 @@
+{
+  "about": "Cases for rules.gates.gate_failures. Each case applies its mutations (JSON Patch operations add, replace, remove with JSON Pointer paths) to a copy of `observation` or `pin`, and expects exactly `failures`, in that order. Removing the path \"\" from the pin means there is no pin (None).",
+  "release": {
+    "apiVersion": "agentplatform.io/v1alpha1",
+    "kind": "AgentRelease",
+    "metadata": {
+      "name": "db-admin-2026-11-18-aaaaaaaa",
+      "namespace": "tenant-test"
+    },
+    "spec": {
+      "agent": "db-admin",
+      "image": "registry.almckay.io/agents/db-admin@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifestSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policySha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "lockSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "buildRevision": "0123456789abcdef0123456789abcdef01234567"
+    }
+  },
+  "pin": {
+    "repository": "X-McKay/zetra-agents",
+    "cluster": "kubani",
+    "tenant": "tenant-test",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subjectRegExp": "^https://github\\.com/X-McKay/zetra-agents/\\.github/workflows/release\\.yml@refs/tags/(?:db-admin|investigator)/v[0-9][A-Za-z0-9.+-]*$",
+    "agents": [
+      "db-admin",
+      "investigator"
+    ]
+  },
+  "observation": {
+    "metadata": {
+      "name": "db-admin-2026-11-18-aaaaaaaa",
+      "namespace": "tenant-test",
+      "uid": "00000000-0000-4000-8000-000000000001",
+      "resourceVersion": "100",
+      "annotations": {
+        "registry.agentplatform.io/deployment": "agent:kubani:tenant-test:db-admin",
+        "registry.agentplatform.io/revision": "3",
+        "registry.agentplatform.io/cluster": "kubani",
+        "registry.agentplatform.io/generation": "40"
+      }
+    },
+    "spec": {
+      "agent": "db-admin",
+      "image": "registry.almckay.io/agents/db-admin@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifestSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policySha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "lockSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "buildRevision": "0123456789abcdef0123456789abcdef01234567",
+      "approval": {
+        "approved": false
+      }
+    },
+    "status": {
+      "conditions": [
+        {
+          "type": "PolicyDrift",
+          "status": "False",
+          "reason": "NoDrift",
+          "message": ""
+        },
+        {
+          "type": "Ready",
+          "status": "False",
+          "reason": "NotApproved",
+          "message": ""
+        },
+        {
+          "type": "SignatureVerified",
+          "status": "True",
+          "reason": "Verified",
+          "message": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/db-admin/v0.1.3"
+        }
+      ],
+      "identityMode": "agent",
+      "delegationRequired": false,
+      "policyDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "policyDrift": false,
+      "ready": false,
+      "signatureVerified": true,
+      "verifiedSigner": {
+        "issuer": "https://token.actions.githubusercontent.com",
+        "subject": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/db-admin/v0.1.3",
+        "attestations": [
+          "https://slsa.dev/provenance/v1",
+          "https://spdx.dev/Document",
+          "https://cosign.sigstore.dev/attestation/vuln/v1",
+          "https://agentplatform.io/eval/v1",
+          "https://agentplatform.io/attestations/release/v1"
+        ]
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "passes",
+      "mutations": [],
+      "failures": []
+    },
+    {
+      "name": "another object",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/metadata/name",
+          "value": "db-admin-2026-11-18-bbbbbbbb"
+        }
+      ],
+      "failures": [
+        "live object is not this release"
+      ]
+    },
+    {
+      "name": "spec image differs",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/spec/image",
+          "value": "other"
+        }
+      ],
+      "failures": [
+        "live spec.image differs from the release"
+      ]
+    },
+    {
+      "name": "spec manifestSha256 differs",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/spec/manifestSha256",
+          "value": "other"
+        }
+      ],
+      "failures": [
+        "live spec.manifestSha256 differs from the release"
+      ]
+    },
+    {
+      "name": "spec lockSha256 differs",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/spec/lockSha256",
+          "value": "other"
+        }
+      ],
+      "failures": [
+        "live spec.lockSha256 differs from the release"
+      ]
+    },
+    {
+      "name": "spec buildRevision differs",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/spec/buildRevision",
+          "value": "other"
+        }
+      ],
+      "failures": [
+        "live spec.buildRevision differs from the release"
+      ]
+    },
+    {
+      "name": "spec agent differs",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/spec/agent",
+          "value": "investigator"
+        }
+      ],
+      "failures": [
+        "live spec.agent differs from the release"
+      ]
+    },
+    {
+      "name": "spec policySha256 differs",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/spec/policySha256",
+          "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      ],
+      "failures": [
+        "live spec.policySha256 differs from the release"
+      ]
+    },
+    {
+      "name": "spec key missing",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "remove",
+          "path": "/spec/lockSha256"
+        }
+      ],
+      "failures": [
+        "live spec.lockSha256 differs from the release"
+      ]
+    },
+    {
+      "name": "already approved on the cluster",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/spec/approval/approved",
+          "value": true
+        }
+      ],
+      "failures": [
+        "live release is not in the unapproved state"
+      ]
+    },
+    {
+      "name": "approval block missing",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "remove",
+          "path": "/spec/approval"
+        }
+      ],
+      "failures": [
+        "live release is not in the unapproved state"
+      ]
+    },
+    {
+      "name": "signature flag false",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/signatureVerified",
+          "value": false
+        }
+      ],
+      "failures": [
+        "controller has not verified the signature"
+      ]
+    },
+    {
+      "name": "signature condition not True",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/conditions/2/status",
+          "value": "False"
+        }
+      ],
+      "failures": [
+        "controller has not verified the signature"
+      ]
+    },
+    {
+      "name": "signature condition other reason",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/conditions/2/reason",
+          "value": "Pending"
+        }
+      ],
+      "failures": [
+        "controller has not verified the signature"
+      ]
+    },
+    {
+      "name": "signer issuer is not GitHub",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/verifiedSigner/issuer",
+          "value": "https://accounts.example.com"
+        }
+      ],
+      "failures": [
+        "verified signer is not this agent's release workflow"
+      ]
+    },
+    {
+      "name": "signer is another agent's tag",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/verifiedSigner/subject",
+          "value": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/investigator/v0.1.3"
+        }
+      ],
+      "failures": [
+        "verified signer is not this agent's release workflow"
+      ]
+    },
+    {
+      "name": "signer is another workflow",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/verifiedSigner/subject",
+          "value": "https://github.com/X-McKay/zetra-agents/.github/workflows/ci.yml@refs/tags/db-admin/v0.1.3"
+        }
+      ],
+      "failures": [
+        "verified signer is not this agent's release workflow",
+        "verified signer subject is outside the tenant signer pin"
+      ]
+    },
+    {
+      "name": "signer subject outside the pin",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/verifiedSigner/subject",
+          "value": "https://github.com/X-McKay/zetra-agents/.github/workflows/release.yml@refs/tags/db-admin/latest"
+        }
+      ],
+      "failures": [
+        "verified signer subject is outside the tenant signer pin"
+      ]
+    },
+    {
+      "name": "pin names another issuer",
+      "mutations": [
+        {
+          "on": "pin",
+          "op": "replace",
+          "path": "/issuer",
+          "value": "https://accounts.example.com"
+        }
+      ],
+      "failures": [
+        "verified signer subject is outside the tenant signer pin"
+      ]
+    },
+    {
+      "name": "pin expression does not compile",
+      "mutations": [
+        {
+          "on": "pin",
+          "op": "replace",
+          "path": "/subjectRegExp",
+          "value": "("
+        }
+      ],
+      "failures": [
+        "verified signer subject is outside the tenant signer pin"
+      ]
+    },
+    {
+      "name": "agent not listed by the repository",
+      "mutations": [
+        {
+          "on": "pin",
+          "op": "replace",
+          "path": "/agents",
+          "value": [
+            "investigator"
+          ]
+        }
+      ],
+      "failures": [
+        "no trusted repository lists this agent"
+      ]
+    },
+    {
+      "name": "no trusted repository",
+      "mutations": [
+        {
+          "on": "pin",
+          "op": "remove",
+          "path": ""
+        }
+      ],
+      "failures": [
+        "no trusted repository lists this agent"
+      ]
+    },
+    {
+      "name": "four attestations",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "remove",
+          "path": "/status/verifiedSigner/attestations/4"
+        }
+      ],
+      "failures": [
+        "the five required attestations were not all verified"
+      ]
+    },
+    {
+      "name": "five attestations, one repeated",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/verifiedSigner/attestations/4",
+          "value": "https://slsa.dev/provenance/v1"
+        }
+      ],
+      "failures": [
+        "the five required attestations were not all verified"
+      ]
+    },
+    {
+      "name": "an unknown attestation in place of one",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/verifiedSigner/attestations/3",
+          "value": "https://example.com/other/v1"
+        }
+      ],
+      "failures": [
+        "the five required attestations were not all verified"
+      ]
+    },
+    {
+      "name": "policy drift flag",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/policyDrift",
+          "value": true
+        }
+      ],
+      "failures": [
+        "policy digest drift is not clear"
+      ]
+    },
+    {
+      "name": "policy drift condition",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/conditions/0/status",
+          "value": "True"
+        },
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/conditions/0/reason",
+          "value": "Drift"
+        }
+      ],
+      "failures": [
+        "policy digest drift is not clear"
+      ]
+    },
+    {
+      "name": "policy digest differs",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/policyDigest",
+          "value": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      ],
+      "failures": [
+        "controller policy digest differs from the release's policySha256"
+      ]
+    },
+    {
+      "name": "ready already",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/ready",
+          "value": true
+        }
+      ],
+      "failures": [
+        "release is not waiting solely on approval"
+      ]
+    },
+    {
+      "name": "not ready for another reason",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "replace",
+          "path": "/status/conditions/1/reason",
+          "value": "AgentDisabled"
+        }
+      ],
+      "failures": [
+        "release is not waiting solely on approval"
+      ]
+    },
+    {
+      "name": "controller has not looked yet",
+      "mutations": [
+        {
+          "on": "observation",
+          "op": "remove",
+          "path": "/status"
+        }
+      ],
+      "failures": [
+        "controller has not verified the signature",
+        "verified signer is not this agent's release workflow",
+        "verified signer subject is outside the tenant signer pin",
+        "the five required attestations were not all verified",
+        "policy digest drift is not clear",
+        "controller policy digest differs from the release's policySha256",
+        "release is not waiting solely on approval"
+      ]
+    }
+  ]
+}

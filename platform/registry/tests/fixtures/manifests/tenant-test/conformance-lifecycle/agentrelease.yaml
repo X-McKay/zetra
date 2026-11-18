@@ -1,0 +1,20 @@
+# yamllint disable rule:line-length
+# Exact signed conformance-lifecycle/v0.1.0 assets; SHA256SUMS verified.
+# Controller verified all five attestations and NoDrift at 19:34:49 UTC before approval.
+apiVersion: agentplatform.io/v1alpha1
+kind: AgentRelease
+metadata:
+  name: conformance-lifecycle-2026-11-06-7c39c4a9
+  namespace: tenant-test
+spec:
+  agent: conformance-lifecycle
+  image: registry.almckay.io/agents/conformance-lifecycle@sha256:7c39c4a95ea89e47d8deb078eb7511cdf7cbbc986f71757a2c4267ca0fdf6991  # pragma: allowlist secret
+  manifestSha256: c621fccc76f99e93600debf322bce9ffc8038498117b5d512406f99dbf8acac9  # pragma: allowlist secret
+  policySha256: 93658583bdcb8cea75a5d8d3048d9729aedd25ae1251a25d03f2af08ea147f95  # pragma: allowlist secret
+  lockSha256: 1d325ac76b56a711b185b216e2cd033884522dcc5db0d7ae64b06d6608c6d212  # pragma: allowlist secret
+  buildRevision: 0ffb3d74fea01fea50a07ab5bce8b0530be63316  # pragma: allowlist secret
+  approval:
+    approved: true
+    approvedBy: 4785437+X-McKay@users.noreply.github.com
+    approvedAt: "2026-11-06T19:43:29Z"
+    ticket: https://github.com/X-McKay/kubani/pull/352

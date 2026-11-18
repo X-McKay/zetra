@@ -1,0 +1,11 @@
+# conformance-b: the second identity the T26 harness case needs (spec 15.2).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - agent.yaml
+  - agentrelease.yaml
+  - agentrelease-v0.1.1.yaml
+  - agentrelease-v0.1.2.yaml
+  - admission-unsigned-agentrelease.yaml
+  - admission-rbac.yaml

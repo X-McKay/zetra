@@ -1,0 +1,37 @@
+[project]
+name = "agent-platform-registry"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.163.2",
+    "httpx==0.28.1",
+    "psycopg[binary,pool]==3.3.9",
+    "pyjwt[crypto]==2.15.1",
+    "pyyaml==6.0.3",
+    "uvicorn==0.54.0",
+]
+
+[project.scripts]
+agent-registry = "agent_registry.cli:main"
+
+[dependency-groups]
+dev = ["pytest==8.4.2", "ruff==0.14.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agent_registry"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"migrations" = "agent_registry/_migrations"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["postgres: needs a PostgreSQL named by REGISTRY_TEST_DSN"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100

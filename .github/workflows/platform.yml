@@ -8,10 +8,49 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [contracts, controller, netpol-attestor, agent-runtime, agent-tools, egress-guard, runner]
+        project: [contracts, controller, netpol-attestor, agent-runtime, agent-tools, egress-guard, runner, provisioner]
     defaults:
       run:
         working-directory: platform/${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: '0.13.1'
+      - run: uv sync --frozen --python 3.12.14
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -m 'not cluster' -q
+  # The Agent Registry's store tests and the loop test run on a real PostgreSQL, the major
+  # version Kubani runs. The database holds nothing and accepts any local connection; every
+  # test makes and drops a schema of its own.
+  python-postgres:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [registry, looptest]
+    defaults:
+      run:
+        working-directory: platform/${{ matrix.project }}
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
+        env:
+          POSTGRES_USER: registry
+          POSTGRES_DB: registry
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U registry"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      REGISTRY_TEST_DSN: postgresql://registry@127.0.0.1:5432/registry
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:

@@ -1,0 +1,3417 @@
+{
+  "components": {
+    "schemas": {
+      "AgentStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "authority": {
+            "enum": [
+              "pull-request",
+              "registry"
+            ],
+            "title": "Authority",
+            "type": "string"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "currentRelease": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentrelease"
+          },
+          "currentRevision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentrevision"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "newestRelease": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newestrelease"
+          },
+          "newestRevision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newestrevision"
+          },
+          "nextActions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Nextactions",
+            "type": "array"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/Observed"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "pinnedRevision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinnedrevision"
+          },
+          "ready": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ready"
+          },
+          "tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "required": [
+          "deployment",
+          "agent",
+          "tenant",
+          "namespace",
+          "authority",
+          "enabled",
+          "pinnedRevision",
+          "currentRevision",
+          "currentRelease",
+          "newestRevision",
+          "newestRelease",
+          "phase",
+          "ready",
+          "blockers",
+          "nextActions",
+          "observation"
+        ],
+        "title": "AgentStatus",
+        "type": "object"
+      },
+      "Approval": {
+        "additionalProperties": false,
+        "description": "What a person approved, and what it is bound to (design section 10.3).",
+        "properties": {
+          "approvedAt": {
+            "format": "date-time",
+            "title": "Approvedat",
+            "type": "string"
+          },
+          "approvedBy": {
+            "title": "Approvedby",
+            "type": "string"
+          },
+          "authorityDigest": {
+            "title": "Authoritydigest",
+            "type": "string"
+          },
+          "baseAuthorityDigest": {
+            "title": "Baseauthoritydigest",
+            "type": "string"
+          },
+          "deploymentId": {
+            "title": "Deploymentid",
+            "type": "string"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "imported",
+              "registry",
+              "recovered"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "policyRevision": {
+            "title": "Policyrevision",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "state": {
+            "default": "active",
+            "enum": [
+              "active",
+              "superseded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "ticket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticket"
+          }
+        },
+        "required": [
+          "id",
+          "deploymentId",
+          "revision",
+          "authorityDigest",
+          "baseAuthorityDigest",
+          "policyRevision",
+          "approvedBy",
+          "approvedAt",
+          "origin"
+        ],
+        "title": "Approval",
+        "type": "object"
+      },
+      "ApprovalPreviewOut": {
+        "additionalProperties": false,
+        "description": "Everything an approval is bound to, for a person to read before approving. The four\nbinding fields are sent back unchanged in `ApproveIn`.",
+        "properties": {
+          "approvable": {
+            "title": "Approvable",
+            "type": "boolean"
+          },
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "authority": {
+            "additionalProperties": true,
+            "title": "Authority",
+            "type": "object"
+          },
+          "authorityDigest": {
+            "title": "Authoritydigest",
+            "type": "string"
+          },
+          "baseAuthority": {
+            "additionalProperties": true,
+            "title": "Baseauthority",
+            "type": "object"
+          },
+          "baseAuthorityDigest": {
+            "title": "Baseauthoritydigest",
+            "type": "string"
+          },
+          "changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "gateFailures": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gatefailures",
+            "type": "array"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/Observed"
+          },
+          "policyRevision": {
+            "title": "Policyrevision",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deployment",
+          "revision",
+          "release",
+          "authorityDigest",
+          "baseAuthorityDigest",
+          "policyRevision",
+          "authority",
+          "baseAuthority",
+          "changes",
+          "gateFailures",
+          "observation",
+          "approved",
+          "approvable"
+        ],
+        "title": "ApprovalPreviewOut",
+        "type": "object"
+      },
+      "ApproveIn": {
+        "additionalProperties": false,
+        "properties": {
+          "approvalId": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Approvalid",
+            "type": "string"
+          },
+          "authorityDigest": {
+            "title": "Authoritydigest",
+            "type": "string"
+          },
+          "baseAuthorityDigest": {
+            "title": "Baseauthoritydigest",
+            "type": "string"
+          },
+          "policyRevision": {
+            "title": "Policyrevision",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "ticket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticket"
+          }
+        },
+        "required": [
+          "approvalId",
+          "revision",
+          "authorityDigest",
+          "baseAuthorityDigest",
+          "policyRevision"
+        ],
+        "title": "ApproveIn",
+        "type": "object"
+      },
+      "ApproveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "approval": {
+            "$ref": "#/components/schemas/Approval"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Revision"
+          }
+        },
+        "required": [
+          "approval",
+          "revision"
+        ],
+        "title": "ApproveOut",
+        "type": "object"
+      },
+      "Dependant": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "array"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "required": [
+          "deployment",
+          "agent",
+          "tenant",
+          "revision",
+          "release",
+          "names"
+        ],
+        "title": "Dependant",
+        "type": "object"
+      },
+      "DependantsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          },
+          "dependants": {
+            "items": {
+              "$ref": "#/components/schemas/Dependant"
+            },
+            "title": "Dependants",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "providedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providedby"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "type": {
+            "enum": [
+              "tool",
+              "model"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cluster",
+          "type",
+          "name",
+          "target",
+          "providedBy",
+          "dependants"
+        ],
+        "title": "DependantsOut",
+        "type": "object"
+      },
+      "Deployment": {
+        "additionalProperties": false,
+        "description": "A deployment of any kind. `document` is kind-specific.\n\nagent: {agent: <the Agent document in force>}. On the pull request path it is the Agent\n    last seen in git or on the cluster; under the registry it is the Agent published with\n    the newest revision. It is what the provisioner is given. Each revision also keeps\n    the Agent that was published with it.\ntool-server: {namespace, workload, image, pinnedByDigest, registered, backend}.\nmodel: {namespace, workload, servedName, servedNameFrom, backend}.",
+        "properties": {
+          "authority": {
+            "default": "pull-request",
+            "enum": [
+              "pull-request",
+              "registry"
+            ],
+            "title": "Authority",
+            "type": "string"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          },
+          "currentRevision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentrevision"
+          },
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "generation": {
+            "default": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "agent",
+              "tool-server",
+              "skill",
+              "model"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "pinnedRevision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinnedrevision"
+          },
+          "tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "item",
+          "cluster",
+          "namespace"
+        ],
+        "title": "Deployment",
+        "type": "object"
+      },
+      "DeploymentChangeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/Deployment"
+          }
+        },
+        "required": [
+          "deployment",
+          "changed"
+        ],
+        "title": "DeploymentChangeOut",
+        "type": "object"
+      },
+      "DeploymentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "approvals": {
+            "items": {
+              "$ref": "#/components/schemas/Approval"
+            },
+            "title": "Approvals",
+            "type": "array"
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/Deployment"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/Revision"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "deployment",
+          "revisions",
+          "approvals"
+        ],
+        "title": "DeploymentOut",
+        "type": "object"
+      },
+      "DeploymentsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "deployments": {
+            "items": {
+              "$ref": "#/components/schemas/Deployment"
+            },
+            "title": "Deployments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "deployments"
+        ],
+        "title": "DeploymentsOut",
+        "type": "object"
+      },
+      "DesiredDeployment": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedObject"
+            },
+            "title": "Objects",
+            "type": "array"
+          },
+          "tenant": {
+            "title": "Tenant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment",
+          "agent",
+          "tenant",
+          "namespace",
+          "objects"
+        ],
+        "title": "DesiredDeployment",
+        "type": "object"
+      },
+      "DesiredOut": {
+        "additionalProperties": false,
+        "properties": {
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/components/schemas/DesiredDeployment"
+            },
+            "title": "Deployments",
+            "type": "array"
+          },
+          "fieldManager": {
+            "title": "Fieldmanager",
+            "type": "string"
+          },
+          "fluxInventories": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Fluxinventories",
+            "type": "array"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "normal",
+              "recovery"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "namespaces": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Namespaces",
+            "type": "array"
+          },
+          "observe": {
+            "items": {
+              "$ref": "#/components/schemas/ObserveSubject"
+            },
+            "title": "Observe",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cluster",
+          "mode",
+          "generation",
+          "fieldManager",
+          "namespaces",
+          "fluxInventories",
+          "deployments",
+          "observe"
+        ],
+        "title": "DesiredOut",
+        "type": "object"
+      },
+      "Difference": {
+        "additionalProperties": false,
+        "properties": {
+          "cluster": {
+            "title": "Cluster"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "registry": {
+            "title": "Registry"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment",
+          "subject",
+          "field",
+          "registry",
+          "cluster"
+        ],
+        "title": "Difference",
+        "type": "object"
+      },
+      "EnabledIn": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "EnabledIn",
+        "type": "object"
+      },
+      "Event": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "deploymentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deploymentid"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "at",
+          "actor",
+          "type"
+        ],
+        "title": "Event",
+        "type": "object"
+      },
+      "EventsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "generation"
+        ],
+        "title": "EventsOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "normal",
+              "recovery"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "mode"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "Item": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "agent",
+              "tool-server",
+              "skill",
+              "model"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "default": "",
+            "title": "Owner",
+            "type": "string"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "Item",
+        "type": "object"
+      },
+      "ItemOut": {
+        "additionalProperties": false,
+        "properties": {
+          "deployments": {
+            "items": {
+              "$ref": "#/components/schemas/Deployment"
+            },
+            "title": "Deployments",
+            "type": "array"
+          },
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "releases": {
+            "items": {
+              "$ref": "#/components/schemas/Release"
+            },
+            "title": "Releases",
+            "type": "array"
+          }
+        },
+        "required": [
+          "item",
+          "releases",
+          "deployments"
+        ],
+        "title": "ItemOut",
+        "type": "object"
+      },
+      "ItemsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ItemsOut",
+        "type": "object"
+      },
+      "LeaveRecoveryIn": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "digest"
+        ],
+        "title": "LeaveRecoveryIn",
+        "type": "object"
+      },
+      "LeaveRecoveryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "adopted": {
+            "items": {
+              "$ref": "#/components/schemas/Difference"
+            },
+            "title": "Adopted",
+            "type": "array"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "normal",
+              "recovery"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "generation",
+          "adopted"
+        ],
+        "title": "LeaveRecoveryOut",
+        "type": "object"
+      },
+      "MetaOut": {
+        "additionalProperties": false,
+        "properties": {
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "normal",
+              "recovery"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "modeChangedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modechangedat"
+          },
+          "modeReason": {
+            "title": "Modereason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "modeReason",
+          "modeChangedAt",
+          "generation"
+        ],
+        "title": "MetaOut",
+        "type": "object"
+      },
+      "ModelStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend"
+          },
+          "declaredServedName": {
+            "title": "Declaredservedname",
+            "type": "string"
+          },
+          "dependants": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dependants",
+            "type": "array"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/Observed"
+          },
+          "observedImage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observedimage"
+          },
+          "observedServedName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observedservedname"
+          }
+        },
+        "required": [
+          "deployment",
+          "name",
+          "namespace",
+          "aliases",
+          "backend",
+          "declaredServedName",
+          "observedServedName",
+          "observedImage",
+          "observation",
+          "dependants"
+        ],
+        "title": "ModelStatus",
+        "type": "object"
+      },
+      "ObjectRef": {
+        "additionalProperties": false,
+        "properties": {
+          "apiVersion": {
+            "title": "Apiversion",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiVersion",
+          "kind",
+          "namespace",
+          "name"
+        ],
+        "title": "ObjectRef",
+        "type": "object"
+      },
+      "ObservationsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotScope"
+            },
+            "title": "Complete",
+            "type": "array"
+          },
+          "lastGeneration": {
+            "title": "Lastgeneration",
+            "type": "integer"
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/ObservedObject"
+            },
+            "title": "Objects",
+            "type": "array"
+          },
+          "observedAt": {
+            "format": "date-time",
+            "title": "Observedat",
+            "type": "string"
+          },
+          "projections": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectionResult"
+            },
+            "title": "Projections",
+            "type": "array"
+          },
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/ObservedSubject"
+            },
+            "title": "Subjects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "observedAt",
+          "lastGeneration"
+        ],
+        "title": "ObservationsIn",
+        "type": "object"
+      },
+      "ObservationsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "normal",
+              "recovery"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "stored": {
+            "title": "Stored",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "generation",
+          "stored"
+        ],
+        "title": "ObservationsOut",
+        "type": "object"
+      },
+      "ObserveSubject": {
+        "additionalProperties": false,
+        "description": "A workload the provisioner reports on and never writes.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "servedNameFrom": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servednamefrom"
+          },
+          "subjectKind": {
+            "enum": [
+              "tool-server",
+              "model-engine"
+            ],
+            "title": "Subjectkind",
+            "type": "string"
+          },
+          "workload": {
+            "$ref": "#/components/schemas/ObjectRef"
+          }
+        },
+        "required": [
+          "subjectKind",
+          "name",
+          "namespace",
+          "workload"
+        ],
+        "title": "ObserveSubject",
+        "type": "object"
+      },
+      "Observed": {
+        "additionalProperties": false,
+        "description": "How fresh the last observation of a subject is (`derive.freshness`).",
+        "properties": {
+          "ageSeconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ageseconds"
+          },
+          "observedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observedat"
+          },
+          "state": {
+            "enum": [
+              "fresh",
+              "old",
+              "absent",
+              "missing"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "Observed",
+        "type": "object"
+      },
+      "ObservedObject": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "inFluxInventory": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Influxinventory"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "subjectKind": {
+            "enum": [
+              "agent",
+              "agentrelease"
+            ],
+            "title": "Subjectkind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subjectKind",
+          "namespace",
+          "name",
+          "inFluxInventory",
+          "document"
+        ],
+        "title": "ObservedObject",
+        "type": "object"
+      },
+      "ObservedSubject": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "present": {
+            "default": true,
+            "title": "Present",
+            "type": "boolean"
+          },
+          "subjectKind": {
+            "enum": [
+              "tool-server",
+              "model-engine"
+            ],
+            "title": "Subjectkind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subjectKind",
+          "namespace",
+          "name"
+        ],
+        "title": "ObservedSubject",
+        "type": "object"
+      },
+      "PinIn": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "PinIn",
+        "type": "object"
+      },
+      "ProjectedObject": {
+        "additionalProperties": false,
+        "description": "One object the provisioner applies. `document` is complete: apiVersion, kind,\nmetadata (name, namespace, annotations) and spec. `generation` is repeated from the\nannotation so the provisioner need not parse it.",
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "Agent",
+              "AgentRelease"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "namespace",
+          "name",
+          "generation",
+          "document"
+        ],
+        "title": "ProjectedObject",
+        "type": "object"
+      },
+      "ProjectionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "Agent",
+              "AgentRelease"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "applied",
+              "unchanged",
+              "refused-flux-inventory",
+              "refused-older",
+              "error"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment",
+          "kind",
+          "namespace",
+          "name",
+          "generation",
+          "result"
+        ],
+        "title": "ProjectionResult",
+        "type": "object"
+      },
+      "Provision": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "releaseId": {
+            "title": "Releaseid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "tool",
+              "capability"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "releaseId",
+          "type",
+          "name"
+        ],
+        "title": "Provision",
+        "type": "object"
+      },
+      "RecordReleaseIn": {
+        "additionalProperties": false,
+        "description": "A published release: the two documents the release workflow attached to the tag.",
+        "properties": {
+          "agent": {
+            "additionalProperties": true,
+            "title": "Agent",
+            "type": "object"
+          },
+          "agentRelease": {
+            "additionalProperties": true,
+            "title": "Agentrelease",
+            "type": "object"
+          },
+          "lineage": {
+            "additionalProperties": true,
+            "title": "Lineage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "agent",
+          "agentRelease"
+        ],
+        "title": "RecordReleaseIn",
+        "type": "object"
+      },
+      "RecordReleaseOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "release": {
+            "$ref": "#/components/schemas/Release"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Revision"
+          }
+        },
+        "required": [
+          "release",
+          "revision",
+          "created"
+        ],
+        "title": "RecordReleaseOut",
+        "type": "object"
+      },
+      "RecoveryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "differences": {
+            "items": {
+              "$ref": "#/components/schemas/Difference"
+            },
+            "title": "Differences",
+            "type": "array"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "normal",
+              "recovery"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "waitingFor": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Waitingfor",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "reason",
+          "complete",
+          "waitingFor",
+          "differences",
+          "digest"
+        ],
+        "title": "RecoveryOut",
+        "type": "object"
+      },
+      "Release": {
+        "additionalProperties": false,
+        "description": "One release of an item. Written once.\n\nFor an agent in milestone 1 `name` is the AgentRelease name and `document` is the published\nAgentRelease with `spec.approval` removed (approval is not a fact about the release).",
+        "properties": {
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "agent",
+              "tool-server",
+              "skill",
+              "model"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "lineage": {
+            "additionalProperties": true,
+            "title": "Lineage",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "built",
+              "adopted"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "recordedAt": {
+            "format": "date-time",
+            "title": "Recordedat",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "item",
+          "name",
+          "digest",
+          "origin",
+          "recordedAt"
+        ],
+        "title": "Release",
+        "type": "object"
+      },
+      "ReleaseOut": {
+        "additionalProperties": false,
+        "properties": {
+          "provisions": {
+            "items": {
+              "$ref": "#/components/schemas/Provision"
+            },
+            "title": "Provisions",
+            "type": "array"
+          },
+          "release": {
+            "$ref": "#/components/schemas/Release"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/Requirement"
+            },
+            "title": "Requirements",
+            "type": "array"
+          }
+        },
+        "required": [
+          "release",
+          "requirements",
+          "provisions"
+        ],
+        "title": "ReleaseOut",
+        "type": "object"
+      },
+      "Requirement": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "array"
+          },
+          "releaseId": {
+            "title": "Releaseid",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "tool",
+              "model",
+              "effect",
+              "skill"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "releaseId",
+          "type",
+          "target"
+        ],
+        "title": "Requirement",
+        "type": "object"
+      },
+      "Resolution": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "resolvedDeployment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolveddeployment"
+          },
+          "resolvedRelease": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolvedrelease"
+          },
+          "revisionId": {
+            "title": "Revisionid",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "tool",
+              "model",
+              "effect",
+              "skill"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revisionId",
+          "type",
+          "target"
+        ],
+        "title": "Resolution",
+        "type": "object"
+      },
+      "ReturnOut": {
+        "additionalProperties": false,
+        "description": "The documents to write back to git when authority returns to the pull request path.",
+        "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "agentReleases": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Agentreleases",
+            "type": "array"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/Deployment"
+          }
+        },
+        "required": [
+          "deployment",
+          "changed",
+          "agent",
+          "agentReleases"
+        ],
+        "title": "ReturnOut",
+        "type": "object"
+      },
+      "Revision": {
+        "additionalProperties": false,
+        "description": "A deployment revision. `number` to `created_at` are written once. The fields after the\nmarker are progress and may change; the store changes them only through\n`Tx.set_revision_progress`.",
+        "properties": {
+          "activatedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activatedat"
+          },
+          "agentDocument": {
+            "additionalProperties": true,
+            "title": "Agentdocument",
+            "type": "object"
+          },
+          "approvalId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approvalid"
+          },
+          "authority": {
+            "additionalProperties": true,
+            "title": "Authority",
+            "type": "object"
+          },
+          "authorityDigest": {
+            "default": "",
+            "title": "Authoritydigest",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "deploymentId": {
+            "title": "Deploymentid",
+            "type": "string"
+          },
+          "generation": {
+            "default": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "origin": {
+            "enum": [
+              "imported",
+              "registry",
+              "recovered"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "phase": {
+            "default": "awaiting-runtime",
+            "enum": [
+              "awaiting-runtime",
+              "pending-approval",
+              "activated",
+              "superseded",
+              "evaluating",
+              "refused"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "policyRevision": {
+            "default": "",
+            "title": "Policyrevision",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "releaseId": {
+            "title": "Releaseid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "deploymentId",
+          "number",
+          "releaseId",
+          "origin",
+          "createdAt"
+        ],
+        "title": "Revision",
+        "type": "object"
+      },
+      "RevisionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "approval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Approval"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "release": {
+            "$ref": "#/components/schemas/Release"
+          },
+          "resolutions": {
+            "items": {
+              "$ref": "#/components/schemas/Resolution"
+            },
+            "title": "Resolutions",
+            "type": "array"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Revision"
+          }
+        },
+        "required": [
+          "revision",
+          "release",
+          "resolutions",
+          "approval"
+        ],
+        "title": "RevisionOut",
+        "type": "object"
+      },
+      "SnapshotScope": {
+        "additionalProperties": false,
+        "properties": {
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "subjectKind": {
+            "enum": [
+              "agent",
+              "agentrelease"
+            ],
+            "title": "Subjectkind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subjectKind",
+          "namespace"
+        ],
+        "title": "SnapshotScope",
+        "type": "object"
+      },
+      "StatusOut": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentStatus"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "normal",
+              "recovery"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelStatus"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "observationMaxAgeSeconds": {
+            "title": "Observationmaxageseconds",
+            "type": "integer"
+          },
+          "toolServers": {
+            "items": {
+              "$ref": "#/components/schemas/ToolServerStatus"
+            },
+            "title": "Toolservers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cluster",
+          "mode",
+          "generation",
+          "observationMaxAgeSeconds",
+          "agents",
+          "toolServers",
+          "models"
+        ],
+        "title": "StatusOut",
+        "type": "object"
+      },
+      "ToolServerStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend"
+          },
+          "declaredImage": {
+            "title": "Declaredimage",
+            "type": "string"
+          },
+          "dependants": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dependants",
+            "type": "array"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/Observed"
+          },
+          "observedImages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Observedimages",
+            "type": "array"
+          },
+          "pinnedByDigest": {
+            "title": "Pinnedbydigest",
+            "type": "boolean"
+          },
+          "readyReplicas": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readyreplicas"
+          },
+          "registered": {
+            "title": "Registered",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deployment",
+          "name",
+          "namespace",
+          "registered",
+          "backend",
+          "declaredImage",
+          "pinnedByDigest",
+          "observedImages",
+          "readyReplicas",
+          "observation",
+          "dependants"
+        ],
+        "title": "ToolServerStatus",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Agent registry",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/healthz": {
+      "get": {
+        "description": "No token needed. Answers 503 `unavailable` when the database cannot be reached.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/clusters/{cluster}/desired": {
+      "get": {
+        "description": "Everything the provisioner should apply and observe. If `lastGeneration` is higher\nthan the registry's generation the registry has gone back in time: it enters recovery\nand answers with no objects.",
+        "operationId": "desired_v1_clusters__cluster__desired_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cluster",
+            "required": true,
+            "schema": {
+              "title": "Cluster",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lastGeneration",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Lastgeneration",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesiredOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Desired",
+        "tags": [
+          "cluster"
+        ]
+      }
+    },
+    "/v1/clusters/{cluster}/observations": {
+      "post": {
+        "description": "Store what the provisioner saw and did, then let each registry-owned agent of the\ncluster advance. Accepted in recovery too: leaving recovery needs fresh observations.",
+        "operationId": "observations_v1_clusters__cluster__observations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cluster",
+            "required": true,
+            "schema": {
+              "title": "Cluster",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObservationsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Observations",
+        "tags": [
+          "cluster"
+        ]
+      }
+    },
+    "/v1/dependants": {
+      "get": {
+        "description": "The agents that depend on a tool server backend (`type=tool`, `name` a backend name) or\non a model alias (`type=model`, `name` an alias). An unknown name is an empty answer, not\nan error.",
+        "operationId": "dependants_v1_dependants_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cluster",
+            "required": true,
+            "schema": {
+              "title": "Cluster",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tool",
+                "model"
+              ],
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DependantsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dependants",
+        "tags": [
+          "read"
+        ]
+      }
+    },
+    "/v1/deployments": {
+      "get": {
+        "operationId": "deployments_v1_deployments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "agent",
+                    "tool-server",
+                    "skill",
+                    "model"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cluster",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cluster"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "authority",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pull-request",
+                    "registry"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authority"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deployments",
+        "tags": [
+          "read"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}": {
+      "get": {
+        "description": "A deployment with its revisions (ascending) and its approvals.",
+        "operationId": "deployment_v1_deployments__deployment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deployment",
+        "tags": [
+          "read"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/approvals": {
+      "post": {
+        "description": "Approve a revision. Refused unless the binding matches and every gate passes.",
+        "operationId": "approve_v1_deployments__deployment_id__approvals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApproveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve",
+        "tags": [
+          "write"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/authority/return": {
+      "post": {
+        "description": "Move an agent back to the pull request path and return the documents to commit.",
+        "operationId": "give_back_v1_deployments__deployment_id__authority_return_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Give Back",
+        "tags": [
+          "authority"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/authority/take": {
+      "post": {
+        "description": "Move an agent from the pull request path to the registry. `conflict` unless the\nregistry's records equal fresh observations of the live objects.",
+        "operationId": "take_v1_deployments__deployment_id__authority_take_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentChangeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Take",
+        "tags": [
+          "authority"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/enabled": {
+      "post": {
+        "operationId": "set_enabled_v1_deployments__deployment_id__enabled_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnabledIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentChangeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Enabled",
+        "tags": [
+          "write"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/pin": {
+      "post": {
+        "description": "Hold the pointer on one activated revision, or let it go.",
+        "operationId": "pin_v1_deployments__deployment_id__pin_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentChangeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pin",
+        "tags": [
+          "write"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/releases": {
+      "post": {
+        "description": "Record a published release and create the next revision, projected unapproved.",
+        "operationId": "record_release_v1_deployments__deployment_id__releases_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordReleaseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordReleaseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Release",
+        "tags": [
+          "write"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/revisions/{number}": {
+      "get": {
+        "operationId": "revision_v1_deployments__deployment_id__revisions__number__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "title": "Number",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revision",
+        "tags": [
+          "read"
+        ]
+      }
+    },
+    "/v1/deployments/{deployment_id}/revisions/{number}/approval": {
+      "get": {
+        "description": "What approving this revision would bind to, and whether it can be approved now.",
+        "operationId": "approval_preview_v1_deployments__deployment_id__revisions__number__approval_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "title": "Number",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approval Preview",
+        "tags": [
+          "write"
+        ]
+      }
+    },
+    "/v1/events": {
+      "get": {
+        "operationId": "events_v1_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "deployment",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deployment"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Events",
+        "tags": [
+          "read"
+        ]
+      }
+    },
+    "/v1/items": {
+      "get": {
+        "operationId": "items_v1_items_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "agent",
+                    "tool-server",
+                    "skill",
+                    "model"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Items",
+        "tags": [
+          "read"
+        ]
+      }
+    },
+    "/v1/items/{kind}/{name}": {
+      "get": {
+        "description": "One item with its releases and its deployments. `not-found` when there is none.",
+        "operationId": "item_v1_items__kind___name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "agent",
+                "tool-server",
+                "skill",
+                "model"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Item",
+        "tags": [
+          "read"
+        ]
+      }
+    },
+    "/v1/meta": {
+      "get": {
+        "description": "The mode and the generation.",
+        "operationId": "meta_v1_meta_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Meta",
+        "tags": [
+          "read"
+        ]
+      }
+    },
+    "/v1/recovery": {
+      "get": {
+        "description": "The mode and, in recovery, every difference between the registry and the clusters.",
+        "operationId": "recovery_v1_recovery_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Recovery",
+        "tags": [
+          "authority"
+        ]
+      }
+    },
+    "/v1/recovery/leave": {
+      "post": {
+        "description": "Adopt what the clusters hold and return to normal. `conflict` when the digest named is\nnot the digest of the differences now, or the report is not complete.",
+        "operationId": "leave_recovery_v1_recovery_leave_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaveRecoveryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaveRecoveryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Leave Recovery",
+        "tags": [
+          "authority"
+        ]
+      }
+    },
+    "/v1/releases/{release_id}": {
+      "get": {
+        "operationId": "release_v1_releases__release_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "release_id",
+            "required": true,
+            "schema": {
+              "title": "Release Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release",
+        "tags": [
+          "read"
+        ]
+      }
+    },
+    "/v1/status": {
+      "get": {
+        "description": "Per agent: the owning path, the current release, blockers and next actions. Per tool\nserver and model: what is declared, what was observed, and how old the observation is.",
+        "operationId": "status_v1_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cluster",
+            "required": true,
+            "schema": {
+              "title": "Cluster",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "read"
+        ]
+      }
+    }
+  }
+}

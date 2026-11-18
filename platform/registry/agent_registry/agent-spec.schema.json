@@ -1,0 +1,166 @@
+{
+  "properties": {
+    "capabilities": {
+      "properties": {
+        "mcp": {
+          "items": {
+            "properties": {
+              "backend": {
+                "pattern": "^[a-z0-9-]{1,63}$",
+                "type": "string"
+              },
+              "delegation": {
+                "default": "inherit",
+                "enum": [
+                  "inherit",
+                  "agent",
+                  "on-behalf-of"
+                ],
+                "type": "string"
+              },
+              "effect": {
+                "enum": [
+                  "remote_read"
+                ],
+                "type": "string"
+              },
+              "tools": {
+                "items": {
+                  "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "backend",
+              "effect",
+              "tools"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "models": {
+          "items": {
+            "properties": {
+              "backend": {
+                "pattern": "^[a-z0-9-]{1,63}$",
+                "type": "string"
+              },
+              "budget": {
+                "properties": {
+                  "tokensPerDay": {
+                    "default": 2000000,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "tokensPerSession": {
+                    "default": 200000,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
+              "models": {
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "backend",
+              "models"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "description": {
+      "maxLength": 512,
+      "type": "string"
+    },
+    "enabled": {
+      "default": true,
+      "type": "boolean"
+    },
+    "identity": {
+      "properties": {
+        "mode": {
+          "enum": [
+            "agent",
+            "on-behalf-of"
+          ],
+          "type": "string"
+        },
+        "onBehalfOf": {
+          "properties": {
+            "fallback": {
+              "default": "deny",
+              "enum": [
+                "deny",
+                "agent"
+              ],
+              "type": "string"
+            },
+            "required": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "owner": {
+      "format": "email",
+      "type": "string"
+    },
+    "runtime": {
+      "properties": {
+        "cpu": {
+          "default": "1",
+          "type": "string"
+        },
+        "maxBoundaries": {
+          "default": 64,
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "memory": {
+          "default": "2Gi",
+          "type": "string"
+        },
+        "runtimeClass": {
+          "default": "kata-qemu-runtime-rs",
+          "type": "string"
+        },
+        "ttlSeconds": {
+          "default": 1800,
+          "maximum": 28800,
+          "minimum": 60,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "owner",
+    "identity",
+    "capabilities"
+  ],
+  "type": "object"
+}
