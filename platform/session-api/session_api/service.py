@@ -153,7 +153,7 @@ class SessionService:
         spec = agent.get("spec") or {}
         if spec.get("enabled") is False:
             raise ApiError("refused", "the agent is disabled")
-        # 5b: a held agent takes no operator's task; the evaluator may still evaluate it
+        # 5a: a held agent takes no operator's task; the evaluator may still evaluate it
         held = annotations.get(HELD_ANNOTATION)
         if held and kind == "operator":
             raise ApiError("refused", f"the agent is held by alias move {held}")

@@ -142,3 +142,27 @@ def test_the_check_is_for_a_reader_and_writes_nothing(token):
     assert (
         code(w.post("/v1/checks/alias", BODY | {"alias": "nope"}, token=token), 404) == "not-found"
     )
+
+
+def test_a_moving_move_is_backed_out_by_the_pair_it_came_from_and_says_so():
+    w = world()
+    move = started(w).json()["id"]
+    for agent in ("passes", "fails", "no-suite"):
+        w.provisioner_pass(holds=[{"move": move, "deployment": dep_of(agent), "running": 0}])
+    w.apply_pair(CANDIDATE)
+    assert w.store.alias_move(move).state == "moving"
+    back = {"engine": "fast", "release": "r1"}
+
+    answer = w.post("/v1/checks/alias", BODY | {"candidate": back}, token="reader").json()
+
+    assert answer == {
+        "allowed": True,
+        "move": move,
+        "assessment": w.store.alias_move(move).assessment_id,
+        "reason": "",
+    }
+    w.apply_pair(back)
+    found = w.get(f"/v1/alias-moves/{move}", token="reader").json()
+    assert found["state"] == "cancelled"
+    assert found["next"] == "cancelled: the alias moved back to what it served before"
+    assert {h["state"] for h in found["holds"]} == {"released"}

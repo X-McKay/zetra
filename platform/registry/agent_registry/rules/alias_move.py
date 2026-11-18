@@ -28,6 +28,10 @@ WAITING_MOVES = (
 )  # while these, D6 and D8 do not happen for a held agent
 EXPIRED = "evaluation did not finish in the time allowed"
 MOVED_ELSEWHERE = "the alias moved to another candidate"
+MOVED_BACK = "the alias moved back to what it served before"
+# A hold the evaluation still has to decide. `holding` is among them only after A7: the alias
+# moved before every agent was confirmed stopped.
+UNDECIDED = ("holding", "held")
 MIN_EVALUATION_SECONDS, MAX_EVALUATION_SECONDS = 60, 86400
 
 
@@ -271,14 +275,23 @@ def a8_changed_without_move(
     now: datetime,
 ) -> None:
     """A8: the feed moved the alias to something that is not the candidate of an open move.
-    An open move that is `holding` or `held` is cancelled."""
+    An open move that is `holding`, `held` or `moving` is cancelled. For a `moving` move this
+    is the way back when the candidate's engine never serves."""
     tx.event(
         "alias-changed-without-move",
         detail={"cluster": cluster, "alias": alias, "from": was, "to": now_pair},
     )
     move = open_move(tx, cluster, alias)
-    if move is not None and move.state in ("holding", "held"):
-        _cancel(tx, move, MOVED_ELSEWHERE, now=now)
+    if move is None or move.state not in WAITING_MOVES:
+        return
+    back = move.state == "moving" and backs_out(tx, move, now_pair)
+    _cancel(tx, move, MOVED_BACK if back else MOVED_ELSEWHERE, now=now)
+
+
+def backs_out(reads: Reads, move: AliasMove, pair: dict[str, str]) -> bool:
+    """Whether `pair` is what the alias served before the move: its assessment's `from`."""
+    stored = reads.assessment(move.assessment_id)
+    return stored is not None and stored.pair == pair
 
 
 def _unconfirmed(reads: Reads, move: AliasMove) -> list[str]:
@@ -369,11 +382,13 @@ def a10_resume(tx: Tx, deployment: str, *, now: datetime) -> int | None:
 def a11_suspend(
     tx: Tx, deployment: str, revision: Revision | None, reason: str, *, now: datetime
 ) -> None:
-    """A11: the newest revision of a deployment whose hold is `held` is refused while the
+    """A11: the newest revision of a deployment whose hold is undecided is refused while the
     move is `evaluating`. The hold is suspended with the revision's reason."""
     hold = hold_in_force(tx, deployment)
     move = tx.alias_move(hold.move_id) if hold else None
-    if hold is None or move is None or hold.state != "held" or move.state != "evaluating":
+    if hold is None or move is None or move.state != "evaluating":
+        return
+    if hold.state not in UNDECIDED:
         return
     newest = tx.revisions(deployment)[-1:]
     if revision is None or not newest or newest[0].number != revision.number:
@@ -391,17 +406,17 @@ def a11_suspend(
 
 def _decide(reads: Reads, move: AliasMove, now: datetime) -> bool:
     """Whether an evaluating move has something to do: A12 or A13."""
-    held = [h for h in reads.holds(move_id=move.id) if h.state == "held"]
-    return not held or (move.deadline is not None and now >= move.deadline)
+    undecided = [h for h in reads.holds(move_id=move.id) if h.state in UNDECIDED]
+    return not undecided or (move.deadline is not None and now >= move.deadline)
 
 
 def a12_expire(tx: Tx, move: AliasMove, *, now: datetime) -> int:
-    """A12: the deadline has passed. Every hold still `held` is suspended, one event each.
+    """A12: the deadline has passed. Every hold still undecided is suspended, one event each.
     An evaluation still running is left to finish. Returns how many holds changed."""
     count = 0
     if move.deadline is not None and now >= move.deadline:
         for hold in tx.holds(move_id=move.id):
-            if hold.state == "held":
+            if hold.state in UNDECIDED:
                 tx.event(
                     "hold-suspended",
                     deployment_id=hold.deployment_id,
@@ -413,8 +428,8 @@ def a12_expire(tx: Tx, move: AliasMove, *, now: datetime) -> int:
 
 
 def a13_complete(tx: Tx, move: AliasMove, *, now: datetime) -> bool:
-    """A13: no hold is `held`; the move is completed. Returns whether it was."""
-    if any(h.state == "held" for h in tx.holds(move_id=move.id)):
+    """A13: no hold is undecided; the move is completed. Returns whether it was."""
+    if any(h.state in UNDECIDED for h in tx.holds(move_id=move.id)):
         return False
     tx.event("alias-move-completed", detail={"move": move.id, "alias": move.alias})
     tx.set_alias_move_progress(move.id, state="completed", finished_at=now)
@@ -454,7 +469,8 @@ def refuse_enable(reads: Reads, deployment: Deployment) -> None:
 
 def check(reads: Reads, cluster: str, alias: str, candidate: dict[str, str]) -> dict[str, Any]:
     """Section 8: is a change that moves the alias to the candidate allowed to merge? Writes
-    nothing. Allowed only with a `held` move for this pair whose assessment is not stale."""
+    nothing. Allowed with a `held` move for this pair whose assessment is not stale, and for
+    the pair a `moving` move came from: the way back when the engine never serves."""
     if reads.cluster(cluster) is None:
         raise Refusal("not-found", f"there is no cluster {cluster}")
     if assessment.find_alias(reads, cluster, alias) is None:
@@ -479,6 +495,9 @@ def check(reads: Reads, cluster: str, alias: str, candidate: dict[str, str]) -> 
         return answer(held, "")
     found = next((m for m in moves if m.state in ("holding", "moving", "evaluating")), None)
     if found is None:
+        moving = open_move(reads, cluster, alias)
+        if moving is not None and moving.state == "moving" and backs_out(reads, moving, candidate):
+            return answer(moving, "")
         return answer(None, f"there is no move for {name}")
     if found.state == "holding":
         agents = ", ".join(sorted(_agent(reads, d) for d in _unconfirmed(reads, found)))

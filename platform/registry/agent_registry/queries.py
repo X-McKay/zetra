@@ -180,7 +180,8 @@ def _next(store: Reads, move: AliasMove, holds: list[Hold]) -> str:
         return "restart or wait for the engine, then say it is serving"
     if move.state == "evaluating":
         until = move.deadline.isoformat() if move.deadline else "?"
-        return f"evaluating {len(names('held'))} agent(s) until {until}"
+        undecided = names("holding") + names("held")
+        return f"evaluating {len(undecided)} agent(s) until {until}"
     if move.state == "completed":
         suspended = names("suspended")
         return "done" + (f"; suspended: {', '.join(suspended)}" if suspended else "")

@@ -133,6 +133,55 @@
       ]
     },
     {
+      "name": "a move whose engine never serves is backed out by moving the alias back",
+      "steps": [
+        {"do": "assess", "expect": {}},
+        {"do": "start", "expect": {"move": "holding"}},
+        {"do": "ack", "agent": "passes", "running": 0, "expect": {}},
+        {"do": "ack", "agent": "fails", "running": 0, "expect": {}},
+        {"do": "ack", "agent": "no-suite", "running": 0, "expect": {"move": "held"}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r2"}, "expect": {"move": "moving", "events": ["alias-moved"]}},
+        {"do": "engine", "readyReplicas": 0, "servedName": "fast-two", "expect": {}},
+        {"do": "evaluate", "expect": {"error": "refused"}},
+        {"do": "cancel", "expect": {"error": "refused"}},
+        {"do": "check", "candidate": {"engine": "fast", "release": "r3"}, "expect": {"allowed": false}},
+        {"do": "check", "candidate": {"engine": "fast", "release": "r1"}, "expect": {"allowed": true}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r1"}, "expect": {"move": "cancelled", "holds": {"passes": "released", "fails": "released", "no-suite": "released"}, "held": [], "events": ["alias-changed-without-move", "alias-move-cancelled"]}},
+        {"do": "check", "candidate": {"engine": "fast", "release": "r1"}, "expect": {"allowed": false}},
+        {"do": "assess", "expect": {"blocked": false}},
+        {"do": "start", "expect": {"move": "holding", "held": ["passes", "fails", "no-suite"]}}
+      ]
+    },
+    {
+      "name": "a moving move is cancelled when the alias goes to a third release",
+      "steps": [
+        {"do": "assess", "expect": {}},
+        {"do": "start", "expect": {"move": "holding"}},
+        {"do": "ack", "agent": "passes", "running": 0, "expect": {}},
+        {"do": "ack", "agent": "fails", "running": 0, "expect": {}},
+        {"do": "ack", "agent": "no-suite", "running": 0, "expect": {"move": "held"}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r2"}, "expect": {"move": "moving"}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r3"}, "expect": {"move": "cancelled", "held": [], "events": ["alias-changed-without-move", "alias-move-cancelled"]}}
+      ]
+    },
+    {
+      "name": "the alias moves before every agent stopped: the unconfirmed are still decided",
+      "steps": [
+        {"do": "assess", "expect": {}},
+        {"do": "start", "expect": {"move": "holding"}},
+        {"do": "ack", "agent": "passes", "running": 0, "expect": {"holds": {"passes": "held"}}},
+        {"do": "ack", "agent": "fails", "running": 2, "expect": {"holds": {"fails": "holding"}}},
+        {"do": "feed", "pair": {"engine": "fast", "release": "r2"}, "expect": {"move": "moving", "events": ["alias-moved", "alias-moved-before-hold-confirmed"]}},
+        {"do": "ready", "agent": "fails", "expect": {"phase": {"fails": "awaiting-runtime"}}},
+        {"do": "engine", "readyReplicas": 1, "servedName": "fast-two", "expect": {}},
+        {"do": "evaluate", "expect": {"move": "evaluating"}},
+        {"do": "clock", "seconds": 5, "expect": {"move": "evaluating", "phase": {"fails": "evaluating"}, "holds": {"passes": "held", "fails": "holding", "no-suite": "holding"}}},
+        {"do": "result", "agent": "fails", "verdict": "fail", "expect": {"holds": {"fails": "suspended"}, "phase": {"fails": "refused"}, "events": ["hold-suspended"]}},
+        {"do": "clock", "seconds": 5, "expect": {"move": "evaluating"}},
+        {"do": "clock", "seconds": 600, "expect": {"move": "completed", "holds": {"passes": "suspended", "fails": "suspended", "no-suite": "suspended"}, "held": ["passes", "fails", "no-suite"], "events": ["hold-suspended", "hold-suspended", "alias-move-completed"]}}
+      ]
+    },
+    {
       "name": "the alias moves with no move at all: milestone 2 applies",
       "steps": [
         {"do": "feed", "pair": {"engine": "fast", "release": "r2"}, "expect": {"events": ["alias-changed-without-move"], "held": [], "phase": {"passes": "awaiting-runtime"}}},

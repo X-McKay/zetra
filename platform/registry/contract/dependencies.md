@@ -101,12 +101,13 @@ The tool server's `Deployment.document` gains `configDigest` and `contract`, whe
                            "digest": "sha256:..."}}}
 ```
 
-A tool's `digest` is `canonical.digest` of its four other fields. The contract's `digest` is
-`canonical.digest` of the map of tool name to tool digest. The contract belongs to the
+Every digest in this document is `derive.sha(value)`: the text `sha256:` followed by
+`canonical.digest(value)`. A tool's `digest` is that of its four other fields. The contract's
+`digest` is that of the map of tool name to tool digest. The contract belongs to the
 deployment and not to the release, because flags change what an image offers.
 
 `derive.resolutions_of`: the `detail` of a `tool` resolution keeps `image` and gains
-`contract`, the `canonical.digest` of the map of each required tool name to that tool's
+`contract`, the `derive.sha` of the map of each required tool name to that tool's
 digest (`null` for a required tool the contract does not list). The key is absent when the
 server has no contract. So `revisions.re_resolve` (`delivery.md` section 5.1) records a new
 revision of an agent when the contract of a tool it requires changes, and not when another
@@ -254,7 +255,7 @@ A feed without `modelReleases` is read as none, and an engine without `release` 
 ### 4.3 In the registry
 
 Each manifest is a `Release` of kind `model`, item the engine, `name` the manifest's name,
-`origin = "adopted"`, `document` the manifest, `digest` `canonical.digest` of the manifest
+`origin = "adopted"`, `document` the manifest, `digest` `derive.sha` of the manifest
 without `evidence`. A release adopted earlier whose document is only `{"servedName": ...}`
 is completed once by a manifest of the same name and served name. After that a stored
 manifest that the feed states differently makes the feed invalid.
@@ -327,7 +328,7 @@ assessment:
   requirement needs `toolCalling`. `met` is the candidate manifest's `offers.toolCalling`:
   `true`, `false`, or `null` when the manifest does not say. `blocked` is true when any need
   of an enabled dependant has `met: false`.
-- `digest` is `canonical.digest` of `{cluster, alias, from, candidate, dependants}` with each
+- `digest` is `derive.sha` of `{cluster, alias, from, candidate, dependants}` with each
   dependant reduced to `{deployment, authority, enabled, release}`.
 
 An assessment is **stale** when computing it again now gives another digest: the pair behind
@@ -359,19 +360,31 @@ while it is `holding`, `held` or `suspended`.
 
 | # | When | What happens |
 | --- | --- | --- |
-| A1 | An operator starts a move for an assessment that is not stale and not blocked, and the alias has no open move | The move is stored as `holding`, with one hold in state `holding` per dependant that has `held: true`. Each held deployment's generation is raised so that its Agent is written again (section 7). Event `alias-move-started`. With no dependant to hold, the move is stored as `held` at once. |
+| A1 | An operator starts a move for an assessment that is not stale and not blocked, and the alias has no open move | The move is stored as `holding`, with one hold in state `holding` per dependant that has `held: true`. Each held deployment's generation is raised so that its Agent is written again (section 7). Event `alias-move-started`. With no dependant to hold, the move is stored as `held` at once. A dependant whose hold from an earlier, finished move is still `suspended` has that hold `released` with the reason `superseded by alias move <id>`, and is held by the new move. |
 | A2 | The same, and the assessment is stale | Refused, code `stale-assessment`. Nothing is written. Staleness is decided first, then A3. |
-| A3 | The same, and the assessment is blocked, or the alias has an open move | Refused, code `refused` for a blocked assessment and `conflict` for an open move. |
-| A4 | An observation report acknowledges a hold (section 7.3) with no task session running | The hold becomes `held`. When every hold of the move is `held`, the move becomes `held` and `held_at` is set. Event `alias-move-held`. |
+| A3 | The same, and the assessment is blocked, or the alias has an open move, or a dependant to hold has a hold in force under an open move of another alias | Refused, code `refused` for a blocked assessment and `conflict` for the other two. |
+| A4 | An observation report acknowledges a hold (section 7.3) with no task session running | The hold becomes `held`, event `hold-held`. When every hold of the move is `held` and the move is `holding`, the move becomes `held` and `held_at` is set. Event `alias-move-held`. A report with sessions still running stores the number, event `hold-counted`, once per change of the number. |
 | A5 | An operator cancels a move that is `holding` or `held` | The move becomes `cancelled`; its holds become `released`; the generations are raised. Event `alias-move-cancelled`. A move in any other state cannot be cancelled: `refused`. |
 | A6 | A feed is applied in which the pair behind the alias equals the move's candidate, and the move is `held` | The move becomes `moving` and `moved_at` is set. Event `alias-moved`. `re_resolve` then records the dependants' new revisions as in milestone 2. |
 | A7 | The same, and the move is still `holding` | As A6, with a second event `alias-moved-before-hold-confirmed`. The check of section 8 exists to prevent this; if it was bypassed, the registry still follows the cluster. |
-| A8 | A feed is applied in which the pair behind the alias changes to something that is not the candidate of an open move | Event `alias-changed-without-move` naming the alias and both pairs. An open move of that alias that is `holding` or `held` becomes `cancelled` (as A5) with the reason "the alias moved to another candidate". Milestone 2's behaviour applies: new revisions, evaluated, nobody held. |
+| A8 | A feed is applied in which the pair behind the alias changes to something that is not the candidate of an open move | Event `alias-changed-without-move` naming the alias and both pairs. An open move of that alias that is `holding`, `held` or `moving` becomes `cancelled` (as A5) with the reason "the alias moved to another candidate"; a `moving` move whose alias goes back to the `from` pair of its assessment has the reason "the alias moved back to what it served before". Milestone 2's behaviour applies: new revisions, evaluated, nobody held. |
 | A9 | An operator says the engine is serving, the move is `moving`, and the newest observation of the candidate's engine is fresh, shows `readyReplicas` of at least 1 and shows the candidate's served name | The move becomes `evaluating`; `evaluating_at` is now and `deadline` is now plus `evaluation_seconds`. Event `alias-move-evaluating`. If the observation does not show that, `refused` with what is missing. |
 | A10 | While the move is `evaluating` or `completed`, a revision of a deployment whose hold is in force is activated (D6 or D9) | The hold becomes `resumed`; the generation is raised. Event `hold-resumed`. |
-| A11 | While the move is `evaluating`, the newest revision of a deployment whose hold is `held` becomes `refused` | The hold becomes `suspended` with the revision's reason. Event `hold-suspended`. |
-| A12 | The move is `evaluating` and the deadline has passed | Every hold still `held` becomes `suspended`, reason "evaluation did not finish in the time allowed", with one event `hold-suspended` each. An evaluation still running is left to finish; if it passes later, A10 resumes the agent. |
-| A13 | The move is `evaluating` and no hold is `held` | The move becomes `completed`; `finished_at` is set. Event `alias-move-completed`. |
+| A11 | While the move is `evaluating`, the newest revision of a deployment whose hold is undecided becomes `refused` | The hold becomes `suspended` with the revision's reason. Event `hold-suspended`. |
+| A12 | The move is `evaluating` and the deadline has passed | Every hold still undecided becomes `suspended`, reason "evaluation did not finish in the time allowed", with one event `hold-suspended` each. An evaluation still running is left to finish; if it passes later, A10 resumes the agent. |
+| A13 | The move is `evaluating` and no hold is undecided | The move becomes `completed`; `finished_at` is set. Event `alias-move-completed`. |
+
+**Undecided.** A hold is undecided while it is `held`, and also while it is still `holding`
+under a move that is `evaluating`. The second happens only after A7. So a move never
+completes with a hold that is neither resumed nor suspended, and the deadline bounds every
+move that reaches `evaluating`.
+
+**Backing out.** A move that is `moving` cannot be cancelled by A5, because the cluster
+already points the alias at the candidate and releasing the holds would give the agents an
+engine that is being swapped. When the candidate's engine never serves, the way back is a
+change that moves the alias to the pair it came from. The check of section 8 allows that
+change, and A8 cancels the move when the feed carries it. A move that is `evaluating` ends
+at its deadline at the latest; moving back after that is an ordinary move.
 
 **Waiting.** While a deployment has a hold in force and the hold's move is `holding`, `held`
 or `moving`, transitions D6 and D8 of `delivery.md` do not happen for it: the revision stays
@@ -393,6 +406,17 @@ a dependant of an alias that has an open move: it would start taking sessions wi
 A13. The observation route calls it after `lifecycle.advance_cluster`, so it runs on every
 provisioner pass.
 
+**Other events.** `assessment-created` when an assessment is stored. `held-by-alias-move`
+once for a revision that waits. When A10 happens in the transaction that activates a
+revision, the activation reports the sequence number of `hold-resumed`, so that the Agent is
+written with the hold gone.
+
+**The store.** It refuses a second open move of an alias and a second hold in force of a
+deployment (`Conflict`), whatever the rules decided.
+
+**The candidate's engine.** A candidate may name another engine than the one the alias
+points at now. A9 looks at the observation of the candidate's engine.
+
 **The database.** Every transition is a transaction on the store. With the database down a
 move cannot start and the check of section 8 cannot pass.
 
@@ -409,7 +433,7 @@ move cannot start and the check of section 8 cannot pass.
 A move's `next` by state: `holding`: "waiting for N agent(s) to stop: <names>"; `held`:
 "merge the change that moves the alias"; `moving`: "restart or wait for the engine, then say
 it is serving"; `evaluating`: "evaluating N agent(s) until <deadline>"; `completed`:
-"done", followed by the suspended agents if any.
+"done", followed by the suspended agents if any; `cancelled`: "cancelled: <reason>".
 
 ## 7. The hold in the cluster
 
@@ -476,10 +500,12 @@ No change of behaviour: it claims the evaluation requests that D8 creates once t
 {"allowed": true, "move": "...", "assessment": "asm-...", "reason": ""}
 ```
 
-`allowed` is true only when the alias has a move in state `held` whose candidate is this
-pair and whose assessment is not stale. Otherwise `reason` says which of these failed: no
-move for this candidate; the move is still `holding` (with the agents not yet stopped); the
-assessment is stale (with what changed). Nothing is written.
+`allowed` is true when the alias has a move in state `held` whose candidate is this pair and
+whose assessment is not stale. It is also true when the alias has a move in state `moving`
+and this pair is the `from` pair of that move's assessment: the change backs the move out
+(section 6.2). The answer names the move either way. Otherwise `reason` says which of these
+failed: no move for this candidate; the move is still `holding` (with the agents not yet
+stopped); the assessment is stale (with what changed). Nothing is written.
 
 The cluster repository's check compares the feed rendered from the pull request with the
 feed of its base. For each tool server whose `contract` differs it calls
