@@ -1404,6 +1404,62 @@
         "title": "EventsOut",
         "type": "object"
       },
+      "Finding": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "blocks": {
+            "title": "Blocks",
+            "type": "boolean"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "finding": {
+            "title": "Finding",
+            "type": "string"
+          },
+          "tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment",
+          "agent",
+          "tenant",
+          "authority",
+          "tool",
+          "finding",
+          "blocks",
+          "action"
+        ],
+        "title": "Finding",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1439,6 +1495,59 @@
           "mode"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "Impact": {
+        "additionalProperties": false,
+        "description": "The answer of section 3.3. `reevaluated` holds agent names.",
+        "properties": {
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend"
+          },
+          "blocked": {
+            "title": "Blocked",
+            "type": "boolean"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "reevaluated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reevaluated",
+            "type": "array"
+          },
+          "server": {
+            "title": "Server",
+            "type": "string"
+          },
+          "users": {
+            "title": "Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "server",
+          "backend",
+          "blocked",
+          "findings",
+          "reevaluated",
+          "users"
+        ],
+        "title": "Impact",
         "type": "object"
       },
       "Item": {
@@ -3066,6 +3175,31 @@
         "title": "SuiteIn",
         "type": "object"
       },
+      "ToolContractCheckIn": {
+        "additionalProperties": false,
+        "properties": {
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          },
+          "contract": {
+            "additionalProperties": true,
+            "title": "Contract",
+            "type": "object"
+          },
+          "server": {
+            "title": "Server",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cluster",
+          "server",
+          "contract"
+        ],
+        "title": "ToolContractCheckIn",
+        "type": "object"
+      },
       "ToolServerStatus": {
         "additionalProperties": false,
         "properties": {
@@ -3220,6 +3354,48 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v1/checks/tool-contract": {
+      "post": {
+        "description": "Which agents a proposed contract for a tool server breaks. `not-found` for an unknown\ncluster or server; `invalid-arguments` when the contract is not one for that server.",
+        "operationId": "tool_contract_v1_checks_tool_contract_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolContractCheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Impact"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tool Contract",
+        "tags": [
+          "checks"
         ]
       }
     },
