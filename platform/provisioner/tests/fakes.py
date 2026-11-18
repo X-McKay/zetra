@@ -33,6 +33,7 @@ class FakeKube:
         self.objects: dict[tuple, dict] = {}
         self.writes: list[tuple[str, str, str]] = []
         self.managers: list[str] = []
+        self.log: list[tuple] = []  # writes and session calls, in the order they happened
         self.fail_apply: set[str] = set()  # object names whose apply raises
         self.fail_apply_all = False
         self.fail_list: set[str] = set()  # kinds whose list raises
@@ -72,6 +73,9 @@ class FakeKube:
         if self.fail_apply_all or meta["name"] in self.fail_apply:
             raise RuntimeError(f"apply of {meta['name']} refused")
         self.managers.append(field_manager)
+        self.log.append(
+            ("write", obj["kind"], meta["name"], (obj.get("spec") or {}).get("approval"))
+        )
         self.writes.append((obj["kind"], meta.get("namespace"), meta["name"]))
         key = self._key(obj["apiVersion"], obj["kind"], meta.get("namespace"), meta["name"])
         cur = self.objects.get(key)
@@ -152,6 +156,24 @@ class FakeRegistry:
             raise self.report_error
         self.reports.append(copy.deepcopy(observations))
         return {"mode": "normal", "generation": 0, "stored": 0}
+
+
+class FakeSessions:
+    """The tenant's session interface; calls are also put on the kube's log, for order."""
+
+    def __init__(self, kube: FakeKube | None = None) -> None:
+        self.kube = kube
+        self.calls: list[tuple[str, str, str, str]] = []  # tenant, agent, release, reason
+        self.error: Exception | None = None
+        self.cancelled = 2
+
+    def cancel_release(self, tenant, agent, release, reason) -> int:
+        self.calls.append((tenant, agent, release, reason))
+        if self.kube is not None:
+            self.kube.log.append(("cancel", release))
+        if self.error:
+            raise self.error
+        return self.cancelled
 
 
 class Stopper(threading.Event):

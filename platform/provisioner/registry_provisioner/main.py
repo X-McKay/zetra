@@ -14,6 +14,7 @@ from pathlib import Path
 from .cycle import Clock, run_pass, utc_now
 from .kube import ApiServer, KubePort
 from .registry import HttpRegistry, RegistryPort
+from .sessions import HttpSessions, SessionPort
 from .settings import Settings, SettingsError
 
 log = logging.getLogger("registry_provisioner")
@@ -30,11 +31,15 @@ def _touch(path: str | None) -> None:
 
 
 def pass_with_heartbeat(
-    kube: KubePort, registry: RegistryPort, settings: Settings, clock: Clock
+    kube: KubePort,
+    registry: RegistryPort,
+    settings: Settings,
+    clock: Clock,
+    sessions: SessionPort | None = None,
 ) -> bool:
     """One pass that never raises; the heartbeat is touched whatever the result."""
     try:
-        ok = run_pass(kube, registry, namespace=settings.namespace, clock=clock)
+        ok = run_pass(kube, registry, namespace=settings.namespace, clock=clock, sessions=sessions)
     except Exception:
         log.exception("the pass failed")
         ok = False
@@ -53,6 +58,7 @@ def main(
     *,
     kube: KubePort | None = None,
     registry: RegistryPort | None = None,
+    sessions: SessionPort | None = None,
     environ: Mapping[str, str] | None = None,
     stop: threading.Event | None = None,
     clock: Clock = utc_now,
@@ -69,10 +75,12 @@ def main(
     except SettingsError as exc:
         print(f"registry-provisioner: {exc}", file=sys.stderr)
         return 2
+    if sessions is None and settings.session_api_url and isinstance(registry, HttpRegistry):
+        sessions = HttpSessions(settings.session_api_url, registry)
     kube = kube or ApiServer()
 
     def step() -> bool:
-        return pass_with_heartbeat(kube, registry, settings, clock)
+        return pass_with_heartbeat(kube, registry, settings, clock, sessions)
 
     if args.once:
         return 0 if step() else 1
