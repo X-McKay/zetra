@@ -331,7 +331,7 @@ class ObservedObject(Record):
     subject_kind: Literal["agent", "agentrelease"]
     namespace: str
     name: str
-    in_flux_inventory: bool
+    in_flux_inventory: bool | None  # null: the inventory could not be read this pass
     # metadata (name, namespace, uid, resourceVersion, annotations under the registry prefix
     # only), spec and status. Nothing else is sent.
     document: dict[str, Any]

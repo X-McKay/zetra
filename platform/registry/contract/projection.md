@@ -111,7 +111,15 @@ One pass, about every 30 seconds:
    | equal, and the live `spec` and registry annotations equal the desired ones | `unchanged` | no |
    | equal, and they differ | `applied`, message `repaired: the live object had been changed` | yes |
 
-   A failed write is `error` with the message; the pass goes on to the next object.
+   The first row also covers a `document` that does not name the object beside it (another
+   `kind`, `name` or `namespace`, or another `apiVersion`): `error`, nothing written.
+
+   A failed write is `error` with the message; the pass goes on to the next object. So is a
+   write after which the object still differs from the desired one: server-side apply does not
+   remove a field another manager owns, and reporting `applied` on every pass would hide that.
+
+   If an inventory of step 3 cannot be read, nothing is written that pass: every object is
+   `error` with the reason, because "not in a Flux inventory" is then not known.
 5. Report (section 6). A failed report changes nothing; the next pass reports again.
 
 It never deletes, never writes any other kind, and never writes outside `namespaces`.
@@ -121,7 +129,9 @@ It never deletes, never writes any other kind, and never writes outside `namespa
 What the provisioner sends each pass:
 
 - `objects`: every `Agent` and `AgentRelease` in each namespace of `namespaces`, whoever wrote
-  it, each with `inFluxInventory`. `document` holds `metadata` (`name`, `namespace`, `uid`,
+  it, each with `inFluxInventory` (`null` when the inventory could not be read: the registry
+  stores it as unknown, and status shows it as unknown, never as "not in the inventory").
+  `document` holds `metadata` (`name`, `namespace`, `uid`,
   `resourceVersion`, and only the annotations under the registry prefix), `spec` and `status`.
   Nothing else leaves the cluster.
 - `complete`: `{subjectKind, namespace}` for each kind and namespace it listed in full.

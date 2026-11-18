@@ -1386,8 +1386,15 @@
             "type": "object"
           },
           "inFluxInventory": {
-            "title": "Influxinventory",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Influxinventory"
           },
           "name": {
             "title": "Name",
