@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from zetra_agents import schema
+from zetra_agents import declaration, schema, suite
 
 FORBIDDEN_IMPORTS = {"httpx", "requests", "urllib", "socket", "aiohttp", "subprocess"}
 NAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
@@ -177,7 +177,10 @@ def forbidden_imports(src: Path) -> list[str]:
 
 
 def check_files(agent: AgentDir) -> list[str]:
-    return [f"{agent.name}: missing {f}" for f in REQUIRED if not (agent.root / f).is_file()]
+    """The files an agent directory must hold. `deploy/agent.yaml` of a one-file agent is
+    generated, so `check` reports it missing with the command that writes it."""
+    required = [f for f in REQUIRED if f != "deploy/agent.yaml" or not declaration.one_file(agent)]
+    return [f"{agent.name}: missing {f}" for f in required if not (agent.root / f).is_file()]
 
 
 def _read(
@@ -336,10 +339,22 @@ def check(agent: AgentDir) -> list[str]:
         return problems
     if not NAME.match(agent.name):
         problems.append(f"{agent.name}: directory name is not a DNS label of at most 32")
+    problems += suite.file_problems(agent.root / "evaluation" / "suite.yaml", agent.name)
     manifest, refused = _read(agent.manifest_path, "agent.yaml", agent.name, tolerant=False)
+    one_file = declaration.is_one_file(manifest)
     cr, cr_refused = _read(agent.agent_cr_path, "deploy/agent.yaml", agent.name, tolerant=True)
-    problems += [p for p in (refused, cr_refused) if p]
-    if manifest is None or cr is None:
+    # The generated file is compared with what would be generated, not read as authored.
+    problems += [p for p in (refused, None if one_file else cr_refused) if p]
+    if manifest is None:
+        return problems
+    if one_file:
+        shape = _manifest_shape(agent.name, manifest)
+        if shape:
+            return problems + shape
+        generated = declaration.problems(agent, manifest)
+        if generated:
+            return problems + generated
+    if cr is None:
         return problems
     shape = _manifest_shape(agent.name, manifest) + _cr_shape(agent.name, cr)
     if shape:

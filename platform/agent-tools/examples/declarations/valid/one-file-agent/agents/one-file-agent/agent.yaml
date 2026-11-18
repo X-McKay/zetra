@@ -1,0 +1,25 @@
+# Valid: the one-file layout. The author edits this file only; deploy/agent.yaml is generated from the requires block, and the model is an alias.
+schema_version: 1
+name: one-file-agent
+entrypoint: one_file_agent.agent:create_agent
+instructions: one_file_agent/instructions/base.md
+model:
+  backend: llm-main
+  name: main
+  max_tokens: 1024
+  temperature: 0
+tools:
+  - name: write_report
+    effect: workspace_write
+requires:
+  owner: dev@example.com
+  description: Reads one report.
+  tenant: tenant-example
+  identity: {mode: agent}
+  budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+  tools:
+    - backend: postgres-admin
+      effect: remote_read
+      tools: [execute_sql]
+      delegation: inherit
+  runtime: {cpu: "1", memory: 2Gi, ttlSeconds: 900}

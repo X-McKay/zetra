@@ -11,6 +11,7 @@ workspace moves; `buildRevision` and `manifestSha256` say whether the agent itse
 
 from __future__ import annotations
 
+import copy
 import datetime as dt
 import hashlib
 import json
@@ -73,6 +74,11 @@ def build(
     )
     policy_sha = digest_hex(bundle)
     release["spec"]["policySha256"] = policy_sha
+    # The Agent's spec as built, so a later change to the live Agent cannot move this release's
+    # policy. Added after the policy is compiled: the digest is of the same Agent either way.
+    release["spec"]["declaration"] = {
+        k: v for k, v in copy.deepcopy(cr["spec"]).items() if k != "enabled"
+    }
     return {
         "name": name,
         "agent": cr,

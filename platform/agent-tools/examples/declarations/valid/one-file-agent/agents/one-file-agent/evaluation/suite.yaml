@@ -1,0 +1,9 @@
+schema_version: 1
+timeout_seconds: 600
+acceptance:
+  min_passed: all
+cases:
+  - id: instance-summary
+    task: Report the server version.
+    expect:
+      report_contains: ["PostgreSQL"]

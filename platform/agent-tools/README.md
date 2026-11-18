@@ -36,3 +36,27 @@ The conformance fixtures in `layout.FIXTURES` are the only agents built with the
 Dockerfile's `fixture` target, which replaces the installed SDK boundary driver with the
 agent package's `step.py` and runs the agent's `verify_image.py`. `check` refuses those
 files on any other agent.
+
+## One file instead of two
+
+An agent whose `agent.yaml` has a `requires` block is on the one-file layout: the author edits
+`agent.yaml` and `deploy/agent.yaml` is generated from it and committed.
+
+```yaml
+model: {backend: llm-main, name: main, max_tokens: 1024, temperature: 0}   # name is an alias
+requires:
+  owner: al
+  description: Read-only PostgreSQL administrator.
+  tenant: tenant-test
+  identity: {mode: agent}
+  budget: {tokensPerDay: 1000000, tokensPerSession: 200000}
+  tools: [{backend: postgres-admin, effect: remote_read, tools: [execute_sql], delegation: inherit}]
+  runtime: {cpu: "1", memory: 2Gi, ttlSeconds: 900}
+```
+
+`zetra-agents render` writes the `tools:` list and `deploy/agent.yaml`; `check` fails when
+either is out of date. On this layout `model.name` must be an alias of `model.backend`:
+`main` is `llm-main` and `fast` is `llm-fast`, or the table under
+`[tool.zetra-agents.aliases]` in the root `pyproject.toml`. An optional
+`evaluation/suite.yaml` is checked by `check`. Every release carries the Agent's spec as
+`spec.declaration`. See `examples/declarations/valid/one-file-agent`.

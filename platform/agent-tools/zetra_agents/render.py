@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from importlib import metadata, resources
 from pathlib import Path
 
-from zetra_agents import layout, manifest
+from zetra_agents import declaration, layout, manifest
 
 ZETRA_GIT = "https://github.com/X-McKay/zetra.git"
 ZETRA_ORIGIN = re.compile(
@@ -204,8 +204,16 @@ def derived_agents(repo: Path) -> list[layout.AgentDir]:
 
 
 def tool_problems(repo: Path) -> list[Difference]:
-    """Manifests whose `tools:` list is not what the agent's code declares."""
+    """Manifests whose `tools:` list is not what the agent's code declares, and generated
+    `deploy/agent.yaml` files that are missing or out of date."""
     problems = []
+    for agent in layout.all_agents(repo):
+        if declaration.one_file(agent):
+            path = agent.agent_cr_path.relative_to(repo).as_posix()
+            problems += [
+                Difference(path, "tools", p.removeprefix(f"{agent.name}: "))
+                for p in declaration.generated_file_problems(agent)
+            ]
     for agent in derived_agents(repo):
         path = agent.manifest_path.relative_to(repo).as_posix()
         try:
@@ -219,8 +227,16 @@ def tool_problems(repo: Path) -> list[Difference]:
 
 
 def write_tools(repo: Path) -> list[Path]:
-    """Rewrite each manifest's `tools:` from its code; the manifests that changed."""
-    return [agent.manifest_path for agent in derived_agents(repo) if manifest.write(agent)]
+    """Rewrite each manifest's `tools:` from its code, and each one-file agent's generated
+    `deploy/agent.yaml` from its manifest; the files that changed."""
+    written = [
+        agent.agent_cr_path
+        for agent in layout.all_agents(repo)
+        if declaration.one_file(agent) and declaration.write(agent)
+    ]
+    return written + [
+        agent.manifest_path for agent in derived_agents(repo) if manifest.write(agent)
+    ]
 
 
 def lock_problems(repo: Path, revision: str) -> list[Difference]:
