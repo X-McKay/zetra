@@ -2,7 +2,9 @@
 (sections 4 and 6 of `platform/registry/contract/skills.md`).
 
 Skill files are read only through `agent_runtime.skills.format`, the one reader; this module
-decides what is a problem and how it is worded.
+decides what is a problem and how it is worded. The reader is in the SDK, which this package
+does not depend on, so it is imported when a skill is first read: an agent that lists no
+skill is checked and rendered without the SDK, which is how `zetra init` runs.
 """
 
 from __future__ import annotations
@@ -11,7 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import skills_ref
-from agent_runtime.skills import format as fmt
 
 from zetra_agents import declaration
 
@@ -21,7 +22,27 @@ if TYPE_CHECKING:
 EFFECT = "sandbox_execute"
 MAX_SKILL_FILE = 32768  # bytes of SKILL.md (section 8.3)
 SKILLS_DIR = "skills"
+LOCK = "skills.lock"  # `fmt.LOCK`, stated here for the agent with no skills
 COMMAND = "zetra-agents render"
+
+
+class _Reader:
+    """`agent_runtime.skills.format`, imported at first use."""
+
+    def __getattr__(self, name: str) -> Any:
+        from agent_runtime.skills import format as reader
+
+        return getattr(reader, name)
+
+
+fmt = _Reader()
+
+
+def _names(manifest: Any) -> list[str]:
+    """`fmt.listed`, which an agent with no `skills` key does not need the reader for."""
+    if not isinstance(manifest, dict) or manifest.get("skills") is None:
+        return []
+    return fmt.listed(manifest)
 
 
 def skills_dir(agent: AgentDir) -> Path:
@@ -29,14 +50,14 @@ def skills_dir(agent: AgentDir) -> Path:
 
 
 def lock_path(agent: AgentDir) -> Path:
-    return agent.root / fmt.LOCK
+    return agent.root / LOCK
 
 
 def listed(agent: AgentDir) -> list[str]:
     """The skills `agent.yaml` lists; [] for no key, an unreadable manifest or a bad list
     (`check` reports those)."""
     try:
-        return fmt.listed(agent.manifest())
+        return _names(agent.manifest())
     except Exception:  # noqa: BLE001 - a manifest or list that cannot be read lists none
         return []
 
@@ -74,6 +95,8 @@ def write_lock(agent: AgentDir) -> bool:
 def lock_differences(agent: AgentDir) -> list[str]:
     """Why the lock is not what `write_lock` would write; [] when it is."""
     names = listed(agent)
+    if not names and not lock_path(agent).exists():
+        return []
     found = fmt.lock_problems(names, skills_dir(agent), lock_path(agent))
     return [f"{p}; run `{COMMAND}`" for p in found]
 
@@ -148,7 +171,7 @@ def problems(agent: AgentDir, manifest: dict[str, Any]) -> list[str]:
     request."""
     name = agent.name
     try:
-        names = fmt.listed(manifest)
+        names = _names(manifest)
     except fmt.SkillError as exc:
         return [f"{name}: {exc}"]
     requested = EFFECT in _requested_effects(agent, manifest)
@@ -159,7 +182,7 @@ def problems(agent: AgentDir, manifest: dict[str, Any]) -> list[str]:
         found += [
             f"{name}: src/ holds {entry.name}, where the image keeps skills; rename it"
             for entry in sorted(agent.src.iterdir() if agent.src.is_dir() else [])
-            if entry.name in (SKILLS_DIR, fmt.LOCK)
+            if entry.name in (SKILLS_DIR, LOCK)
         ]
     skills: list[fmt.Skill] = []
     for skill_name in names:
@@ -206,7 +229,7 @@ def notes(agent: AgentDir, manifest: dict[str, Any]) -> list[str]:
     fronts, which are ignored."""
     found = []
     try:
-        names = fmt.listed(manifest)
+        names = _names(manifest)
     except fmt.SkillError:
         return []
     for skill_name in names:

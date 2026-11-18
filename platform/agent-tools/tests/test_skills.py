@@ -4,6 +4,8 @@
 
 import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -278,3 +280,43 @@ def test_the_dockerfile_stages_the_skills_and_verifies_them_in_the_image():
     assert "COPY --from=build /stage/ /app/" in text
     ignore = render.template("dockerignore")
     assert "!skills/**" in ignore and "!agents/*/skills.lock" in ignore
+
+
+WITHOUT_THE_SDK = """\
+import sys
+
+sys.modules["agent_runtime"] = None  # an import of it now raises ImportError
+from pathlib import Path
+
+from zetra_agents import cli, layout, release, render, skills
+
+root = Path(sys.argv[1])
+render.init(
+    root,
+    agent="plain-agent",
+    revision="0" * 40,
+    tenant="tenant-test",
+    owner="dev@example.com",
+    description="Demo",
+)
+agent = layout.AgentDir(root / "agents" / "plain-agent")
+assert skills.problems(agent, agent.manifest()) == [], "problems"
+assert skills.notes(agent, agent.manifest()) == [], "notes"
+assert skills.release_entries(agent) == [], "release"
+assert not skills.write_lock(agent) and not skills.lock_differences(agent), "lock"
+(root / "uv.lock").write_text("version = 1\\n")  # `init` leaves the lock to uv
+sys.exit(cli.main(["--repo", str(root), "check"]))
+"""
+
+
+def test_an_agent_that_lists_no_skill_is_rendered_and_checked_without_the_sdk(tmp_path):
+    """The reader is in the SDK, which the tooling does not depend on: `zetra init` runs
+    where the SDK is not installed."""
+    assert skills.LOCK == fmt.LOCK
+    done = subprocess.run(
+        [sys.executable, "-c", WITHOUT_THE_SDK, str(tmp_path / "new")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
