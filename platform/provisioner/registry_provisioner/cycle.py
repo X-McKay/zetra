@@ -82,6 +82,14 @@ def run_pass(
     if desired["mode"] != "recovery":
         cancel_revoked(sessions, desired.get("revocations") or [], results)
 
+    holds = None
+    if "holds" in desired:  # a registry that does not know the key is never sent it
+        holds = (
+            []
+            if desired["mode"] == "recovery"
+            else observe_holds(sessions, desired["holds"] or [], results)
+        )
+
     objects, complete = observed_objects(kube, namespaces, inventory)
     body = {
         "observedAt": clock().astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -91,6 +99,8 @@ def run_pass(
         "subjects": observed_subjects(kube, desired.get("observe", [])),
         "projections": [r.wire() for r in results],
     }
+    if holds is not None:
+        body["holds"] = holds
     _log_results(results)
     try:
         registry.report(body)
@@ -123,6 +133,41 @@ def cancel_revoked(
                 log.warning("%s: cancel failed, will be tried again: %s", who, error_text(exc))
             else:
                 log.info("%s: cancelled %d session(s)", who, count)
+
+
+def observe_holds(
+    sessions: SessionPort | None, holds: list[dict], results: list[Result]
+) -> list[dict]:
+    """Dependencies section 7.3: for each hold whose Agent is written as asked, cancel the
+    task sessions when it says so, then count those still running. A hold that fails is left
+    out, logged and tried again next pass; it never stops the others."""
+    written = {(r.namespace, r.name) for r in results if r.kind == "Agent" and r.result in WRITTEN}
+    reported = []
+    for hold in holds:
+        who = f"hold {hold['move']} deployment {hold['deployment']}"
+        if (hold["namespace"], hold["agent"]) not in written:
+            log.info("%s: not counted: the Agent was not written this pass", who)
+        elif sessions is None:
+            log.info("%s: not counted: no session interface configured", who)
+        else:
+            try:
+                if hold.get("sessions") == "cancel":
+                    count = sessions.cancel_sessions(
+                        hold["tenant"], hold["agent"], "task", f"alias move {hold['move']}"
+                    )
+                    log.info("%s: cancelled %d session(s)", who, count)
+                running = sum(
+                    1
+                    for s in sessions.list_running(hold["tenant"], hold["agent"])
+                    if s.get("purpose") == "task"
+                )
+            except Exception as exc:
+                log.warning("%s: not counted, will be tried again: %s", who, error_text(exc))
+            else:
+                reported.append(
+                    {"move": hold["move"], "deployment": hold["deployment"], "running": running}
+                )
+    return reported
 
 
 def _unwritten(deployment: str, entry: dict, why: str) -> Result:

@@ -1,4 +1,5 @@
-"""The tenant's session interface: cancel the sessions of a revoked release.
+"""The tenant's session interface: cancel a revoked release's sessions, and list and cancel an
+agent's running sessions for an alias-move hold.
 
 `platform/session-api/contract/sessions.md` section 4.5. It carries the registry's token and
 logs none.
@@ -25,6 +26,18 @@ class SessionPort(Protocol):
         """
         ...
 
+    def cancel_sessions(self, tenant: str, agent: str, purpose: str, reason: str) -> int:
+        """Cancel the agent's running sessions of one purpose, of every release; the number
+        cancelled. Raises RegistryError when the call failed or any cancellation did."""
+        ...
+
+    def list_running(self, tenant: str, agent: str) -> list[dict]:
+        """The agent's running sessions, each with at least `sessionId` and `purpose`.
+
+        Raises RegistryError when the list could not be read.
+        """
+        ...
+
 
 class HttpSessions:
     def __init__(self, template: str, registry: HttpRegistry) -> None:
@@ -32,14 +45,22 @@ class HttpSessions:
         self._tokens = registry.tokens
         self._http = registry.http
 
-    def cancel_release(self, tenant: str, agent: str, release: str, reason: str) -> int:
+    def _url(self, tenant: str, path: str) -> str:
         base = self._template.replace("{tenant}", quote(tenant, safe="")).rstrip("/")
-        path = f"/v1/tenants/{quote(tenant, safe='')}/sessions/cancel"
+        return base + f"/v1/tenants/{quote(tenant, safe='')}/sessions{path}"
+
+    def cancel_release(self, tenant: str, agent: str, release: str, reason: str) -> int:
+        return self._cancel(tenant, {"agent": agent, "release": release, "reason": reason})
+
+    def cancel_sessions(self, tenant: str, agent: str, purpose: str, reason: str) -> int:
+        return self._cancel(tenant, {"agent": agent, "purpose": purpose, "reason": reason})
+
+    def _cancel(self, tenant: str, body: dict) -> int:
         try:
             r = self._http.post(
-                base + path,
+                self._url(tenant, "/cancel"),
                 headers={"Authorization": f"Bearer {self._tokens.token()}"},
-                json={"agent": agent, "release": release, "reason": reason},
+                json=body,
                 timeout=TIMEOUT,
             )
         except httpx.HTTPError as exc:
@@ -57,3 +78,23 @@ class HttpSessions:
                 f"{len(cancelled)} cancelled"
             )
         return len(cancelled)
+
+    def list_running(self, tenant: str, agent: str) -> list[dict]:
+        try:
+            r = self._http.get(
+                self._url(tenant, ""),
+                params={"state": "running", "agent": agent},
+                headers={"Authorization": f"Bearer {self._tokens.token()}"},
+                timeout=TIMEOUT,
+            )
+        except httpx.HTTPError as exc:
+            raise RegistryError(f"list sessions: {type(exc).__name__}") from None
+        if r.status_code // 100 != 2:
+            raise RegistryError(f"list sessions answered {r.status_code}", status=r.status_code)
+        try:
+            rows = list(r.json()["sessions"])
+            if not all(isinstance(row, dict) for row in rows):
+                raise TypeError
+        except (ValueError, KeyError, TypeError, AttributeError):
+            raise RegistryError("list sessions: the answer is unusable") from None
+        return rows

@@ -14,7 +14,12 @@ from typing import Any, TypeVar
 
 from runner.types import NAME_RE, InvalidInput, SessionInput
 
-from session_api.config import CURRENT_RELEASE_ANNOTATION, DEPLOYMENT_ANNOTATION, Settings
+from session_api.config import (
+    CURRENT_RELEASE_ANNOTATION,
+    DEPLOYMENT_ANNOTATION,
+    HELD_ANNOTATION,
+    Settings,
+)
 from session_api.errors import ApiError
 from session_api.ports import (
     RUNNING,
@@ -148,6 +153,10 @@ class SessionService:
         spec = agent.get("spec") or {}
         if spec.get("enabled") is False:
             raise ApiError("refused", "the agent is disabled")
+        # 5b: a held agent takes no operator's task; the evaluator may still evaluate it
+        held = annotations.get(HELD_ANNOTATION)
+        if held and kind == "operator":
+            raise ApiError("refused", f"the agent is held by alias move {held}")
         # 6
         current = annotations.get(CURRENT_RELEASE_ANNOTATION) or None
         name = body.release or current
@@ -278,7 +287,9 @@ class SessionService:
 
     # -- 4.4 list, 4.5 cancel by release -----------------------------------------------------
 
-    async def _running(self, agent: str | None, release: str | None) -> list[dict]:
+    async def _running(
+        self, agent: str | None, release: str | None, purpose: str | None = None
+    ) -> list[dict]:
         prefix = f"session:{self.settings.tenant}:" + (f"{agent}:" if agent else "")
         found = []
         for ex in await self._remote(self.sessions.list_running(), "Temporal"):
@@ -289,6 +300,8 @@ class SessionService:
                 continue
             meta = await self._meta(ex)
             if release is not None and meta["release"] != release:
+                continue
+            if purpose is not None and meta["purpose"] != purpose:
                 continue
             found.append(
                 {
@@ -312,14 +325,19 @@ class SessionService:
         rows = await self._running(agent, release)
         return {"sessions": [{k: v for k, v in r.items() if k[0] != "_"} for r in rows]}
 
-    async def cancel_release(self, agent: str, release: str, entry: Entry) -> dict:
-        entry.agent, entry.release = agent, release
+    async def cancel_release(
+        self, agent: str, release: str | None, purpose: str | None, entry: Entry
+    ) -> dict:
+        """Without a release, every release of the agent; `purpose` narrows either way."""
+        entry.agent, entry.release, entry.purpose = agent, release, purpose
         for label, value in (("agent", agent), ("release", release)):
-            if not NAME_RE.fullmatch(value):
+            if value is not None and not NAME_RE.fullmatch(value):
                 raise ApiError("invalid-arguments", f"{label} must be a DNS label")
+        if purpose is not None and purpose not in PURPOSES:
+            raise ApiError("invalid-arguments", "purpose must be task or evaluation")
         cancelled: list[str] = []
         failed: list[dict] = []
-        for row in await self._running(agent, release):
+        for row in await self._running(agent, release, purpose):
             try:
                 if await self.sessions.cancel(row["_workflowId"]):
                     cancelled.append(row["sessionId"])
