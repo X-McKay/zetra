@@ -71,7 +71,7 @@ def run_pass(
                         )
                     )
 
-    objects, complete = observed_objects(kube, namespaces, inventory or set())
+    objects, complete = observed_objects(kube, namespaces, inventory)
     body = {
         "observedAt": clock().astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "lastGeneration": last,

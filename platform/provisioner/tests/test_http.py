@@ -5,6 +5,7 @@ import urllib.parse
 import httpx
 import pytest
 
+from registry_provisioner.main import main
 from registry_provisioner.registry import ASSERTION_TYPE, HttpRegistry, RegistryError, TokenSource
 from registry_provisioner.settings import Settings, SettingsError
 from tests.fakes import example
@@ -242,3 +243,41 @@ def test_real_client_needs_token_settings():
     )
     with pytest.raises(SettingsError):
         HttpRegistry.from_settings(s)
+
+
+BASE = {"PROVISIONER_CLUSTER": "k", "PROVISIONER_NAMESPACE": "ns"}
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://registry.almckay.io",
+        "https://localhost:8080",
+        "http://agent-registry.agent-platform.svc.cluster.local:8080",
+        "http://keycloak.auth.svc:8080/realms/agents/protocol/openid-connect/token",
+    ],
+)
+def test_urls_accepted(url):
+    for name in ("PROVISIONER_REGISTRY_URL", "PROVISIONER_TOKEN_URL"):
+        env = {**BASE, "PROVISIONER_REGISTRY_URL": "https://r.test", name: url}
+        Settings.from_env(env)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://agents.almckay.io",
+        "http://localhost:8080",
+        "http://evil.example/x.svc",
+        "http://svc",
+        "http://.svc",
+        "ftp://x.svc",
+    ],
+)
+def test_urls_refused_with_status_2(url, kube, registry, capsys):
+    for name in ("PROVISIONER_REGISTRY_URL", "PROVISIONER_TOKEN_URL"):
+        env = {**BASE, "PROVISIONER_REGISTRY_URL": "https://r.test", name: url}
+        with pytest.raises(SettingsError, match=name):
+            Settings.from_env(env)
+        assert main(["--once"], kube=kube, registry=registry, environ=env) == 2
+        assert name in capsys.readouterr().err

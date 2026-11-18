@@ -78,9 +78,7 @@ class FakeKube:
         if cur is None:
             return self.put(obj)
         merged = copy.deepcopy(cur)
-        _merge(merged, copy.deepcopy(obj))
-        if "spec" in obj:  # apply owns the whole spec it sends
-            merged["spec"] = copy.deepcopy(obj["spec"])
+        _merge(merged, copy.deepcopy(obj))  # maps by key; lists and scalars replaced
         return self.put(merged)
 
     # test helpers

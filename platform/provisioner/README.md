@@ -7,6 +7,10 @@ server-side apply under the rules of `platform/registry/contract/projection.md` 
 `AgentRelease` in the namespaces the registry lists, plus its own ConfigMap
 `registry-provisioner-state` (key `lastGeneration`).
 
+URLs must be `https`, or `http` only to a host ending in `.svc` or `.svc.cluster.local`. If
+an apply returns an object that still differs from the desired one (another field manager owns
+a field the registry's document lacks), the result is `error`, not a repair on every pass.
+
 It gets a Keycloak access token by presenting its projected service-account token as a client
 assertion (no client secret), re-reading the token file at every refresh.
 

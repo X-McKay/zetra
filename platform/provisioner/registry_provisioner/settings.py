@@ -4,10 +4,34 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 
 class SettingsError(Exception):
     pass
+
+
+def check_url(name: str, url: str | None) -> None:
+    """https anywhere; plain http only to a service name inside the cluster."""
+    if not url:
+        return
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname or ""
+    except ValueError:
+        raise SettingsError(f"{name} is not a URL") from None
+    if parts.scheme == "https" and host:
+        return
+    in_cluster = host.endswith((".svc", ".svc.cluster.local")) and host not in (
+        ".svc",
+        ".svc.cluster.local",
+    )
+    if parts.scheme == "http" and in_cluster:
+        return
+    raise SettingsError(
+        f"{name} must be https, or http to a host ending in .svc or .svc.cluster.local: "
+        "tokens do not travel in clear outside the cluster"
+    )
 
 
 @dataclass(frozen=True)
@@ -40,11 +64,7 @@ class Settings:
         if seconds <= 0:
             raise SettingsError("PROVISIONER_INTERVAL_SECONDS must be above zero")
         for name in ("REGISTRY_URL", "TOKEN_URL"):
-            url = get(name)
-            if url and not url.startswith("https://"):
-                raise SettingsError(
-                    f"PROVISIONER_{name} must be https: tokens never travel in clear"
-                )
+            check_url(f"PROVISIONER_{name}", get(name))
         return cls(
             cluster=cluster,
             registry_url=get("REGISTRY_URL").rstrip("/"),

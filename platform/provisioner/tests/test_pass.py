@@ -452,3 +452,31 @@ def test_logs_counts_and_each_changed_object(kube, registry, env, caplog):
 def test_missing_settings_exit_2(kube, registry, capsys):
     assert main(["--once"], kube=kube, registry=registry, environ={}) == 2
     assert "PROVISIONER_CLUSTER" in capsys.readouterr().err
+
+
+# round 2
+
+
+def test_apply_that_leaves_the_object_different_is_error(kube, registry, desired, env):
+    agent = desired["deployments"][0]["objects"][0]
+    live = live_of(agent)
+    live["spec"]["extraByFlux"] = 1
+    kube.put(live)
+    assert run(kube, registry, env) == 0
+    got = results(registry)
+    assert got["db-admin"]["result"] == "error"
+    assert got["db-admin"]["message"] == (
+        "after the write the object still differs: another writer owns fields "
+        "the registry's document does not have"
+    )
+    assert kube.writes.count(("Agent", NS, "db-admin")) == 1
+    assert got["db-admin-2026-11-18-aaaaaaaa"]["result"] == "applied"
+
+
+def test_unknown_inventory_is_reported_as_null(kube, registry, env):
+    registry.answer["fluxInventories"] = [{"namespace": "flux-system", "name": "gone"}]
+    kube.put({"apiVersion": AV, "kind": "Agent", "metadata": {"namespace": NS, "name": "x"}})
+    run(kube, registry, env)
+    assert [o["inFluxInventory"] for o in registry.reports[0]["objects"]] == [None]
+    assert [w for w in kube.writes if w[0] != "ConfigMap"] == []
+    assert {p["result"] for p in registry.reports[0]["projections"]} == {"error"}

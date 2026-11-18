@@ -112,6 +112,13 @@ def _generation(live: dict) -> int | None:
         return None
 
 
+def _equal(live: dict, desired: dict) -> bool:
+    """The spec, and the annotations under the registry prefix; nothing else counts."""
+    return (live.get("spec") or {}) == (desired.get("spec") or {}) and registry_annotations(
+        live
+    ) == registry_annotations(desired)
+
+
 def _decide(live: dict | None, desired: dict, generation: int) -> tuple[str, str]:
     """(result, message) for an object that is on the cluster or not, and not in Flux."""
     if live is None:
@@ -123,10 +130,7 @@ def _decide(live: dict | None, desired: dict, generation: int) -> tuple[str, str
         return "refused-older", f"the cluster holds generation {live_generation}"
     if live_generation < generation:
         return "applied", ""
-    same = (live.get("spec") or {}) == (desired.get("spec") or {}) and registry_annotations(
-        live
-    ) == registry_annotations(desired)
-    if same:
+    if _equal(live, desired):
         return "unchanged", ""
     return "applied", "repaired: the live object had been changed"
 
@@ -165,7 +169,13 @@ def project_object(
         live = kube.get(API_VERSION, kind, ns, name)
         outcome, message = _decide(live, doc, generation)
         if outcome == "applied":
-            kube.apply(doc, field_manager=field_manager)
+            written = kube.apply(doc, field_manager=field_manager)
+            if not _equal(written, doc):
+                return result(
+                    "error",
+                    "after the write the object still differs: another writer owns fields "
+                    "the registry's document does not have",
+                )
     except Exception as exc:
         return result("error", error_text(exc))
     return result(outcome, message)

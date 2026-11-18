@@ -13,7 +13,7 @@ WORKLOAD_KINDS = ("Deployment", "StatefulSet", "DaemonSet")
 
 
 def observed_objects(
-    kube: KubePort, namespaces: list[str], inventory: Inventory
+    kube: KubePort, namespaces: list[str], inventory: Inventory | None
 ) -> tuple[list[dict], list[dict]]:
     """Every Agent and AgentRelease of each namespace, and the scopes listed in full."""
     objects, complete = [], []
@@ -33,7 +33,10 @@ def observed_objects(
                         "subjectKind": kind.lower(),
                         "namespace": ns,
                         "name": name,
-                        "inFluxInventory": (ns, name, kind) in inventory,
+                        # None: the inventory could not be read, so the answer is not known
+                        "inFluxInventory": (
+                            None if inventory is None else (ns, name, kind) in inventory
+                        ),
                         "document": {
                             "metadata": {
                                 "name": name,
