@@ -170,6 +170,14 @@ class SessionWorkflow:
                 snapshot=snapshot,
                 summary_sha256=records.summary_hash(out.summary),
             )
+            if out.script_run is not None:
+                _record(
+                    "script_run",
+                    session_id=inp.session_id,
+                    generation=self.generation,
+                    boundary=boundary,
+                    **out.script_run,
+                )
             if out.done:
                 return "COMPLETED"
             boundary += 1

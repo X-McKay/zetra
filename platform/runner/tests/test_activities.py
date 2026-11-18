@@ -345,7 +345,9 @@ def test_t25_not_done_with_completion_code(tmp_path):
     unknown(tmp_path, FakeWS([boundary_doc(3)], rc=2))
 
 
-@pytest.mark.parametrize("rc", [1, 5, 137, -1, None])
+# 6 is the skill launcher's failure status (skills contract 9.1): not a known status, so the
+# outcome is unknown and the sandbox is replaced.
+@pytest.mark.parametrize("rc", [1, 5, 6, 137, -1, None])
 def test_t25_unknown_exit_code(tmp_path, rc):
     unknown(tmp_path, FakeWS([boundary_doc(3)], rc=rc))
 
