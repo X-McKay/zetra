@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from fastapi import FastAPI
 
 from agent_registry.api import cluster, errors, evaluations, handover, intake, read, write
+from agent_registry.api import alias_moves
 from agent_registry.api import schemas as s
 from agent_registry.api.auth import TokenVerifier
 from agent_registry.api.github import GithubTokenVerifier, GithubJwksVerifier
@@ -48,4 +49,5 @@ def create_app(
     app.include_router(handover.router)
     app.include_router(cluster.router)
     app.include_router(evaluations.router)
+    app.include_router(alias_moves.router)
     return app

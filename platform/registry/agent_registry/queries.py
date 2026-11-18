@@ -8,8 +8,8 @@ from typing import Any, Literal
 
 from agent_registry import derive
 from agent_registry.api import schemas as s
-from agent_registry.models import Alias, Deployment, Observation, Release, Revision
-from agent_registry.rules import Refusal, activation, revocation
+from agent_registry.models import Alias, Assessment, Deployment, Observation, Release, Revision
+from agent_registry.rules import Refusal, activation, assessment, revocation
 from agent_registry.rules.revisions import candidate
 from agent_registry.store import Reads
 
@@ -118,6 +118,33 @@ def events(
     # Events first: the generation read after them is never behind the newest one returned.
     found = store.events(deployment_id=deployment_id, after=after, limit=limit)
     return s.EventsOut(events=found, generation=store.generation())
+
+
+# ---- assessments -----------------------------------------------------------------------------
+
+
+def assessment_out(store: Reads, stored: Assessment) -> s.AssessmentOut:
+    """An assessment as the wire carries it, with `stale` decided now."""
+    return s.AssessmentOut(
+        id=stored.id,
+        cluster=stored.cluster,
+        alias=stored.alias,
+        from_=stored.pair,
+        candidate=stored.candidate,
+        dependants=stored.dependants,
+        blocked=stored.blocked,
+        digest=stored.digest,
+        created_by=stored.created_by,
+        created_at=stored.created_at,
+        stale=assessment.is_stale(store, stored),
+    )
+
+
+def assessment_of(store: Reads, assessment_id: str) -> s.AssessmentOut:
+    found = store.assessment(assessment_id)
+    if found is None:
+        raise Refusal("not-found", f"there is no assessment {assessment_id}")
+    return assessment_out(store, found)
 
 
 # ---- dependants ------------------------------------------------------------------------------

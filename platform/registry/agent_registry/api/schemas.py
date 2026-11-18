@@ -518,3 +518,50 @@ class ObservationsOut(Record):
     mode: Mode
     generation: int
     stored: int
+
+
+# ---- assessments and alias moves --------------------------------------------------------
+
+
+class Pair(Record):
+    """The engine behind an alias and the release that engine serves."""
+
+    engine: str
+    release: str
+
+
+class AssessmentIn(Record):
+    cluster: str
+    alias: str
+    candidate: Pair
+
+
+class Need(Record):
+    need: str  # toolCalling
+    met: bool | None  # the candidate manifest's offer; None when it does not say
+
+
+class AssessedDependant(Record):
+    deployment: str
+    agent: str
+    tenant: str | None
+    authority: Literal["pull-request", "registry"]
+    enabled: bool
+    release: str | None  # the release of the current revision
+    held: bool
+    evaluation: Literal["required", "none"]
+    needs: list[Need]
+
+
+class AssessmentOut(Record):
+    id: str
+    cluster: str
+    alias: str
+    from_: Pair = Field(alias="from")
+    candidate: Pair
+    dependants: list[AssessedDependant]
+    blocked: bool
+    digest: str
+    created_by: str
+    created_at: datetime
+    stale: bool  # computed at the time of the call

@@ -446,6 +446,174 @@
         "title": "ApproveOut",
         "type": "object"
       },
+      "AssessedDependant": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "authority": {
+            "enum": [
+              "pull-request",
+              "registry"
+            ],
+            "title": "Authority",
+            "type": "string"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "evaluation": {
+            "enum": [
+              "required",
+              "none"
+            ],
+            "title": "Evaluation",
+            "type": "string"
+          },
+          "held": {
+            "title": "Held",
+            "type": "boolean"
+          },
+          "needs": {
+            "items": {
+              "$ref": "#/components/schemas/Need"
+            },
+            "title": "Needs",
+            "type": "array"
+          },
+          "release": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release"
+          },
+          "tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "required": [
+          "deployment",
+          "agent",
+          "tenant",
+          "authority",
+          "enabled",
+          "release",
+          "held",
+          "evaluation",
+          "needs"
+        ],
+        "title": "AssessedDependant",
+        "type": "object"
+      },
+      "AssessmentIn": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cluster",
+          "alias",
+          "candidate"
+        ],
+        "title": "AssessmentIn",
+        "type": "object"
+      },
+      "AssessmentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "blocked": {
+            "title": "Blocked",
+            "type": "boolean"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "createdBy": {
+            "title": "Createdby",
+            "type": "string"
+          },
+          "dependants": {
+            "items": {
+              "$ref": "#/components/schemas/AssessedDependant"
+            },
+            "title": "Dependants",
+            "type": "array"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "from": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "cluster",
+          "alias",
+          "from",
+          "candidate",
+          "dependants",
+          "blocked",
+          "digest",
+          "createdBy",
+          "createdAt",
+          "stale"
+        ],
+        "title": "AssessmentOut",
+        "type": "object"
+      },
       "CandidateEvaluation": {
         "additionalProperties": false,
         "properties": {
@@ -1750,6 +1918,32 @@
         "title": "ModelStatus",
         "type": "object"
       },
+      "Need": {
+        "additionalProperties": false,
+        "properties": {
+          "met": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Met"
+          },
+          "need": {
+            "title": "Need",
+            "type": "string"
+          }
+        },
+        "required": [
+          "need",
+          "met"
+        ],
+        "title": "Need",
+        "type": "object"
+      },
       "ObjectRef": {
         "additionalProperties": false,
         "properties": {
@@ -2028,6 +2222,26 @@
           "name"
         ],
         "title": "ObservedSubject",
+        "type": "object"
+      },
+      "Pair": {
+        "additionalProperties": false,
+        "description": "The engine behind an alias and the release that engine serves.",
+        "properties": {
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "release"
+        ],
+        "title": "Pair",
         "type": "object"
       },
       "PinIn": {
@@ -3220,6 +3434,90 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v1/assessments": {
+      "post": {
+        "description": "Compute and store what moving the alias to the candidate would touch.",
+        "operationId": "create_assessment_v1_assessments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessmentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Assessment",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/assessments/{assessment_id}": {
+      "get": {
+        "operationId": "get_assessment_v1_assessments__assessment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Assessment",
+        "tags": [
+          "alias-moves"
         ]
       }
     },
