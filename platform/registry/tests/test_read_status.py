@@ -208,7 +208,7 @@ def test_a_new_release_nobody_has_approved_on_the_pull_request_path():
     found = agent_status(world)
 
     assert found["blockers"] == [f"release {name}: waiting for the verdict"]
-    assert found["nextActions"] == [f"just agent approve {AGENT} {name}"]
+    assert found["nextActions"] == [f"just agent approve {name}"]
     assert (found["newestRevision"], found["newestRelease"]) == (3, name)
     assert (found["currentRevision"], found["phase"]) == (2, "awaiting-runtime")
 

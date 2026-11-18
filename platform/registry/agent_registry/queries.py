@@ -263,7 +263,7 @@ def _agent_status(
         if newest.phase == "awaiting-runtime":
             blockers.append(f"release {name}: {newest.reason}")
             if newest.approval_id is None and deployment.authority == "pull-request":
-                actions.append(f"just agent approve {deployment.item} {name}")
+                actions.append(f"just agent approve {name}")
         elif newest.phase == "pending-approval":
             blockers.append(f"release {name} waits for approval: {newest.reason}")
             actions.append(f"just agent approve {deployment.item}")

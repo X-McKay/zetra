@@ -289,7 +289,7 @@ empty lists.
 | a `projection` observation of one of its objects is fresh with result `refused-flux-inventory` | `Flux still owns <kind>/<name>` | `merge the pull request that removes <agent> from the Flux kustomization` |
 | the same with `refused-older` | `the cluster holds a newer <kind>/<name> than the registry` | |
 | the same with `error` | `<kind>/<name> could not be written: <message>` | |
-| the newest revision is `awaiting-runtime` and has no approval | `release <name>: <reason>` | pull request path: `just agent approve <agent> <release>` |
+| the newest revision is `awaiting-runtime` and has no approval | `release <name>: <reason>` | pull request path: `just agent approve <release>`, the AgentRelease name |
 | the newest revision is `pending-approval` | `release <name> waits for approval: <reason>` | `just agent approve <agent>` |
 | the newest revision is `awaiting-runtime` and has an approval | `release <name>: <reason>` | |
 | the deployment is pinned and a later revision is activated | `pinned to revision <n>; revision <m> is activated and not in use` | |
