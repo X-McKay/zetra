@@ -408,8 +408,9 @@ not refused by an evaluation, or its release is revoked.
 One loop per cluster. Each pass: claim; if there is one, run it; post the result; otherwise
 sleep.
 
-- A case is one session started through the session interface with the release named and
-  `purpose: "evaluation"`. Its session id is a version 4 UUID made from the first 16 bytes of
+- A case is one session started through the session interface with the release named,
+  `purpose: "evaluation"` and the task `{"request": "<the case's task>"}`, the shape
+  `just agent run --task` sends. Its session id is a version 4 UUID made from the first 16 bytes of
   the sha256 of `<evaluation id>/<case id>`, with the version and variant bits set
   (`uuid.UUID(bytes=..., version=4)`). Starting it again returns the session that exists, so
   an evaluator that restarts runs nothing twice.
@@ -420,7 +421,9 @@ sleep.
 - A start the session interface refuses (any 4xx answer; the release is not Ready, for
   one), or a session interface that cannot be reached after 5 tries over about a minute,
   makes the verdict `error`. The summary carries the interface's code and message.
-- The lease asked for is `timeout_seconds` times the number of cases, plus 120, at most 3600.
+- The evaluator does not know the suite before it claims, so it asks for a lease of 3600. The
+  registry gives the smaller of what was asked and `timeout_seconds` times the number of
+  cases, plus 120; `claimExpiresAt` says which.
 - It never handles a grant handle and never starts a session for a release whose identity
   mode is not `agent`; the session interface refuses those, which is `error`.
 

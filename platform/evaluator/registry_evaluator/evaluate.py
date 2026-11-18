@@ -94,7 +94,7 @@ def run_case(ev: dict, case: dict, timeout: float, run: Runtime) -> dict:
     body = {
         "agent": agent,
         "release": ev["release"],
-        "task": case["task"],
+        "task": {"request": case["task"]},  # the shape `just agent run --task` sends
         "sessionId": sid,
         "purpose": "evaluation",
     }

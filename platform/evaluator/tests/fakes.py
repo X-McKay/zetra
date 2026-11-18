@@ -93,7 +93,7 @@ class FakeSessions:
         sid = body["sessionId"]
         created = sid not in self.sessions
         if created:
-            self.sessions[sid] = {"task": body["task"], "reads": 0}
+            self.sessions[sid] = {"task": body["task"]["request"], "reads": 0}
         return {"sessionId": sid, "state": "running", "created": created}
 
     def read(self, tenant, agent, session_id):
