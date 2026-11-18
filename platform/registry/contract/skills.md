@@ -398,8 +398,9 @@ def run(app: Path, workspace: Path, listed: Sequence[str],
 `limits` is for tests; left out, the bounds are the ones here with the script's own timeout.
 
 `run` never raises for anything the model sent. It raises `LauncherFailure` when it cannot
-say that the script's processes are gone (section 9.4); the step then exits with a status
-the runner does not know, and the runner replaces the sandbox.
+say that the script's processes are gone (section 9.4); the step then exits with status 6,
+which is not one of the statuses the runner knows (0, 2, 3, 4 and 5), and the runner
+replaces the sandbox.
 
 ### 9.2 What is run, and where
 
@@ -511,7 +512,7 @@ boundary and on no other:
   their count and hash, as it carries the hash of a boundary's summary.
 
 The runner accepts `script_run` as an optional key of the boundary output and validates it
-strictly: exactly these eight keys; `skill` a skill name or null; `script` a script path of
+strictly: exactly these nine keys; `skill` a skill name or null; `script` a script path of
 section 5 or null; `digest` a digest or null; `argument_count` 0 to 32; `arguments_sha256`
 64 hex characters; `exit_status` an integer from -64 to 255 or null; `limits_hit` a sorted
 list without repeats of the four limit names; `refused` a code of section 9.3 or null;
@@ -519,7 +520,7 @@ list without repeats of the four limit names; `refused` a code of section 9.3 or
 `skill_run`, or a `skill_run` boundary without it, is a protocol error.
 
 It then emits one audit record, `script_run`, with `session_id`, `generation`, `boundary`
-and the eight keys. The local harness reads the key the same way and prints the record.
+and the nine keys. The local harness reads the key the same way and prints the record.
 
 An older runner rejects the new key. The runner is therefore rolled out before any image
 that can run a script.
@@ -581,10 +582,15 @@ The image build, from the repository's one `Dockerfile`:
 
 - copies only the pinned skills, to `/app/skills/`, and the lock to `/app/skills.lock`;
 - fails when the lock is stale (section 4), by running the reference implementation in the
-  build stage;
+  build stage: `python -m agent_runtime.skills.image stage --agent agents/<name> --skills
+  skills --out <dir>` writes `<dir>/skills/<name>/` for each listed skill and
+  `<dir>/skills.lock`, or prints one line per problem and exits 1. For an agent with no
+  skills it writes an empty `<dir>/skills/` and no lock, so the runtime stage copies `<dir>`
+  into `/app` whether or not there are skills;
 - fails when an interpreter a pinned skill names is not found in the runtime image, by
-  running `python -m agent_runtime.skills.image verify` in the runtime stage, which also
-  recomputes each digest there;
+  running `python -m agent_runtime.skills.image verify --app /app` in the runtime stage,
+  which also recomputes each digest there and fails on a directory under `/app/skills/` the
+  agent does not list;
 - works unchanged for an agent with no skills and for a repository with no `skills/`
   directory.
 
@@ -594,8 +600,8 @@ The image build, from the repository's one `Dockerfile`:
 
 | Package | Files it owns | Sections |
 | --- | --- | --- |
-| 4.0 Contracts | this file, `skill-digest-cases.json`, `effects.json`, `agent_runtime/skills/format.py`, the interface in `agent_runtime/skills/launcher.py`, the effect lists and reserved names in `agent_runtime/tools.py` and `zetra_agents/layout.py`, `requires.effects` in `zetra_agents/declaration.py`, `deploy/platform/crds/` and the two copies of the Agent schema, `agent_platform/effects.py` | 2 to 5, 7.1, 7.2 (the function), 9.1, 11.1 (the resource definition) |
-| 4.1 Discovery | `agent_runtime/skills/tools.py`, `agent_runtime/skills/image.py`, `agent_runtime/step.py` (loading, the prompt, the built-in tools, the `script_run` key) | 8, 10 (the step's side), 12 (`image.py`) |
+| 4.0 Contracts | this file, `skill-digest-cases.json`, `effects.json`, `agent_runtime/skills/format.py`, `agent_runtime/skills/image.py`, the interface in `agent_runtime/skills/launcher.py`, the effect lists and reserved names in `agent_runtime/tools.py` and `zetra_agents/layout.py`, `requires.effects` in `zetra_agents/declaration.py`, `deploy/platform/crds/` and the two copies of the Agent schema, `agent_platform/effects.py` | 2 to 5, 7.1, 7.2 (the function), 9.1, 11.1 (the resource definition), 12 (`image.py`) |
+| 4.1 Discovery | `agent_runtime/skills/tools.py`, `agent_runtime/step.py` (loading, the prompt, the built-in tools, the `script_run` key) | 8, 10 (the step's side) |
 | 4.2 Effect | `platform/contracts/agent_platform/` (`bundle.py`, `podtemplate.py`), `platform/controller/` | 7.2 (the controller), 7.3 |
 | 4.3 Launcher | the body of `agent_runtime/skills/launcher.py`, `agent_runtime/skills/supervisor.py` and their tests | 9 |
 | 4.4, 4.5 Tooling | `zetra_agents/skills.py`, the hooks in `layout.py`, `render.py`, `release.py`, `local.py`, `testing.py` and `cli.py`, `templates/Dockerfile.tmpl`, `templates/dockerignore.tmpl`, `pyproject.toml` and its lock | 4, 6, 8.1 (the local harness), 10 (the local harness), 11.1, 12 |

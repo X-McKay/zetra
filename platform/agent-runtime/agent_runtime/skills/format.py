@@ -84,6 +84,21 @@ def is_name(name: Any) -> bool:
     return isinstance(name, str) and len(name) <= MAX_NAME and NAME.match(name) is not None
 
 
+def listed(manifest: Any) -> list[str]:
+    """The skill names an agent's manifest lists under `skills` (section 2), in its order.
+    No key, or an empty list, is no skills."""
+    names = manifest.get("skills") if isinstance(manifest, dict) else None
+    if names is None:
+        return []
+    if not isinstance(names, list) or not all(is_name(name) for name in names):
+        raise SkillError("agent.yaml skills must be a list of skill names")
+    if len(set(names)) != len(names):
+        raise SkillError("agent.yaml skills lists a skill more than once")
+    if len(names) > MAX_SKILLS:
+        raise SkillError(f"agent.yaml skills lists more than {MAX_SKILLS} skills")
+    return list(names)
+
+
 def files(directory: pathlib.Path) -> list[tuple[str, pathlib.Path]]:
     """Every file of a skill directory as (relative POSIX path, path), in path order.
 

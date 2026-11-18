@@ -11,6 +11,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+# Where a script's interpreter is looked for, and the PATH the script is given.
+INTERPRETER_PATH = "/usr/local/bin:/usr/bin:/bin"
+
 MAX_ARGUMENTS = 32
 MAX_ARGUMENT_BYTES = 4096
 MAX_ARGUMENTS_BYTES = 16384  # all arguments together
