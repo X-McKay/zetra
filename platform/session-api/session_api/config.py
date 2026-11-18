@@ -11,6 +11,7 @@ from runner.types import TENANT_RE, WORKER_POOLS
 ANNOTATION_PREFIX = "registry.agentplatform.io/"
 DEPLOYMENT_ANNOTATION = ANNOTATION_PREFIX + "deployment"
 CURRENT_RELEASE_ANNOTATION = ANNOTATION_PREFIX + "current-release"
+HELD_ANNOTATION = ANNOTATION_PREFIX + "held"
 
 OPERATOR = "registry-operator"
 EVALUATOR = "registry-evaluator"

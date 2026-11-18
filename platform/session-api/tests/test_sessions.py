@@ -276,7 +276,42 @@ def test_cancel_by_release_cancels_a_session_with_no_memo_and_leaves_other_relea
     assert world.sessions.cancelled == [f"session:{TENANT}:db-admin:{s}" for s in (SID, SID2)]
 
 
+def test_cancel_by_purpose_and_without_a_release(world):
+    world.sessions.add(session_input("db-admin-r1", SID), {"release": "db-admin-r1"})
+    world.sessions.add(
+        session_input("db-admin-r1", SID2),
+        {"release": "db-admin-r1", "purpose": "evaluation"},
+    )
+    world.sessions.add(session_input("db-admin-r0", SID3), {"release": "db-admin-r0"})
+
+    def cancel(who, body):
+        return world.call(
+            "POST", "/sessions/cancel", who, {"agent": "db-admin", "reason": "x"} | body
+        )
+
+    one = cancel("provisioner", {"release": "db-admin-r1", "purpose": "task"})
+    assert one.json()["cancelled"] == [SID]
+    every = cancel("provisioner", {"purpose": "task"})  # across releases; SID is cancelled again
+    assert sorted(every.json()["cancelled"]) == sorted([SID, SID3])
+    assert f"session:{TENANT}:db-admin:{SID2}" not in world.sessions.cancelled  # not a task
+    everything = cancel("operator", {})
+    assert sorted(everything.json()["cancelled"]) == sorted([SID, SID2, SID3])
+    bad = cancel("provisioner", {"purpose": "other"})
+    assert (bad.status_code, code(bad)) == (400, "invalid-arguments")
+
+
 # 8
+
+
+def test_a_held_agent_refuses_an_operators_start_and_not_the_evaluators(world):
+    world.objects.agents["db-admin"] = fakes.agent(held="mv-1")
+    refused = world.start()
+    assert (refused.status_code, code(refused)) == (409, "refused")
+    assert refused.json()["error"]["message"] == "the agent is held by alias move mv-1"
+    assert world.sessions.submitted == []
+    allowed = world.start("evaluator", purpose="evaluation")
+    assert allowed.status_code == 202
+    assert len(world.sessions.submitted) == 1
 
 
 def test_the_evaluator_cannot_read_or_cancel_a_task_session(world):

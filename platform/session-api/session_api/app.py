@@ -46,7 +46,8 @@ class CancelBody(BaseModel):
 
 class CancelReleaseBody(CancelBody):
     agent: str
-    release: str
+    release: str | None = None
+    purpose: str | None = None
 
 
 def _utcnow() -> datetime:
@@ -130,7 +131,7 @@ def create_app(
         async with audited(CANCEL_RELEASE) as entry:
             await caller(request, tenant, ("operator", "provisioner"), entry)
             body = await _body(request, CancelReleaseBody)
-            return await service.cancel_release(body.agent, body.release, entry)
+            return await service.cancel_release(body.agent, body.release, body.purpose, entry)
 
     @app.get("/v1/tenants/{tenant}/sessions")
     async def list_sessions(
