@@ -10,17 +10,24 @@ from datetime import UTC, datetime
 from typing import Any
 
 from agent_registry.models import (
+    IN_FORCE,
+    OPEN_MOVE,
     Alias,
+    AliasMove,
     Approval,
     ApprovalState,
+    Assessment,
     Cluster,
     Deployment,
     Evaluation,
     EvaluationState,
     Event,
+    Hold,
+    HoldState,
     Item,
     Meta,
     Mode,
+    MoveState,
     Observation,
     Phase,
     Provision,
@@ -57,6 +64,9 @@ class _State:
     approvals: dict[str, Approval] = field(default_factory=dict)
     evaluations: dict[str, Evaluation] = field(default_factory=dict)
     revocations: dict[str, Revocation] = field(default_factory=dict)
+    assessments: dict[str, Assessment] = field(default_factory=dict)
+    moves: dict[str, AliasMove] = field(default_factory=dict)
+    holds: dict[tuple[str, str], Hold] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
     observations: dict[tuple[str, str, str, str], Observation] = field(default_factory=dict)
 
@@ -75,6 +85,9 @@ class _State:
             "approvals",
             "evaluations",
             "revocations",
+            "assessments",
+            "moves",
+            "holds",
             "observations",
         ):
             setattr(out, name, dict(getattr(self, name)))
@@ -217,6 +230,32 @@ class _Reads:
     def revocation(self, revocation_id: str) -> Revocation | None:
         return self._s.revocations.get(revocation_id)
 
+    def assessment(self, assessment_id: str) -> Assessment | None:
+        return self._s.assessments.get(assessment_id)
+
+    def alias_moves(
+        self, *, cluster: str | None = None, alias: str | None = None, open: bool | None = None
+    ) -> list[AliasMove]:
+        rows = [
+            m
+            for m in self._s.moves.values()
+            if cluster in (None, m.cluster)
+            and alias in (None, m.alias)
+            and (open is None or (m.state in OPEN_MOVE) == open)
+        ]
+        return sorted(rows, key=lambda m: (m.started_at, m.id), reverse=True)
+
+    def alias_move(self, move_id: str) -> AliasMove | None:
+        return self._s.moves.get(move_id)
+
+    def holds(self, *, move_id: str | None = None, deployment_id: str | None = None) -> list[Hold]:
+        rows = [
+            h
+            for h in self._s.holds.values()
+            if move_id in (None, h.move_id) and deployment_id in (None, h.deployment_id)
+        ]
+        return sorted(rows, key=lambda h: (h.move_id, h.deployment_id))
+
     def events(
         self, *, deployment_id: str | None = None, after: int = 0, limit: int = 200
     ) -> list[Event]:
@@ -256,6 +295,16 @@ _EVALUATION_PROGRESS = {
     "result",
     "finished_at",
 }
+_MOVE_PROGRESS = {
+    "state",
+    "held_at",
+    "moved_at",
+    "evaluating_at",
+    "deadline",
+    "finished_at",
+    "reason",
+}
+_HOLD_PROGRESS = {"state", "reason", "running", "acknowledged_at", "ended_at"}
 
 
 class _Tx(_Reads):
@@ -464,6 +513,99 @@ class _Tx(_Reads):
             exclude={"indexed_at"}
         ):
             raise Conflict(f"revocation {revocation.id} exists with other content")
+
+    def add_assessment(self, assessment: Assessment) -> None:
+        have = self._s.assessments.get(assessment.id)
+        if have is None:
+            self._s.assessments[assessment.id] = assessment
+            self.changed = True
+        elif have != assessment:
+            raise Conflict(f"assessment {assessment.id} exists with other content")
+
+    def add_alias_move(self, move: AliasMove) -> None:
+        if move.assessment_id not in self._s.assessments:
+            raise Missing(f"assessment {move.assessment_id} does not exist")
+        have = self._s.moves.get(move.id)
+        if have is not None:
+            if have.model_dump(exclude=_MOVE_PROGRESS) != move.model_dump(exclude=_MOVE_PROGRESS):
+                raise Conflict(f"alias move {move.id} exists with other content")
+            return
+        if move.state in OPEN_MOVE and any(
+            m.state in OPEN_MOVE and (m.cluster, m.alias) == (move.cluster, move.alias)
+            for m in self._s.moves.values()
+        ):
+            raise Conflict(f"alias {move.alias} already has an open move")
+        self._s.moves[move.id] = move
+        self.changed = True
+
+    def set_alias_move_progress(
+        self,
+        move_id: str,
+        *,
+        state: MoveState | None = None,
+        held_at: datetime | None = None,
+        moved_at: datetime | None = None,
+        evaluating_at: datetime | None = None,
+        deadline: datetime | None = None,
+        finished_at: datetime | None = None,
+        reason: str | None = None,
+    ) -> AliasMove:
+        have = self._s.moves.get(move_id)
+        if have is None:
+            raise Missing(f"alias move {move_id} does not exist")
+        given = {
+            "state": state,
+            "held_at": held_at,
+            "moved_at": moved_at,
+            "evaluating_at": evaluating_at,
+            "deadline": deadline,
+            "finished_at": finished_at,
+            "reason": reason,
+        }
+        updated = have.model_copy(update={k: v for k, v in given.items() if v is not None})
+        self._put(self._s.moves, move_id, updated)
+        return updated
+
+    def add_hold(self, hold: Hold) -> None:
+        if hold.move_id not in self._s.moves:
+            raise Missing(f"alias move {hold.move_id} does not exist")
+        if hold.deployment_id not in self._s.deployments:
+            raise Missing(f"deployment {hold.deployment_id} does not exist")
+        key = (hold.move_id, hold.deployment_id)
+        if key in self._s.holds:
+            return
+        if hold.state in IN_FORCE and any(
+            h.state in IN_FORCE and h.deployment_id == hold.deployment_id
+            for h in self._s.holds.values()
+        ):
+            raise Conflict(f"{hold.deployment_id} already has a hold in force")
+        self._s.holds[key] = hold
+        self.changed = True
+
+    def set_hold_progress(
+        self,
+        move_id: str,
+        deployment_id: str,
+        *,
+        state: HoldState | None = None,
+        reason: str | None = None,
+        running: int | None = None,
+        acknowledged_at: datetime | None = None,
+        ended_at: datetime | None = None,
+    ) -> Hold:
+        have = self._s.holds.get((move_id, deployment_id))
+        if have is None:
+            raise Missing(f"hold {move_id}/{deployment_id} does not exist")
+        given = {
+            "state": state,
+            "reason": reason,
+            "running": running,
+            "acknowledged_at": acknowledged_at,
+            "ended_at": ended_at,
+        }
+        updated = have.model_copy(update={k: v for k, v in given.items() if v is not None})
+        self._put(self._s.holds, (move_id, deployment_id), updated)
+        return updated
 
     def event(
         self, type: str, *, deployment_id: str | None = None, detail: dict[str, Any] | None = None

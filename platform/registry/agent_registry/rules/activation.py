@@ -99,7 +99,11 @@ def activate(
         tx.put_deployment(
             deployment.model_copy(update={"current_revision": number, "generation": seq})
         )
-    return seq
+    # A10. Imported here: the alias move rules read what activation reads.
+    from agent_registry.rules import alias_move
+
+    resumed = alias_move.a10_resume(tx, deployment_id, now=now)
+    return resumed or seq
 
 
 def refuse(tx: Tx, deployment_id: str, number: int, reason: str, *, now: datetime) -> int:
@@ -112,6 +116,10 @@ def refuse(tx: Tx, deployment_id: str, number: int, reason: str, *, now: datetim
     ).seq
     tx.set_revision_progress(deployment_id, number, phase="refused", reason=reason)
     revisions.cancel_open_evaluations(tx, deployment_id, number, now=now)
+    # A11. Imported here: the alias move rules read what activation reads.
+    from agent_registry.rules import alias_move
+
+    alias_move.a11_suspend(tx, deployment_id, tx.revision(deployment_id, number), reason, now=now)
     return seq
 
 

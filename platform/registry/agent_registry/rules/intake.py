@@ -9,7 +9,7 @@ from datetime import datetime
 
 from agent_registry import importer, modes
 from agent_registry.models import Observation
-from agent_registry.rules import lifecycle
+from agent_registry.rules import alias_move, lifecycle
 from agent_registry.store import Store
 
 
@@ -26,6 +26,7 @@ def accept(
     objects: int,
     observed_at: datetime,
     last_generation: int,
+    holds: list[tuple[str, str, int]],
     now: datetime,
     max_age_seconds: int,
     actor: str,
@@ -57,5 +58,7 @@ def accept(
 
     if store.meta().mode == "normal":
         importer.index_observations(store, cluster, now=now)
+        alias_move.acknowledge(store, cluster, holds, now=now, actor=actor)
         lifecycle.advance_cluster(store, cluster, now=now, max_age_seconds=max_age_seconds)
+        alias_move.advance(store, cluster, now=now)
     return store.meta().mode, store.generation(), len(stored)

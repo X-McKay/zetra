@@ -166,6 +166,12 @@ class RevokedStatus(Record):
     at: datetime
 
 
+class HeldStatus(Record):
+    move: str  # the alias move
+    state: Literal["holding", "held", "suspended"]
+    reason: str
+
+
 class AgentStatus(Record):
     deployment: str
     agent: str
@@ -189,6 +195,7 @@ class AgentStatus(Record):
     acknowledged: bool | None = None  # the cluster has the Agent at the registry's generation
     pinned: int | None = None
     revoked: list[RevokedStatus] = Field(default_factory=list)  # newest first
+    held: HeldStatus | None = None  # set while a hold is in force
 
 
 class ToolServerStatus(Record):
@@ -220,6 +227,44 @@ class ModelStatus(Record):
     release: str | None  # the release the document names; None when the feed names none
 
 
+class Pair(Record):
+    """The engine behind an alias and the release that engine serves."""
+
+    engine: str
+    release: str
+
+
+class HoldOut(Record):
+    deployment: str
+    agent: str
+    state: Literal["holding", "held", "suspended", "resumed", "released"]
+    reason: str
+    running: int | None
+    acknowledged_at: datetime | None
+    ended_at: datetime | None
+
+
+class AliasMoveOut(Record):
+    id: str
+    assessment_id: str
+    cluster: str
+    alias: str
+    candidate: Pair
+    state: Literal["holding", "held", "moving", "evaluating", "completed", "cancelled"]
+    sessions: Literal["finish", "cancel"]
+    evaluation_seconds: int
+    started_by: str
+    started_at: datetime
+    held_at: datetime | None
+    moved_at: datetime | None
+    evaluating_at: datetime | None
+    deadline: datetime | None
+    finished_at: datetime | None
+    reason: str
+    holds: list[HoldOut]
+    next: str  # one sentence: what the move waits for
+
+
 class StatusOut(Record):
     cluster: str
     mode: Mode
@@ -228,6 +273,7 @@ class StatusOut(Record):
     agents: list[AgentStatus]
     tool_servers: list[ToolServerStatus]
     models: list[ModelStatus]
+    alias_moves: list[AliasMoveOut] = Field(default_factory=list)  # the open moves
 
 
 class EventsOut(Record):
@@ -457,6 +503,19 @@ class DesiredRevocation(Record):
     sessions: Literal["cancel"]
 
 
+class DesiredHold(Record):
+    """An agent to hold for an alias move: the provisioner writes its Agent with the `held`
+    annotation, stops its sessions when `sessions` is `cancel`, and reports how many task
+    sessions still run (`contract/dependencies.md` section 7)."""
+
+    move: str
+    deployment: str
+    tenant: str
+    namespace: str
+    agent: str
+    sessions: Literal["finish", "cancel"]
+
+
 class DesiredOut(Record):
     cluster: str
     mode: Mode
@@ -467,6 +526,7 @@ class DesiredOut(Record):
     deployments: list[DesiredDeployment]  # registry-owned agents only; empty in recovery
     observe: list[ObserveSubject]
     revocations: list[DesiredRevocation] = Field(default_factory=list)  # empty in recovery
+    holds: list[DesiredHold] = Field(default_factory=list)  # empty in recovery
 
 
 class ObservedObject(Record):
@@ -504,6 +564,14 @@ class SnapshotScope(Record):
     namespace: str
 
 
+class HoldReport(Record):
+    """The task sessions the provisioner counted for one hold it was asked for."""
+
+    move: str
+    deployment: str
+    running: int = Field(ge=0)
+
+
 class ObservationsIn(Record):
     observed_at: datetime
     last_generation: int  # the highest generation this provisioner ever received
@@ -512,9 +580,80 @@ class ObservationsIn(Record):
     objects: list[ObservedObject] = Field(default_factory=list)
     subjects: list[ObservedSubject] = Field(default_factory=list)
     projections: list[ProjectionResult] = Field(default_factory=list)
+    # Sent only when the desired document had holds. An entry for an unknown or finished hold
+    # is ignored.
+    holds: list[HoldReport] | None = None
 
 
 class ObservationsOut(Record):
     mode: Mode
     generation: int
     stored: int
+
+
+# ---- assessments and alias moves --------------------------------------------------------
+
+
+class AssessmentIn(Record):
+    cluster: str
+    alias: str
+    candidate: Pair
+
+
+class Need(Record):
+    need: str  # toolCalling
+    met: bool | None  # the candidate manifest's offer; None when it does not say
+
+
+class AssessedDependant(Record):
+    deployment: str
+    agent: str
+    tenant: str | None
+    authority: Literal["pull-request", "registry"]
+    enabled: bool
+    release: str | None  # the release of the current revision
+    held: bool
+    evaluation: Literal["required", "none"]
+    needs: list[Need]
+
+
+class AssessmentOut(Record):
+    id: str
+    cluster: str
+    alias: str
+    from_: Pair = Field(alias="from")
+    candidate: Pair
+    dependants: list[AssessedDependant]
+    blocked: bool
+    digest: str
+    created_by: str
+    created_at: datetime
+    stale: bool  # computed at the time of the call
+
+
+class AliasMoveIn(Record):
+    assessment: str  # the assessment's id
+    sessions: Literal["finish", "cancel"] = "finish"
+    # None: REGISTRY_ALIAS_MOVE_EVALUATION_SECONDS
+    evaluation_seconds: int | None = Field(default=None, ge=60, le=86400)
+
+
+class AliasMoveCancelIn(Record):
+    reason: str = ""
+
+
+class AliasMovesOut(Record):
+    moves: list[AliasMoveOut]  # newest first
+
+
+class AliasCheckIn(Record):
+    cluster: str
+    alias: str
+    candidate: Pair
+
+
+class AliasCheckOut(Record):
+    allowed: bool
+    move: str | None
+    assessment: str | None
+    reason: str

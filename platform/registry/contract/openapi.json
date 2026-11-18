@@ -84,6 +84,16 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "held": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "lastRefused": {
             "anyOf": [
               {
@@ -212,6 +222,291 @@
           "observation"
         ],
         "title": "AgentStatus",
+        "type": "object"
+      },
+      "AliasCheckIn": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cluster",
+          "alias",
+          "candidate"
+        ],
+        "title": "AliasCheckIn",
+        "type": "object"
+      },
+      "AliasCheckOut": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment"
+          },
+          "move": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "allowed",
+          "move",
+          "assessment",
+          "reason"
+        ],
+        "title": "AliasCheckOut",
+        "type": "object"
+      },
+      "AliasMoveCancelIn": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "AliasMoveCancelIn",
+        "type": "object"
+      },
+      "AliasMoveIn": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment": {
+            "title": "Assessment",
+            "type": "string"
+          },
+          "evaluationSeconds": {
+            "anyOf": [
+              {
+                "maximum": 86400.0,
+                "minimum": 60.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluationseconds"
+          },
+          "sessions": {
+            "default": "finish",
+            "enum": [
+              "finish",
+              "cancel"
+            ],
+            "title": "Sessions",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessment"
+        ],
+        "title": "AliasMoveIn",
+        "type": "object"
+      },
+      "AliasMoveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "assessmentId": {
+            "title": "Assessmentid",
+            "type": "string"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "evaluatingAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluatingat"
+          },
+          "evaluationSeconds": {
+            "title": "Evaluationseconds",
+            "type": "integer"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishedat"
+          },
+          "heldAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heldat"
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/HoldOut"
+            },
+            "title": "Holds",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "movedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movedat"
+          },
+          "next": {
+            "title": "Next",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "sessions": {
+            "enum": [
+              "finish",
+              "cancel"
+            ],
+            "title": "Sessions",
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "title": "Startedat",
+            "type": "string"
+          },
+          "startedBy": {
+            "title": "Startedby",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "holding",
+              "held",
+              "moving",
+              "evaluating",
+              "completed",
+              "cancelled"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "assessmentId",
+          "cluster",
+          "alias",
+          "candidate",
+          "state",
+          "sessions",
+          "evaluationSeconds",
+          "startedBy",
+          "startedAt",
+          "heldAt",
+          "movedAt",
+          "evaluatingAt",
+          "deadline",
+          "finishedAt",
+          "reason",
+          "holds",
+          "next"
+        ],
+        "title": "AliasMoveOut",
+        "type": "object"
+      },
+      "AliasMovesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "moves": {
+            "items": {
+              "$ref": "#/components/schemas/AliasMoveOut"
+            },
+            "title": "Moves",
+            "type": "array"
+          }
+        },
+        "required": [
+          "moves"
+        ],
+        "title": "AliasMovesOut",
         "type": "object"
       },
       "Approval": {
@@ -444,6 +739,174 @@
           "revision"
         ],
         "title": "ApproveOut",
+        "type": "object"
+      },
+      "AssessedDependant": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "authority": {
+            "enum": [
+              "pull-request",
+              "registry"
+            ],
+            "title": "Authority",
+            "type": "string"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "evaluation": {
+            "enum": [
+              "required",
+              "none"
+            ],
+            "title": "Evaluation",
+            "type": "string"
+          },
+          "held": {
+            "title": "Held",
+            "type": "boolean"
+          },
+          "needs": {
+            "items": {
+              "$ref": "#/components/schemas/Need"
+            },
+            "title": "Needs",
+            "type": "array"
+          },
+          "release": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release"
+          },
+          "tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "required": [
+          "deployment",
+          "agent",
+          "tenant",
+          "authority",
+          "enabled",
+          "release",
+          "held",
+          "evaluation",
+          "needs"
+        ],
+        "title": "AssessedDependant",
+        "type": "object"
+      },
+      "AssessmentIn": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cluster",
+          "alias",
+          "candidate"
+        ],
+        "title": "AssessmentIn",
+        "type": "object"
+      },
+      "AssessmentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "blocked": {
+            "title": "Blocked",
+            "type": "boolean"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "createdBy": {
+            "title": "Createdby",
+            "type": "string"
+          },
+          "dependants": {
+            "items": {
+              "$ref": "#/components/schemas/AssessedDependant"
+            },
+            "title": "Dependants",
+            "type": "array"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "from": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "cluster",
+          "alias",
+          "from",
+          "candidate",
+          "dependants",
+          "blocked",
+          "digest",
+          "createdBy",
+          "createdAt",
+          "stale"
+        ],
+        "title": "AssessmentOut",
         "type": "object"
       },
       "CandidateEvaluation": {
@@ -1036,6 +1499,50 @@
         "title": "DesiredDeployment",
         "type": "object"
       },
+      "DesiredHold": {
+        "additionalProperties": false,
+        "description": "An agent to hold for an alias move: the provisioner writes its Agent with the `held`\nannotation, stops its sessions when `sessions` is `cancel`, and reports how many task\nsessions still run (`contract/dependencies.md` section 7).",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "move": {
+            "title": "Move",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "sessions": {
+            "enum": [
+              "finish",
+              "cancel"
+            ],
+            "title": "Sessions",
+            "type": "string"
+          },
+          "tenant": {
+            "title": "Tenant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "move",
+          "deployment",
+          "tenant",
+          "namespace",
+          "agent",
+          "sessions"
+        ],
+        "title": "DesiredHold",
+        "type": "object"
+      },
       "DesiredOut": {
         "additionalProperties": false,
         "properties": {
@@ -1067,6 +1574,13 @@
           "generation": {
             "title": "Generation",
             "type": "integer"
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/DesiredHold"
+            },
+            "title": "Holds",
+            "type": "array"
           },
           "mode": {
             "enum": [
@@ -1497,6 +2011,135 @@
         "title": "Health",
         "type": "object"
       },
+      "HeldStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "move": {
+            "title": "Move",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "holding",
+              "held",
+              "suspended"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "move",
+          "state",
+          "reason"
+        ],
+        "title": "HeldStatus",
+        "type": "object"
+      },
+      "HoldOut": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledgedat"
+          },
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endedat"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "running": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Running"
+          },
+          "state": {
+            "enum": [
+              "holding",
+              "held",
+              "suspended",
+              "resumed",
+              "released"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment",
+          "agent",
+          "state",
+          "reason",
+          "running",
+          "acknowledgedAt",
+          "endedAt"
+        ],
+        "title": "HoldOut",
+        "type": "object"
+      },
+      "HoldReport": {
+        "additionalProperties": false,
+        "description": "The task sessions the provisioner counted for one hold it was asked for.",
+        "properties": {
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "move": {
+            "title": "Move",
+            "type": "string"
+          },
+          "running": {
+            "minimum": 0.0,
+            "title": "Running",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "move",
+          "deployment",
+          "running"
+        ],
+        "title": "HoldReport",
+        "type": "object"
+      },
       "Impact": {
         "additionalProperties": false,
         "description": "The answer of section 3.3. `reevaluated` holds agent names.",
@@ -1859,6 +2502,32 @@
         "title": "ModelStatus",
         "type": "object"
       },
+      "Need": {
+        "additionalProperties": false,
+        "properties": {
+          "met": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Met"
+          },
+          "need": {
+            "title": "Need",
+            "type": "string"
+          }
+        },
+        "required": [
+          "need",
+          "met"
+        ],
+        "title": "Need",
+        "type": "object"
+      },
       "ObjectRef": {
         "additionalProperties": false,
         "properties": {
@@ -1897,6 +2566,20 @@
             },
             "title": "Complete",
             "type": "array"
+          },
+          "holds": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HoldReport"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holds"
           },
           "lastGeneration": {
             "title": "Lastgeneration",
@@ -2137,6 +2820,26 @@
           "name"
         ],
         "title": "ObservedSubject",
+        "type": "object"
+      },
+      "Pair": {
+        "additionalProperties": false,
+        "description": "The engine behind an alias and the release that engine serves.",
+        "properties": {
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "release"
+        ],
+        "title": "Pair",
         "type": "object"
       },
       "PinIn": {
@@ -3112,6 +3815,13 @@
             "title": "Agents",
             "type": "array"
           },
+          "aliasMoves": {
+            "items": {
+              "$ref": "#/components/schemas/AliasMoveOut"
+            },
+            "title": "Aliasmoves",
+            "type": "array"
+          },
           "cluster": {
             "title": "Cluster",
             "type": "string"
@@ -3354,6 +4064,392 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v1/alias-moves": {
+      "get": {
+        "description": "Moves, newest first.",
+        "operationId": "list_moves_v1_alias_moves_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cluster",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cluster"
+            }
+          },
+          {
+            "in": "query",
+            "name": "alias",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Alias"
+            }
+          },
+          {
+            "in": "query",
+            "name": "open",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Open"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMovesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Moves",
+        "tags": [
+          "alias-moves"
+        ]
+      },
+      "post": {
+        "description": "A1 to A3: start the move an assessment describes.",
+        "operationId": "start_move_v1_alias_moves_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasMoveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMoveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Move",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/alias-moves/{move_id}": {
+      "get": {
+        "operationId": "get_move_v1_alias_moves__move_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "move_id",
+            "required": true,
+            "schema": {
+              "title": "Move Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMoveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Move",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/alias-moves/{move_id}/cancel": {
+      "post": {
+        "description": "A5: cancel a move that is holding or held.",
+        "operationId": "cancel_move_v1_alias_moves__move_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "move_id",
+            "required": true,
+            "schema": {
+              "title": "Move Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasMoveCancelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMoveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Move",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/alias-moves/{move_id}/evaluate": {
+      "post": {
+        "description": "A9: the engine is serving the candidate; evaluate the held agents on it.",
+        "operationId": "evaluate_move_v1_alias_moves__move_id__evaluate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "move_id",
+            "required": true,
+            "schema": {
+              "title": "Move Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMoveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Move",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/assessments": {
+      "post": {
+        "description": "Compute and store what moving the alias to the candidate would touch.",
+        "operationId": "create_assessment_v1_assessments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessmentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Assessment",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/assessments/{assessment_id}": {
+      "get": {
+        "operationId": "get_assessment_v1_assessments__assessment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Assessment",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/checks/alias": {
+      "post": {
+        "description": "Section 8: may a change that moves the alias to the candidate merge? Writes nothing.",
+        "operationId": "check_alias_v1_checks_alias_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasCheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Alias",
+        "tags": [
+          "alias-moves"
         ]
       }
     },

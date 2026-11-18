@@ -8,8 +8,18 @@ from typing import Any, Literal
 
 from agent_registry import derive
 from agent_registry.api import schemas as s
-from agent_registry.models import Alias, Deployment, Observation, Release, Revision
-from agent_registry.rules import Refusal, activation, revocation
+from agent_registry.models import (
+    AliasMove,
+    Alias,
+    Assessment,
+    Deployment,
+    Hold,
+    Observation,
+    Release,
+    Revision,
+)
+from agent_registry.rules import Refusal, activation, assessment, revocation
+from agent_registry.rules import alias_move as alias_move_rules
 from agent_registry.rules.revisions import candidate
 from agent_registry.store import Reads
 
@@ -118,6 +128,94 @@ def events(
     # Events first: the generation read after them is never behind the newest one returned.
     found = store.events(deployment_id=deployment_id, after=after, limit=limit)
     return s.EventsOut(events=found, generation=store.generation())
+
+
+# ---- assessments -----------------------------------------------------------------------------
+
+
+def assessment_out(store: Reads, stored: Assessment) -> s.AssessmentOut:
+    """An assessment as the wire carries it, with `stale` decided now."""
+    return s.AssessmentOut(
+        id=stored.id,
+        cluster=stored.cluster,
+        alias=stored.alias,
+        from_=stored.pair,
+        candidate=stored.candidate,
+        dependants=stored.dependants,
+        blocked=stored.blocked,
+        digest=stored.digest,
+        created_by=stored.created_by,
+        created_at=stored.created_at,
+        stale=assessment.is_stale(store, stored),
+    )
+
+
+def assessment_of(store: Reads, assessment_id: str) -> s.AssessmentOut:
+    found = store.assessment(assessment_id)
+    if found is None:
+        raise Refusal("not-found", f"there is no assessment {assessment_id}")
+    return assessment_out(store, found)
+
+
+# ---- alias moves -----------------------------------------------------------------------------
+
+
+def _agent_name(store: Reads, deployment: str) -> str:
+    found = store.deployment(deployment)
+    return found.item if found else deployment
+
+
+def _next(store: Reads, move: AliasMove, holds: list[Hold]) -> str:
+    """What the move waits for, in a sentence (`contract/dependencies.md` section 6.3)."""
+
+    def names(state: str) -> list[str]:
+        return sorted(_agent_name(store, h.deployment_id) for h in holds if h.state == state)
+
+    if move.state == "holding":
+        waiting = names("holding")
+        return f"waiting for {len(waiting)} agent(s) to stop: {', '.join(waiting)}"
+    if move.state == "held":
+        return "merge the change that moves the alias"
+    if move.state == "moving":
+        return "restart or wait for the engine, then say it is serving"
+    if move.state == "evaluating":
+        until = move.deadline.isoformat() if move.deadline else "?"
+        return f"evaluating {len(names('held'))} agent(s) until {until}"
+    if move.state == "completed":
+        suspended = names("suspended")
+        return "done" + (f"; suspended: {', '.join(suspended)}" if suspended else "")
+    return f"cancelled: {move.reason}" if move.reason else "cancelled"
+
+
+def move_out(store: Reads, move: AliasMove) -> s.AliasMoveOut:
+    holds = store.holds(move_id=move.id)
+    return s.AliasMoveOut(
+        **move.model_dump(exclude={"candidate"}),
+        candidate=move.candidate,
+        holds=[
+            s.HoldOut(
+                **h.model_dump(exclude={"move_id", "deployment_id"}),
+                deployment=h.deployment_id,
+                agent=_agent_name(store, h.deployment_id),
+            )
+            for h in holds
+        ],
+        next=_next(store, move, holds),
+    )
+
+
+def alias_move(store: Reads, move_id: str) -> s.AliasMoveOut:
+    found = store.alias_move(move_id)
+    if found is None:
+        raise Refusal("not-found", f"there is no alias move {move_id}")
+    return move_out(store, found)
+
+
+def alias_moves(
+    store: Reads, cluster: str | None, alias: str | None, open: bool | None
+) -> s.AliasMovesOut:
+    found = store.alias_moves(cluster=cluster, alias=alias, open=open)
+    return s.AliasMovesOut(moves=[move_out(store, m) for m in found])
 
 
 # ---- dependants ------------------------------------------------------------------------------
@@ -444,6 +542,7 @@ def _agent_status(
     if current is not None and ready is False:
         blockers.append(f"current release {release_name(current)} is not Ready: {not_ready}")
 
+    hold = alias_move_rules.hold_in_force(store, deployment.id)
     return s.AgentStatus(
         deployment=deployment.id,
         agent=deployment.item,
@@ -461,6 +560,13 @@ def _agent_status(
         blockers=blockers,
         next_actions=actions,
         observation=_observed(agent_observation, at, max_age),
+        held=s.HeldStatus(
+            move=hold.move_id,
+            state=hold.state,
+            reason=hold.reason or alias_move_rules.held_reason(hold.move_id),
+        )
+        if hold
+        else None,
         **extra,
     )
 
@@ -549,4 +655,5 @@ def status(store: Reads, cluster: str, now: datetime, max_age_seconds: int) -> s
         agents=agents,
         tool_servers=servers,
         models=engines,
+        alias_moves=[move_out(store, m) for m in store.alias_moves(cluster=cluster, open=True)],
     )
