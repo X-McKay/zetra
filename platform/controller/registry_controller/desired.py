@@ -32,6 +32,8 @@ from agent_platform.netpol import netpol_digest, render_tenant_policies
 
 MANAGED_BY = {"app.kubernetes.io/managed-by": "agent-registry-controller"}
 APS_TOKEN_ROLE = "agent-policy-service-token"
+# On an Agent: the AgentRelease new sessions start on (delivery contract, section 9).
+ANNOTATION_CURRENT_RELEASE = "registry.agentplatform.io/current-release"
 
 
 def owner_ref(obj: dict[str, Any]) -> dict[str, Any]:
