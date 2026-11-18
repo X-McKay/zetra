@@ -106,6 +106,8 @@ def main(argv: list[str] | None = None) -> int:
         problems = verify(args.app)
     for problem in problems:
         print(problem, file=sys.stderr)
+    if problems and args.command == "stage":  # the build's message names the command too
+        print(f"{fmt.LOCK} is written by `zetra-agents render`", file=sys.stderr)
     return 1 if problems else 0
 
 

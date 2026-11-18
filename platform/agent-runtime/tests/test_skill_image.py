@@ -60,13 +60,18 @@ def test_stage_writes_only_the_pinned_skills_and_the_lock(repo, tmp_path):
     assert os.access(out / "skills" / "row-count" / "scripts" / "count.py", os.X_OK)
 
 
-def test_a_changed_skill_without_a_new_lock_fails_the_build(repo, tmp_path):
+def test_a_changed_skill_without_a_new_lock_fails_the_build(repo, tmp_path, capsys):
     (repo / "skills" / "row-count" / "scripts" / "count.py").write_text("print(2)\n")
     out = tmp_path / "out"
     assert stage(repo, out) == ["skill row-count changed since it was pinned in skills.lock"]
     assert not out.exists()
     command = ["stage", "--agent", str(repo / "agents" / "demo")]
     assert image.main([*command, "--skills", str(repo / "skills"), "--out", str(out)]) == 1
+    # the message names the skill and the command that writes the lock
+    assert capsys.readouterr().err == (
+        "skill row-count changed since it was pinned in skills.lock\n"
+        "skills.lock is written by `zetra-agents render`\n"
+    )
 
 
 def test_a_missing_or_extra_lock_fails_the_build(repo, tmp_path):
