@@ -1,0 +1,154 @@
+{
+  "about": "The digest of a skill directory (skills.md section 3). Each case lists the files of a directory with their content as UTF-8 text and whether the owner may execute them; `lines` is the text that is hashed and `digest` its sha256. Files under `ignored` are on disk and are not part of the skill.",
+  "cases": [
+    {
+      "name": "one-file",
+      "says": "The smallest skill: SKILL.md alone.",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "---\nname: hello\ndescription: Says hello. Use to greet.\n---\n\nSay hello.\n",
+          "executable": false
+        }
+      ],
+      "lines": "e3a848a8d13ab115cfa2b8d672b78528ad2a247e96e57c3ce2042b73a83bcdbf - SKILL.md\n",
+      "digest": "sha256:640ad02eceea9fb2db5c344152e9ac6c4a3833fd839e4d6dbc00d587457c62c0"
+    },
+    {
+      "name": "with-script",
+      "says": "A sidecar, an executable script and a reference file.",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "---\nname: row-count\ndescription: Counts rows. Use when asked how many.\n---\n\nRun count.\n",
+          "executable": false
+        },
+        {
+          "path": "zetra.yaml",
+          "content": "schema_version: 1\nscripts:\n  - path: scripts/count.py\n    interpreter: python3\n",
+          "executable": false
+        },
+        {
+          "path": "scripts/count.py",
+          "content": "import sys\n\nprint(\"rows\", len(sys.argv) - 1)\n",
+          "executable": true
+        },
+        {
+          "path": "references/notes.md",
+          "content": "# Notes\n\nNothing yet.\n",
+          "executable": false
+        }
+      ],
+      "lines": "816af8a373f407f56d3118b2807b19bf2df07edbc61b15d887d54ae1d6be3b0b - SKILL.md\naf56b80c72ab7f798a393a39c2e90a4074dee1defccfb6a47b382cb3effa6634 - references/notes.md\n536d0de1a0fdcdc26803b9eaeb1cd5690bf6253ba3f010e242e8a806d0c1a57e x scripts/count.py\nc73fec6b7ab1c023149163d48d2f2be66561183793b74da5b3ca17e25c64833a - zetra.yaml\n",
+      "digest": "sha256:62a3db36393acf72fa07c67ca68a62bec1952926d511c65f5052dc5c3c2a89d0"
+    },
+    {
+      "name": "script-not-executable",
+      "says": "As with-script, but the script's owner may not execute it. The digest differs.",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "---\nname: row-count\ndescription: Counts rows. Use when asked how many.\n---\n\nRun count.\n",
+          "executable": false
+        },
+        {
+          "path": "zetra.yaml",
+          "content": "schema_version: 1\nscripts:\n  - path: scripts/count.py\n    interpreter: python3\n",
+          "executable": false
+        },
+        {
+          "path": "scripts/count.py",
+          "content": "import sys\n\nprint(\"rows\", len(sys.argv) - 1)\n",
+          "executable": false
+        },
+        {
+          "path": "references/notes.md",
+          "content": "# Notes\n\nNothing yet.\n",
+          "executable": false
+        }
+      ],
+      "differs_from": "with-script",
+      "lines": "816af8a373f407f56d3118b2807b19bf2df07edbc61b15d887d54ae1d6be3b0b - SKILL.md\naf56b80c72ab7f798a393a39c2e90a4074dee1defccfb6a47b382cb3effa6634 - references/notes.md\n536d0de1a0fdcdc26803b9eaeb1cd5690bf6253ba3f010e242e8a806d0c1a57e - scripts/count.py\nc73fec6b7ab1c023149163d48d2f2be66561183793b74da5b3ca17e25c64833a - zetra.yaml\n",
+      "digest": "sha256:66861aac1997d68a406fc539570a6b365f2c85f928176c9db4f9048b9edb7b15"
+    },
+    {
+      "name": "bytecode-cache-ignored",
+      "says": "As with-script, plus a __pycache__ directory. The digest is the same.",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "---\nname: row-count\ndescription: Counts rows. Use when asked how many.\n---\n\nRun count.\n",
+          "executable": false
+        },
+        {
+          "path": "zetra.yaml",
+          "content": "schema_version: 1\nscripts:\n  - path: scripts/count.py\n    interpreter: python3\n",
+          "executable": false
+        },
+        {
+          "path": "scripts/count.py",
+          "content": "import sys\n\nprint(\"rows\", len(sys.argv) - 1)\n",
+          "executable": true
+        },
+        {
+          "path": "references/notes.md",
+          "content": "# Notes\n\nNothing yet.\n",
+          "executable": false
+        }
+      ],
+      "ignored": [
+        {
+          "path": "scripts/__pycache__/count.cpython-312.pyc",
+          "content": "not part of the skill",
+          "executable": false
+        }
+      ],
+      "same_as": "with-script",
+      "lines": "816af8a373f407f56d3118b2807b19bf2df07edbc61b15d887d54ae1d6be3b0b - SKILL.md\naf56b80c72ab7f798a393a39c2e90a4074dee1defccfb6a47b382cb3effa6634 - references/notes.md\n536d0de1a0fdcdc26803b9eaeb1cd5690bf6253ba3f010e242e8a806d0c1a57e x scripts/count.py\nc73fec6b7ab1c023149163d48d2f2be66561183793b74da5b3ca17e25c64833a - zetra.yaml\n",
+      "digest": "sha256:62a3db36393acf72fa07c67ca68a62bec1952926d511c65f5052dc5c3c2a89d0"
+    },
+    {
+      "name": "path-order",
+      "says": "Lines are in byte order of the whole path: A, a-b, a.b, a/b, then a non-ASCII name.",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "---\nname: ordering\ndescription: Pins the order of lines. Use never.\n---\n\nNothing.\n",
+          "executable": false
+        },
+        {
+          "path": "a/b",
+          "content": "1\n",
+          "executable": false
+        },
+        {
+          "path": "a.b",
+          "content": "2\n",
+          "executable": false
+        },
+        {
+          "path": "a-b",
+          "content": "3\n",
+          "executable": false
+        },
+        {
+          "path": "A",
+          "content": "4\n",
+          "executable": false
+        },
+        {
+          "path": "é.md",
+          "content": "5\n",
+          "executable": false
+        },
+        {
+          "path": "empty",
+          "content": "",
+          "executable": false
+        }
+      ],
+      "lines": "7de1555df0c2700329e815b93b32c571c3ea54dc967b89e81ab73b9972b72d1d - A\n96d72e4158876c97a93f12ab1c496879d1643aca8e1b1a6c815fe7df575c0300 - SKILL.md\n1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2 - a-b\n53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 - a.b\n4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 - a/b\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - empty\nf0b5c2c2211c8d67ed15e75e656c7862d086e9245420892a7de62cd9ec582a06 - é.md\n",
+      "digest": "sha256:0133147e895c7f9b332b2a8c3670386604a47f0de81d418974c7dcc432eadfcc"
+    }
+  ]
+}
