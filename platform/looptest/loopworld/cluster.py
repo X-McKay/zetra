@@ -4,7 +4,8 @@ create, replace, merge_patch, patch_status, delete) and the provisioner's (get, 
 Three things a real API server does are kept, because the programs rely on them:
 
 - a write of an Agent fills the defaults of the Agent CRD (read from the CRD file itself);
-- server-side apply merges maps by key and never touches `status`;
+- server-side apply merges maps by key and never touches `status`, and takes away a field
+  that its manager applied before and no longer does;
 - a write that changes nothing keeps the resourceVersion.
 
 Flux is played by `flux_apply` and `flux_release`: the first writes an object and lists it in
@@ -67,6 +68,25 @@ def _merge(target: dict, patch: dict, *, null_deletes: bool) -> dict:
     return target
 
 
+def _paths(value: Any, prefix: tuple[str, ...] = ()) -> set[tuple[str, ...]]:
+    """The path of every leaf of nested maps; a list or a scalar is one leaf."""
+    if isinstance(value, dict) and value:
+        return {p for k, v in value.items() for p in _paths(v, (*prefix, k))}
+    return {prefix}
+
+
+def _drop(obj: dict, path: tuple[str, ...]) -> None:
+    """Remove the leaf at `path`, and the maps it leaves empty."""
+    if len(path) == 1:
+        obj.pop(path[0], None)
+        return
+    child = obj.get(path[0])
+    if isinstance(child, dict):
+        _drop(child, path[1:])
+        if not child:
+            del obj[path[0]]
+
+
 def _content(obj: dict) -> dict:
     """The object without what the server stamps on it."""
     meta = {k: v for k, v in obj["metadata"].items() if k not in ("uid", "resourceVersion")}
@@ -83,6 +103,8 @@ class Cluster:
         self.unreadable: set[Key] = set()
         self._schemas = _schemas()
         self._rv = itertools.count(1)
+        # (object key, field manager) -> the field paths that manager applied last
+        self._applied: dict[tuple[Key, str], set[tuple[str, ...]]] = {}
 
     # -- storage ---------------------------------------------------------------------------
 
@@ -183,6 +205,14 @@ class Cluster:
             raise RuntimeError("apply of the main resource cannot carry status")
         current = self.get(obj["apiVersion"], obj["kind"], *self._key(obj)[2:])
         merged = obj if current is None else _merge(current, obj, null_deletes=False)
+        key = self._key(obj)
+        owned = {p for p in _paths(obj) if p[0] != "metadata" or p[1:2] == ("annotations",)}
+        elsewhere = set().union(
+            *(v for (k, who), v in self._applied.items() if k == key and who != field_manager)
+        )
+        for path in self._applied.get((key, field_manager), set()) - owned - elsewhere:
+            _drop(merged, path)
+        self._applied[(key, field_manager)] = owned
         return self._store(merged, "apply", field_manager)
 
     # -- Flux ------------------------------------------------------------------------------

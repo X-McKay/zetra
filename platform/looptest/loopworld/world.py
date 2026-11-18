@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import types
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -27,17 +28,31 @@ from agent_platform.signing import (
     DEFAULT_REQUIRED_ATTESTATIONS,
     GITHUB_ACTIONS_ISSUER,
 )
-from agent_registry import importer
+from agent_registry import canonical, importer
 from agent_registry.api.app import create_app
 from agent_registry.api.auth import Principal, StaticVerifier
-from agent_registry.config import FIELD_MANAGER, OPERATOR, PROVISIONER, READER, Settings
+from agent_registry.api.github import GithubClaims, StaticGithubVerifier
+from agent_registry.config import (
+    EVALUATOR,
+    FIELD_MANAGER,
+    OPERATOR,
+    PROVISIONER,
+    READER,
+    Settings,
+)
 from agent_registry.store import Store
 from loopworld.cluster import AV, Cluster
+from loopworld.sessions import PlayedTemporal, session_app
 from registry_controller.config import ControllerConfig
 from registry_controller.reconciler import Reconciler
 from registry_controller.signature import Verification
+from registry_evaluator.cycle import Worker
+from registry_evaluator.evaluate import Runtime
+from registry_evaluator.registry import HttpRegistry as EvaluatorRegistry
+from registry_evaluator.sessions import HttpSessions as EvaluatorSessions
 from registry_provisioner.cycle import run_pass
 from registry_provisioner.registry import HttpRegistry
+from registry_provisioner.sessions import HttpSessions as ProvisionerSessions
 
 FIXTURES = Path(__file__).resolve().parents[2] / "registry" / "tests" / "fixtures"
 T0 = datetime(2026, 11, 17, 12, 0, 0, tzinfo=UTC)
@@ -67,7 +82,15 @@ TOKENS = {
         person=False,
         cluster=CLUSTER,
     ),
+    "evaluator": Principal(
+        subject="sa-3",
+        username="service-account-registry-evaluator-kubani",
+        roles=frozenset({EVALUATOR}),
+        person=False,
+        azp=f"registry-evaluator-{CLUSTER}",
+    ),
 }
+REPORT_AUDIENCE = "agent-registry-reports"
 
 
 def feed() -> dict[str, Any]:
@@ -95,10 +118,13 @@ def signer_subject(agent: str, tag: str) -> str:
 
 
 class _Token:
-    """The provisioner's token source: the name the registry knows the provisioner by."""
+    """A caller's token source: the name the registry knows the caller by."""
+
+    def __init__(self, name: str = "provisioner") -> None:
+        self.name = name
 
     def token(self) -> str:
-        return "provisioner"
+        return self.name
 
     def invalidate(self) -> None:
         pass
@@ -139,15 +165,33 @@ class World:
         self.now = T0
         self.cluster = Cluster()
         self.store = make_store(lambda: self.now)
-        self.settings = Settings()
+        self.settings = Settings(report_audience=REPORT_AUDIENCE)
+        self.github = StaticGithubVerifier({})
         self.app = create_app(
-            self.store, self.settings, StaticVerifier(TOKENS), clock=lambda: self.now
+            self.store,
+            self.settings,
+            StaticVerifier(TOKENS),
+            github_verifier=self.github,
+            clock=lambda: self.now,
         )
         self.http = TestClient(self.app)
         self.registry = HttpRegistry("http://testserver", CLUSTER, _Token(), self.http)
         self.signatures = Signatures()
+        # The tenant's session interface, and the Temporal behind it.
+        self._sessions()
+        self.feed_document = feed()
         self.controller = self._controller()
         self._platform_objects()
+
+    def _sessions(self) -> None:
+        self.temporal = PlayedTemporal(
+            now=lambda: self.now,
+            approval_of=lambda name: ((self.release(name) or {}).get("spec") or {}).get("approval"),
+        )
+        self.sessions_http = TestClient(
+            session_app(TENANT, CLUSTER, self.cluster, self.temporal, lambda: self.now)
+        )
+        self.workers: dict[str, Worker] = {}
 
     def _controller(self) -> Reconciler:
         return Reconciler(
@@ -174,6 +218,7 @@ class World:
         registry restored from an earlier dump is to the cluster that kept running."""
         self.cluster, self.signatures, self.now = other.cluster, other.signatures, other.now
         self.controller = self._controller()
+        self._sessions()
 
     # -- the cluster as the platform's own manifests leave it ------------------------------
 
@@ -241,7 +286,7 @@ class World:
 
     def apply_feed(self) -> bool:
         """What `agent-registry serve` does with the feed file at start and on change."""
-        return importer.apply_feed(self.store, feed(), now=self.now)
+        return importer.apply_feed(self.store, self.feed_document, now=self.now)
 
     def reconcile(self) -> None:
         """The Registry Controller sees every Agent, and through it every AgentRelease."""
@@ -251,8 +296,16 @@ class World:
     def provision(self) -> list[dict[str, Any]]:
         """One pass of the provisioner. Returns what it reported for each object it was asked
         to hold."""
+        cancels = ProvisionerSessions(
+            "http://testserver",
+            types.SimpleNamespace(tokens=_Token("provisioner"), http=self.sessions_http),
+        )
         assert run_pass(
-            self.cluster, self.registry, namespace=PLATFORM_NAMESPACE, clock=lambda: self.now
+            self.cluster,
+            self.registry,
+            namespace=PLATFORM_NAMESPACE,
+            clock=lambda: self.now,
+            sessions=cancels,
         )
         return [
             {"object": o.name, **o.document}
@@ -266,6 +319,23 @@ class World:
         self.tick()
         self.reconcile()
         return self.provision()
+
+    def evaluate(self, name: str = "evaluator-1") -> bool:
+        """One cycle of the evaluator `name`: claim, run the suite through the session
+        interface, post the verdict. True when it handled an evaluation. Time passes only by
+        the evaluator's own sleeping, which moves the world's clock."""
+        return self.worker(name).run_pass()
+
+    def worker(self, name: str, *, sleep=None) -> Worker:
+        """The evaluator `name`, made once: the real cycle, with the registry and the session
+        interface reached over HTTP in process."""
+        if name not in self.workers:
+            tokens = _Token("evaluator")
+            registry = EvaluatorRegistry("http://testserver", CLUSTER, tokens, self.http)
+            sessions = EvaluatorSessions("http://testserver", tokens, self.sessions_http)
+            run = Runtime(sessions, lambda: self.now.timestamp(), sleep or self.tick)
+            self.workers[name] = Worker(name, registry, run)
+        return self.workers[name]
 
     # -- the registry, as its callers reach it ---------------------------------------------
 
@@ -337,3 +407,88 @@ class World:
             "agentRelease": release,
             "lineage": {"repository": REPOSITORY, "tag": f"{agent}/{tag}"},
         }
+
+    def publish_declared(
+        self,
+        agent: str,
+        version: str,
+        build: str,
+        *,
+        suite: dict[str, Any] | None = None,
+        change: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
+        """A release as the release workflow reports it: it carries its declaration, the
+        Agent's spec without `enabled` (delivery 2), and the evaluation suite if there is one.
+
+        `change` edits the Agent's spec first, for a release that asks for something else; the
+        policy digest is compiled for that Agent. Returns the body of `POST /v1/reports/releases`."""
+        body = self.publish(agent, version, build)
+        document = canonical.agent_document(body["agent"])
+        if change is not None:
+            change(document["spec"])
+        release = body["agentRelease"]
+        release["spec"]["declaration"] = {
+            k: v for k, v in document["spec"].items() if k != "enabled"
+        }
+        release["spec"]["manifestSha256"] = canonical.digest(document)
+        release["spec"]["policySha256"] = digest_hex(
+            compile_bundle(
+                document, release, mcp_resource_base=MCP_RESOURCE_BASE, trust_domain=TRUST_DOMAIN
+            )
+        )
+        report: dict[str, Any] = {
+            "agent": document,
+            "agentRelease": release,
+            "lineage": {"checksums": {"agent.yaml": "sha256:" + build * 64}},
+        }
+        if suite is not None:
+            report["evaluation"] = {"suite": suite}
+        return report
+
+    def report_release(self, body: dict[str, Any], version: str) -> Any:
+        """The release workflow's report: the route, with the identity of the workflow that ran
+        at the tag `<agent>/v<version>`. Returns the answer."""
+        agent = body["agent"]["metadata"]["name"]
+        tag = f"{agent}/v{version}"
+        workflow = f"{REPOSITORY}/.github/workflows/release.yml@refs/tags/{tag}"
+        name = f"github-{tag}"
+        self.github._tokens[name] = GithubClaims(
+            repository=REPOSITORY,
+            ref=f"refs/tags/{tag}",
+            ref_type="tag",
+            sha="c" * 40,
+            job_workflow_ref=workflow,
+        )
+        return self.http.post(
+            "/v1/reports/releases", json=body, headers={"Authorization": f"Bearer {name}"}
+        )
+
+    def revoke(self, release: str, *, reason: str = "security", sessions: str | None = None) -> str:
+        """A reviewed revocation of an agent release reaches the feed (delivery 8.1), and the
+        registry applies it. Returns the revocation's id."""
+        entry = {
+            "schemaVersion": 1,
+            "id": f"{self.now:%Y-%m-%d}-db-admin-{release[-8:]}",
+            "kind": "agent",
+            "item": "db-admin",
+            "release": release,
+            "reason": reason,
+            "summary": "loop test",
+            "revokedBy": "al",
+            "revokedAt": f"{self.now:%Y-%m-%dT%H:%M:%SZ}",
+        }
+        if sessions is not None:
+            entry["sessions"] = sessions
+        listed = [*self.feed_document.get("revocations", []), entry]
+        self.feed_document["revocations"] = sorted(listed, key=lambda e: e["id"])
+        assert self.apply_feed()
+        return entry["id"]
+
+    def start_session(self, agent: str, request: str, *, token: str = "operator") -> Any:
+        """A person starts a session of the agent's current release, through the session
+        interface."""
+        return self.sessions_http.post(
+            f"/v1/tenants/{TENANT}/sessions",
+            json={"agent": agent, "task": {"request": request}},
+            headers={"Authorization": f"Bearer {token}"},
+        )
