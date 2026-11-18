@@ -6,7 +6,8 @@ script, and the platform decides whether a deployment may run it.
 Where this document and `delivery.md` or `dependencies.md` disagree about new behaviour, this
 one is right. Everything they say that is not changed here still holds.
 
-Cases as data: `skill-digest-cases.json` (section 3). The reference implementation of
+Cases as data: `skill-digest-cases.json` (section 3) and `effects.json` (section 7). The
+reference implementation of
 sections 2 to 5 is `platform/agent-runtime/agent_runtime/skills/format.py`; every other
 package imports it and none writes a second one.
 
@@ -235,7 +236,10 @@ ANNOTATION_GRANTED_EFFECTS = "agentplatform.io/granted-effects"
 def requested(agent_spec: dict) -> list[str]          # sorted, from capabilities.effects
 def granted(namespace: dict | None) -> set[str]       # from the annotation
 def ungranted(agent_spec: dict, namespace: dict | None) -> list[str]
+def statement(effect: str) -> str                     # the line of section 7.4
 ```
+
+An effect the code does not know is never granted, whatever the annotation says.
 
 The Registry Controller reads the Namespace it already reads for the signer identity. A
 release whose declaration (or, for a release without one, whose Agent) requests an effect
@@ -275,7 +279,9 @@ requests the effect:
 effect sandbox_execute: skill scripts run inside the agent's container and can read the session's identity token
 ```
 
-The text is the constant `agent_platform.effects.STATEMENTS["sandbox_execute"]`.
+The text is in `effects.json`. `agent_platform.effects.STATEMENTS` holds it for the
+controller's side and the tooling, and the registry, which does not import that package,
+holds its own copy; a test in each holds the copy equal to the file.
 
 ### 7.5 What is claimed
 
@@ -382,8 +388,11 @@ class Run:
     duration_ms: int
 
 def run(app: Path, workspace: Path, listed: Sequence[str],
-        skill: object, script: object, arguments: object) -> Run
+        skill: object, script: object, arguments: object,
+        *, limits: Limits | None = None) -> Run
 ```
+
+`limits` is for tests; left out, the bounds are the ones here with the script's own timeout.
 
 `run` never raises for anything the model sent. It raises `LauncherFailure` when it cannot
 say that the script's processes are gone (section 9.4); the step then exits with a status
@@ -582,10 +591,10 @@ The image build, from the repository's one `Dockerfile`:
 
 | Package | Files it owns | Sections |
 | --- | --- | --- |
-| 4.0 Contracts | this file, `skill-digest-cases.json`, `agent_runtime/skills/format.py`, `tests/test_skill_format.py` | 2 to 5 |
-| 4.1 Discovery | `agent_runtime/skills/tools.py`, `agent_runtime/skills/image.py`, `agent_runtime/step.py` (loading, the prompt, the built-in tools, the `script_run` key), `agent_runtime/tools.py` (the reserved names) | 8, 10 (the step's side), 12 (`image.py`) |
-| 4.2 Effect | `agent_runtime/tools.py` and `zetra_agents/layout.py` (the vocabulary and the author's-tool rule), `zetra_agents/declaration.py`, `zetra_agents/schemas/`, `registry/agent_registry/agent-spec.schema.json`, `deploy/platform/crds/`, `platform/contracts/agent_platform/` (`effects.py`, `bundle.py`, `podtemplate.py`), `platform/controller/` | 7.1 to 7.3, 11.1 (the resource definition) |
-| 4.3 Launcher | `agent_runtime/skills/launcher.py`, `agent_runtime/skills/supervisor.py` and their tests | 9 |
+| 4.0 Contracts | this file, `skill-digest-cases.json`, `effects.json`, `agent_runtime/skills/format.py`, the interface in `agent_runtime/skills/launcher.py`, the effect lists and reserved names in `agent_runtime/tools.py` and `zetra_agents/layout.py`, `agent_platform/effects.py` | 2 to 5, 7.1 (the vocabulary), 7.2 (the function), 9.1 |
+| 4.1 Discovery | `agent_runtime/skills/tools.py`, `agent_runtime/skills/image.py`, `agent_runtime/step.py` (loading, the prompt, the built-in tools, the `script_run` key) | 8, 10 (the step's side), 12 (`image.py`) |
+| 4.2 Effect | `zetra_agents/declaration.py`, `zetra_agents/schemas/`, `registry/agent_registry/agent-spec.schema.json`, `deploy/platform/crds/`, `platform/contracts/agent_platform/` (`bundle.py`, `podtemplate.py`), `platform/controller/` | 7.1 to 7.3, 11.1 (the resource definition) |
+| 4.3 Launcher | the body of `agent_runtime/skills/launcher.py`, `agent_runtime/skills/supervisor.py` and their tests | 9 |
 | 4.4, 4.5 Tooling | `zetra_agents/skills.py`, the hooks in `layout.py`, `render.py`, `release.py`, `local.py`, `testing.py` and `cli.py`, `templates/Dockerfile.tmpl`, `templates/dockerignore.tmpl`, `pyproject.toml` and its lock | 4, 6, 8.1 (the local harness), 10 (the local harness), 11.1, 12 |
 | 4.6 Catalog | `agent_registry/importer/skills.py`, `canonical.py`, `derive.py`, `rules/authority.py`, the `type=skill` answer of `/v1/dependants`, `contract/openapi.json` | 7.4, 11.2 |
 | Runner record | `runner/types.py`, `runner/records.py`, the activity that emits records | 10 (the runner's side) |
@@ -593,10 +602,9 @@ The image build, from the repository's one `Dockerfile`:
 
 4.1 and 4.3 meet at `launcher.run` (section 9.1) and at nothing else: 4.1 calls it, turns a
 `Run` into the tool result and the `script_run` key, and does not start a process itself.
-4.2 and 4.4 both touch `layout.py`: 4.2 owns the two effect lists and `_tool_problems`; 4.4
-adds one call to `skills.problems(agent, manifest)` in `check` and changes nothing else
-there. 4.2 owns `requires.effects` in `declaration.py`; 4.4 reads the generated Agent and
-does not change the generator.
+4.4 adds one call to `skills.problems(agent, manifest)` in `layout.py`'s `check` and
+changes nothing else there. 4.2 owns `requires.effects` in `declaration.py`; 4.4 reads the
+generated Agent and does not change the generator.
 
 Order on a cluster: the resource definitions, then the controller, the registry and the
 runner, then the tenant's grant, then any release that lists a skill with a script.

@@ -27,7 +27,14 @@ import yaml
 
 from agent_runtime import confine
 from agent_runtime.identity import sandbox_dir, state_dir, write_private
-from agent_runtime.tools import EFFECTS, Done, Tool, ToolCall, ToolResult
+from agent_runtime.tools import (
+    AUTHOR_EFFECTS,
+    RESERVED_NAMES,
+    Done,
+    Tool,
+    ToolCall,
+    ToolResult,
+)
 
 MAX_INPUT = 65536
 MAX_OUTPUT = 65536
@@ -139,8 +146,10 @@ def load_agent(manifest: dict):
         raise ValueError("instructions outside the app directory")
     instructions = path.read_text(encoding="utf-8")
     declared = {t["name"]: t["effect"] for t in manifest["tools"]}
-    if len(declared) != len(manifest["tools"]) or not set(declared.values()) <= EFFECTS:
+    if len(declared) != len(manifest["tools"]) or not set(declared.values()) <= AUTHOR_EFFECTS:
         raise ValueError("manifest tools are duplicated or not admitted")
+    if set(declared) & set(RESERVED_NAMES):
+        raise ValueError("a manifest tool has a name the runtime keeps for skills")
     from agent_runtime.mcp import call_tool
 
     if str(app) not in sys.path:

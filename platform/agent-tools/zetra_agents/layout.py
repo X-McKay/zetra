@@ -52,9 +52,13 @@ FIXTURES = {
     "conformance-transport",
 }
 VERIFY_IMAGE = "verify_image.py"
-# The effects a tool may declare: `EFFECTS` of agent_runtime.tools, which a test holds this
-# to. `remote_write` is not among them and has its own refusal.
-EFFECTS = ("workspace_read", "workspace_write", "remote_read")
+# The effects a tool the author writes may declare, the whole vocabulary, and the tool names
+# the runtime keeps for skills: `AUTHOR_EFFECTS`, `EFFECTS` and `RESERVED_NAMES` of
+# agent_runtime.tools, which a test holds these to. `remote_write` is in neither list and has
+# its own refusal. `sandbox_execute` is requested under `requires.effects`, never on a tool.
+AUTHOR_EFFECTS = ("workspace_read", "workspace_write", "remote_read")
+EFFECTS = (*AUTHOR_EFFECTS, "sandbox_execute")
+RESERVED_TOOL_NAMES = ("skill_use", "skill_file", "skill_run")
 # A fixture driver keeps the SDK's step module under this name and delegates to it.
 SDK_STEP_BACKUP = re.compile(r"agent_runtime\._([a-z]+)_sdk_step")
 IMAGE_TARGETS = ("runtime", "fixture")
@@ -275,17 +279,28 @@ def _tool_problems(name: str, tools: list[Any]) -> list[str]:
                 "tool names must be unique"
             )
         seen.add(tool_name)
+        if tool_name in RESERVED_TOOL_NAMES:
+            problems.append(
+                f"{name}: agent.yaml tool {tool_name!r} has a name the runtime keeps for "
+                "skills; rename the tool"
+            )
         if effect == "remote_write":
             problems.append(f"{name}: remote_write tools are not admitted")
+        elif effect == "sandbox_execute":
+            problems.append(
+                f"{name}: agent.yaml tool {tool_name!r} has effect sandbox_execute, which "
+                "only the built-in skill launcher has; request it under requires.effects "
+                f"and give the tool one of {', '.join(AUTHOR_EFFECTS)}"
+            )
         elif effect is None:
             problems.append(
                 f"{name}: agent.yaml tool {tool_name!r} has no effect; set effect to "
-                f"one of {', '.join(EFFECTS)}"
+                f"one of {', '.join(AUTHOR_EFFECTS)}"
             )
-        elif not isinstance(effect, str) or effect not in EFFECTS:
+        elif not isinstance(effect, str) or effect not in AUTHOR_EFFECTS:
             problems.append(
                 f"{name}: agent.yaml tool {tool_name!r} has effect {effect!r}, which is not "
-                f"one of {', '.join(EFFECTS)}; set effect to the one the tool has"
+                f"one of {', '.join(AUTHOR_EFFECTS)}; set effect to the one the tool has"
             )
     return problems
 

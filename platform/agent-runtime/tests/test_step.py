@@ -238,6 +238,20 @@ def test_manifest_declaring_remote_write_exits_3(sandbox):
     assert rc == 3 and "not admitted" in out["summary"]
 
 
+@pytest.mark.parametrize(
+    ("tool", "says"),
+    [
+        ({"name": "run_it", "effect": "sandbox_execute"}, "not admitted"),
+        ({"name": "skill_run", "effect": "workspace_read"}, "keeps for skills"),
+    ],
+)
+def test_manifest_tool_with_the_launchers_effect_or_name_exits_3(sandbox, tool, says):
+    # skills.md 7.1 and 8.3: the effect and the three names belong to the runtime
+    make_app(sandbox.root / "app", {**MANIFEST, "tools": [*MANIFEST["tools"], tool]})
+    rc, out, _ = sandbox.run(0)
+    assert rc == 3 and says in out["summary"]
+
+
 @pytest.mark.parametrize("status,rc", [(403, 3), (429, 4)])
 def test_model_403_is_agent_error_and_429_is_budget(sandbox, status, rc):
     sandbox.gw.chat_replies = [(status, {"error": {"message": "denied"}})]

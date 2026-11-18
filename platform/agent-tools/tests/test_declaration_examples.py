@@ -95,6 +95,24 @@ def test_the_effects_check_admits_are_the_ones_the_sdk_defines():
     from agent_runtime import tools
 
     assert set(layout.EFFECTS) == set(tools.EFFECTS)
+    assert set(layout.AUTHOR_EFFECTS) == set(tools.AUTHOR_EFFECTS)
+    assert layout.RESERVED_TOOL_NAMES == tools.RESERVED_NAMES
+
+
+def test_a_tool_may_not_take_the_launchers_effect_or_a_reserved_name():
+    # skills.md 7.1 and 8.3
+    problems = layout._tool_problems(
+        "demo",
+        [
+            {"name": "run_it", "effect": "sandbox_execute"},
+            {"name": "skill_use", "effect": "workspace_read"},
+            {"name": "read_notes", "effect": "workspace_read"},
+        ],
+    )
+    assert len(problems) == 2
+    assert "only the built-in skill launcher has" in problems[0]
+    assert "requires.effects" in problems[0]
+    assert "'skill_use' has a name the runtime keeps for skills" in problems[1]
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a file whatever its mode")
