@@ -20,7 +20,7 @@ from here).
 | `contract/gate-cases.json`, `contract/authority-cases.json` | the approval gates and the "asks for more" rule, as cases |
 | `contract/examples/` | one answer of the desired route and one observation report |
 | `agent_registry/models.py`, `store/` | the records and the store protocol; `store/memory.py` for tests, `store/pg.py` for PostgreSQL |
-| `agent_registry/canonical.py`, `derive.py` | documents, digests and derived records, shared by everything |
+| `agent_registry/canonical.py`, `defaults.py`, `derive.py` | documents (an Agent with its defaults filled in), digests and derived records, shared by everything |
 | `agent_registry/rules/` | the decisions, each a function of the store |
 | `agent_registry/api/` | routes, callers and the error body |
 | `migrations/` | numbered SQL, applied at start |

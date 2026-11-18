@@ -70,7 +70,9 @@
               "runtime": {
                 "cpu": "1",
                 "memory": "2Gi",
-                "ttlSeconds": 900
+                "ttlSeconds": 900,
+                "maxBoundaries": 64,
+                "runtimeClass": "kata-qemu-runtime-rs"
               },
               "enabled": true
             }
@@ -163,7 +165,7 @@
             "spec": {
               "agent": "db-admin",
               "image": "registry.almckay.io/agents/db-admin@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "manifestSha256": "63b27894f5d0723337cc7dfdb64ab8a4c421e80649199eb6dc3a8219099a3c95",
+              "manifestSha256": "8a48961c4a14c814d04c4746bf4075d8bd4cd79f3c36f03990e0d73a14d954e8",
               "policySha256": "54038a26fa048b753c6de189a9818d6a14a0830762859a1c38243a93c0f0c3a2",
               "lockSha256": "ffce7248823835935e987637ca549c21b4656d3ad1e66f7f47f7bdc3d9468a33",
               "buildRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

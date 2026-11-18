@@ -6,6 +6,8 @@ import hashlib
 import json
 from typing import Any
 
+from agent_registry import defaults
+
 EMPTY_AUTHORITY: dict[str, Any] = {}
 
 
@@ -24,9 +26,10 @@ def authority_of(agent_document: dict[str, Any]) -> dict[str, Any]:
     This is what an approval is bound to in milestone 1: identity mode, model backends with
     their models and budgets, tool backends with effect, tools and delegation, and runtime
     limits. Owner and description are not authority. Lists are sorted, so order in the
-    document does not change the digest.
+    document does not change the digest. The resource's defaults are filled in first, so a
+    manifest that leaves a defaulted field out and the object on the cluster agree.
     """
-    spec = agent_document.get("spec") or {}
+    spec = defaults.agent_spec(agent_document.get("spec"))
     identity = spec.get("identity") or {}
     capabilities = spec.get("capabilities") or {}
     runtime = spec.get("runtime") or {}
@@ -82,11 +85,12 @@ def release_document(agent_release: dict[str, Any]) -> dict[str, Any]:
 
 
 def agent_document(agent: dict[str, Any]) -> dict[str, Any]:
-    """An Agent as the registry keeps it: apiVersion, kind, name, namespace and spec."""
+    """An Agent as the registry keeps it: apiVersion, kind, name, namespace and spec, the
+    spec with the resource's defaults filled in, as the cluster holds it."""
     meta = agent.get("metadata") or {}
     return {
         "apiVersion": agent.get("apiVersion"),
         "kind": agent.get("kind"),
         "metadata": {"name": meta.get("name"), "namespace": meta.get("namespace")},
-        "spec": agent.get("spec") or {},
+        "spec": defaults.agent_spec(agent.get("spec")),
     }

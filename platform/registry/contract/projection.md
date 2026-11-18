@@ -47,6 +47,12 @@ then the AgentReleases in ascending revision number. Each `document` is complete
 `deployment.enabled and <the document's own spec.enabled, true when absent>`.
 Generation: `deployment.generation`.
 
+The Agent resource has defaults, so the object on the cluster holds fields a manifest may
+leave out. `canonical.agent_document` fills them in (`agent_registry/defaults.py`) and every
+Agent document the registry keeps has passed through it. The kept `spec` is therefore the
+`spec` the cluster holds, and "equals" in sections 5, 7 and 8 means equal, key for key. The
+AgentRelease resource has no defaults.
+
 **AgentRelease**, for each revision: the release's `document`, plus `spec.approval`. The CRD
 requires the block, so it is always present:
 

@@ -28,11 +28,11 @@
       }
     ],
     "runtime": {
-      "runtimeClass": null,
+      "runtimeClass": "kata-qemu-runtime-rs",
       "cpu": "1",
       "memory": "2Gi",
       "ttlSeconds": 900,
-      "maxBoundaries": null
+      "maxBoundaries": 64
     }
   },
   "emptyBase": [
@@ -293,16 +293,16 @@
       ]
     },
     {
-      "name": "a boundary limit where there was none",
+      "name": "a higher boundary limit",
       "mutations": [
         {
           "op": "replace",
           "path": "/runtime/maxBoundaries",
-          "value": 4
+          "value": 128
         }
       ],
       "reasons": [
-        "runtime maxBoundaries rises from None to 4"
+        "runtime maxBoundaries rises from 64 to 128"
       ]
     },
     {
@@ -341,7 +341,7 @@
         }
       ],
       "reasons": [
-        "runtime runtimeClass changes from None to 'kata'"
+        "runtime runtimeClass changes from 'kata-qemu-runtime-rs' to 'kata'"
       ]
     },
     {

@@ -78,7 +78,9 @@ document's `metadata.namespace`. A document in a namespace no tenant has is list
    `enabled = spec.enabled` (true when absent),
    `document = {"agent": canonical.agent_document(agent)}`. An existing deployment keeps its
    `pinned_revision`, `current_revision` and `generation`; its `enabled` and `document` follow
-   the Agent document.
+   the Agent document. `canonical.agent_document` fills in the resource's defaults, so a
+   manifest read from git and the same Agent read from the cluster give the same document,
+   and importing one after the other changes nothing.
 4. Releases of this agent (`spec.agent` equal to the agent's name, same namespace) that are
    not yet a revision, in this order: approved ones first, by `approval.approvedAt` and then
    name; then unapproved ones by name. For each:
