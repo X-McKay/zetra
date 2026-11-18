@@ -1,6 +1,6 @@
-"""The records of the registry (milestone 1).
+"""The records of the registry.
 
-One class per table of `migrations/0001_init.sql`. Python names are snake_case; JSON names are
+One class per table of `migrations/0001_init.sql` and `migrations/0002_delivery.sql`. Python names are snake_case; JSON names are
 camelCase. The same classes are what the store returns and what the HTTP interface carries.
 
 Identifiers are text and built by the functions at the end of this file. Nothing else builds one.
@@ -28,16 +28,19 @@ SubjectKind = Literal["agent", "agentrelease", "tool-server", "model-engine", "p
 RequirementType = Literal["tool", "model", "effect", "skill"]
 ProvisionType = Literal["tool", "capability"]
 
-# The phases of design section 5.3. Milestone 1 uses four of them; `evaluating` and `refused`
-# arrive with the evaluation gate of milestone 2.
+# The phases of design section 5.3 (`contract/delivery.md` section 5).
 Phase = Literal[
     "awaiting-runtime",  # projected; waiting for the controller's verdict or for Ready
     "pending-approval",  # the controller's gates pass and no approval covers the change
     "activated",  # it has been the current revision
     "superseded",  # replaced by a later revision before it was ever current
-    "evaluating",
-    "refused",
+    "evaluating",  # approved and Ready; its evaluation has not passed yet
+    "refused",  # it failed its evaluation, or its release was revoked before it was current
 ]
+
+EvaluationState = Literal["pending", "claimed", "passed", "failed", "error", "cancelled"]
+RevocationReason = Literal["security", "quality"]
+RevocationSessions = Literal["cancel", "finish"]
 
 NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 RELEASE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
@@ -233,6 +236,43 @@ class Observation(Record):
     document: dict[str, Any] = Field(default_factory=dict)
 
 
+class Evaluation(Record):
+    """One attempt to evaluate one revision (`contract/delivery.md` section 6). `id` to
+    `created_at` are written once. The fields after the marker are progress; the store changes
+    them only through `Tx.set_evaluation_progress`."""
+
+    id: str
+    deployment_id: str
+    revision: int
+    attempt: int  # 1 for the first
+    suite: dict[str, Any] = Field(default_factory=dict)  # the suite as the release carried it
+    suite_digest: str = ""  # canonical.digest(suite)
+    created_at: datetime
+    # progress
+    state: EvaluationState = "pending"
+    claimed_by: str | None = None
+    claim_expires_at: datetime | None = None
+    evaluator_version: str = ""
+    result: dict[str, Any] = Field(default_factory=dict)  # {verdict, summary, cases: [...]}
+    finished_at: datetime | None = None
+
+
+class Revocation(Record):
+    """A release that must not run, indexed from the feed (`contract/delivery.md` section 8).
+    Written once. The reviewed file in the cluster repository is the authority."""
+
+    id: str
+    kind: Kind
+    item: str
+    release: str  # the release name
+    reason: RevocationReason
+    sessions: RevocationSessions  # what happens to sessions already running on it
+    summary: str = ""
+    revoked_by: str
+    revoked_at: datetime
+    indexed_at: datetime  # when this registry first saw it; not compared on a second write
+
+
 def deployment_id(kind: str, cluster: str, tenant: str | None, name: str) -> str:
     return f"{kind}:{cluster}:{tenant or '-'}:{name}"
 
@@ -245,6 +285,10 @@ def release_id(kind: str, item: str, name: str) -> str:
 
 def revision_id(deployment: str, number: int) -> str:
     return f"{deployment}@{number}"
+
+
+def evaluation_id(deployment: str, number: int, attempt: int) -> str:
+    return f"{deployment}@{number}#{attempt}"
 
 
 def release_slug(text: str) -> str:
