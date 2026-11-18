@@ -21,7 +21,7 @@ from agent_registry.api.errors import ApiError
 from agent_registry.api.github import GithubClaims
 from agent_registry.config import Settings
 from agent_registry.models import Record, TrustedRepository, deployment_id
-from agent_registry.rules import lifecycle, report
+from agent_registry.rules import Refusal, lifecycle, report, revocation
 from agent_registry.rules import approval as approvals
 from agent_registry.store import Store
 
@@ -124,7 +124,10 @@ def report_release(
         raise ApiError("invalid-arguments", f"agent: namespace must be {tenant.namespace}")
     target = deployment_id("agent", trusted.cluster, trusted.tenant, agent_name)
     approvals.owned(store, target)  # in recovery, not found, the pull request path
-    # The release is revoked: refused (section 8), added by the revocation package.
+    named = (body.agent_release.get("metadata") or {}).get("name")
+    revoked = revocation.revoked_named(store, "agent", agent_name, str(named))
+    if revoked is not None:
+        raise Refusal("refused", f"release {named} is revoked: {revoked.id}")
     suite = body.evaluation.suite if body.evaluation else None
     if suite is not None:
         report.check_suite(suite)
