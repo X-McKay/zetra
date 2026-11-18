@@ -1814,6 +1814,98 @@
         "title": "ReleaseOut",
         "type": "object"
       },
+      "ReportEvaluationIn": {
+        "additionalProperties": false,
+        "properties": {
+          "suite": {
+            "additionalProperties": true,
+            "title": "Suite",
+            "type": "object"
+          }
+        },
+        "required": [
+          "suite"
+        ],
+        "title": "ReportEvaluationIn",
+        "type": "object"
+      },
+      "ReportLineageIn": {
+        "description": "Only the checksums are read. Any other key is ignored: the rest is the token's.",
+        "properties": {
+          "checksums": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Checksums",
+            "type": "object"
+          }
+        },
+        "title": "ReportLineageIn",
+        "type": "object"
+      },
+      "ReportReleaseIn": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "additionalProperties": true,
+            "title": "Agent",
+            "type": "object"
+          },
+          "agentRelease": {
+            "additionalProperties": true,
+            "title": "Agentrelease",
+            "type": "object"
+          },
+          "evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportEvaluationIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lineage": {
+            "$ref": "#/components/schemas/ReportLineageIn"
+          }
+        },
+        "required": [
+          "agent",
+          "agentRelease"
+        ],
+        "title": "ReportReleaseIn",
+        "type": "object"
+      },
+      "ReportReleaseOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deployment",
+          "release",
+          "revision",
+          "created"
+        ],
+        "title": "ReportReleaseOut",
+        "type": "object"
+      },
       "Requirement": {
         "additionalProperties": false,
         "properties": {
@@ -3367,6 +3459,48 @@
         "summary": "Release",
         "tags": [
           "read"
+        ]
+      }
+    },
+    "/v1/reports/releases": {
+      "post": {
+        "description": "Record a release the workflow published. Nothing is approved or made current.",
+        "operationId": "report_release_v1_reports_releases_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportReleaseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportReleaseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Release",
+        "tags": [
+          "intake"
         ]
       }
     },
