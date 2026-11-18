@@ -12,6 +12,13 @@ from __future__ import annotations
 
 from typing import Any
 
+# What an approval of the effect covers (`contract/effects.json`; a test holds the two equal).
+STATEMENTS = {
+    "sandbox_execute": (
+        "skill scripts run inside the agent's container and can read the session's identity token"
+    ),
+}
+
 
 def _at_most(candidate: Any, base: Any) -> bool:
     """A limit is no higher. No limit at all (None) is only matched by no limit."""
@@ -81,4 +88,9 @@ def widens(base: dict[str, Any], candidate: dict[str, Any]) -> list[str]:
     for key in ("runtimeClass", "cpu", "memory"):
         if was.get(key) != now.get(key):
             reasons.append(f"runtime {key} changes from {was.get(key)!r} to {now.get(key)!r}")
+
+    for effect in sorted(set(candidate.get("effects") or []) - set(base.get("effects") or [])):
+        reasons.append(
+            f"effect {effect}: {STATEMENTS.get(effect, 'an effect the registry does not know')}"
+        )
     return reasons

@@ -53,7 +53,7 @@ def authority_of(agent_document: dict[str, Any]) -> dict[str, Any]:
         }
         for t in capabilities.get("mcp") or []
     ]
-    return {
+    authority: dict[str, Any] = {
         "identity": {"mode": identity.get("mode"), "onBehalfOf": identity.get("onBehalfOf")},
         "models": sorted(models, key=lambda m: str(m["backend"])),
         "mcp": sorted(mcp, key=lambda t: str(t["backend"])),
@@ -65,6 +65,10 @@ def authority_of(agent_document: dict[str, Any]) -> dict[str, Any]:
             "maxBoundaries": runtime.get("maxBoundaries"),
         },
     }
+    # Only when something is requested, so no authority digest that predates effects moves.
+    if capabilities.get("effects"):
+        authority["effects"] = sorted(capabilities["effects"])
+    return authority
 
 
 def authority_digest(authority: dict[str, Any]) -> str:

@@ -119,7 +119,7 @@ class Dependant(Record):
 
 class DependantsOut(Record):
     cluster: str
-    type: Literal["tool", "model"]
+    type: Literal["tool", "model", "skill"]
     name: str  # as asked: a tool backend name, or a model alias
     target: str | None  # the gateway backend looked up; None when the alias is unknown
     provided_by: str | None  # deployment id of the tool server or model; None when unregistered

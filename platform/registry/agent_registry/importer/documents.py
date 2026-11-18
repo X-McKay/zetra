@@ -11,6 +11,7 @@ import yaml
 
 from agent_registry import canonical, derive
 from agent_registry.importer.report import ImportReport
+from agent_registry.importer.skills import record_skills
 from agent_registry.models import (
     Approval,
     Deployment,
@@ -329,7 +330,10 @@ def _import_agent(
         if stored is None:
             tx.add_release(record)
             created.append(record.id)
-        requirements = derive.requirements_of(record.id, document)
+        created.extend(record_skills(tx, record))
+        requirements = derive.requirements_of(
+            record.id, document, record.document["spec"].get("skills")
+        )
         tx.add_requirements(record.id, requirements)
         number = len(tx.revisions(did)) + 1
         revision = Revision(
