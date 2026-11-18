@@ -22,6 +22,12 @@ inputs:
   vuln-exceptions:
     description: comma-separated High finding ids the tenant allows (Critical never)
     default: ""
+  registry-url:
+    description: base URL of the Agent Registry; when set, the last step reports the release to it
+    default: ""
+  registry-audience:
+    description: audience the registry wants in the GitHub identity token (REGISTRY_REPORT_AUDIENCE)
+    default: ""
   uv-version:
     default: "0.13.1"
   python-version:
@@ -114,3 +120,14 @@ runs:
           echo "uploaded $(basename "$f")"
         done
         py 'import json,sys; print(json.loads(sys.argv[1])["html_url"])' "$release"
+    # The release is published by now; a failure here does not withdraw it. The job needs
+    # `permissions: id-token: write` for the identity token.
+    - name: Report the release to the Agent Registry
+      if: inputs.registry-url != ''
+      shell: bash
+      env:
+        REGISTRY_URL: ${{ inputs.registry-url }}
+        REGISTRY_AUDIENCE: ${{ inputs.registry-audience }}
+        AGENT: ${{ steps.agent.outputs.name }}
+      run: |
+        uv run --locked python "${{ github.action_path }}/report.py"
