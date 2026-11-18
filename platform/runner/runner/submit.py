@@ -21,7 +21,11 @@ from runner.workflow import EXECUTION_TIMEOUT, SessionWorkflow
 
 
 async def submit(
-    client: Client, inp: SessionInput, *, rpc_timeout: timedelta | None = None
+    client: Client,
+    inp: SessionInput,
+    *,
+    rpc_timeout: timedelta | None = None,
+    memo: dict | None = None,
 ) -> WorkflowHandle[SessionWorkflow, SessionResult]:
     inp.validate()
     if inp.worker_pool != "legacy":
@@ -45,6 +49,7 @@ async def submit(
             id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
             execution_timeout=EXECUTION_TIMEOUT,
             task_timeout=timedelta(seconds=10),
+            memo=memo,
             rpc_timeout=rpc_timeout,
         )
     except WorkflowAlreadyStartedError as exc:
