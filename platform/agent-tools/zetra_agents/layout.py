@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from zetra_agents import declaration, schema, suite
+from zetra_agents import declaration, schema, skills, suite
 
 FORBIDDEN_IMPORTS = {"httpx", "requests", "urllib", "socket", "aiohttp", "subprocess"}
 NAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
@@ -399,6 +399,7 @@ def check(agent: AgentDir) -> list[str]:
             problems.append(f"{agent.name}: manifest model is not granted by the Agent")
     problems += _tool_problems(agent.name, manifest.get("tools") or [])
     problems += _grant_problems(agent.name, cr["spec"])
+    problems += skills.problems(agent, manifest)
     if agent.src.is_dir() and agent.package_dir() is None:
         problems.append(f"{agent.name}: src/ must hold exactly one package directory")
     elif agent.src.is_dir():

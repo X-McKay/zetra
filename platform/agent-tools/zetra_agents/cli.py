@@ -16,6 +16,7 @@ import sys
 import threading
 from pathlib import Path
 
+import yaml
 from agent_platform.constants import DEFAULT_TRUST_DOMAIN
 
 from zetra_agents import (
@@ -28,6 +29,7 @@ from zetra_agents import (
     preflight,
     release,
     render,
+    skills,
     tags,
 )
 
@@ -227,6 +229,9 @@ def main(argv: list[str] | None = None) -> int:
             problems += contract_problems
             for note in notes:
                 print(note)
+        for a in agents:
+            for note in skill_notes(a):
+                print(note)
         for p in problems:
             print(p, file=sys.stderr)
         if not problems:
@@ -278,6 +283,14 @@ def code_problems(agent: layout.AgentDir) -> list[str]:
     return manifest.decide_problems(agent) if layout.image_target(agent) == "runtime" else []
 
 
+def skill_notes(agent: layout.AgentDir) -> list[str]:
+    """What `check` says about an agent's skills without failing on it (skills.md section 6)."""
+    try:
+        return skills.notes(agent, agent.manifest())
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, RecursionError, AttributeError):
+        return []
+
+
 def render_command(repo: Path, args: argparse.Namespace) -> int:
     if args.check:
         differences = render.check(repo)
@@ -295,7 +308,12 @@ def render_command(repo: Path, args: argparse.Namespace) -> int:
         print(path)
     try:
         for path in render.write_tools(repo):
-            print(f"{path} (tools: rewritten from the code)")
+            what = (
+                "skills.lock: from the skills"
+                if path.name == "skills.lock"
+                else "tools: rewritten from the code"
+            )
+            print(f"{path} ({what})")
     except manifest.ToolsError as exc:
         print(f"tools: {exc}", file=sys.stderr)
         return 1
