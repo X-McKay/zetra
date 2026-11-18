@@ -11,7 +11,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, Callable
 
-from agent_platform import naming
+from agent_platform import effects as effects_mod, naming
 from agent_platform.bundle import compile_bundle, delegation_required, digest_hex
 from agent_platform.constants import (
     AGENT_SUBJECTS_CONFIGMAP,
@@ -366,17 +366,24 @@ class Reconciler:
             )
         # On drift policyDigest and the ConfigMaps are left exactly as they were.
 
+        # The Namespace is read each time, so withdrawing a grant takes effect at the next
+        # reconcile.
+        not_granted = effects_mod.ungranted(
+            built_from["spec"], self.kube.get("v1", "Namespace", None, tenant)
+        )
         facts = desired.ReleaseFacts(
             approved=(spec.get("approval") or {}).get("approved") is True,
             signature_verified=signed,
             policy_drift=drift,
             agent_enabled=desired.agent_enabled(agent),
             agent_ready=desired.condition_true(agent, "Ready"),
+            effects_granted=not not_granted,
         )
         ready = desired.release_ready(facts)
         status["ready"] = ready
+        message = "" if facts.effects_granted else "effects not granted: " + ", ".join(not_granted)
         status["conditions"] = desired.set_condition(
-            conds, "Ready", ready, "Ready" if ready else _not_ready_reason(facts), "", now
+            conds, "Ready", ready, "Ready" if ready else _not_ready_reason(facts), message, now
         )
         self.kube.patch_status(GROUP_VERSION, "AgentRelease", tenant, name, status)
         return self._finish(status, regenerate)
@@ -460,6 +467,8 @@ class Reconciler:
 
 
 def _not_ready_reason(f: desired.ReleaseFacts) -> str:
+    if not f.effects_granted:
+        return "EffectNotGranted"
     if not f.approved:
         return "NotApproved"
     if not f.signature_verified:
