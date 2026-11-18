@@ -24,7 +24,7 @@ CREATE TABLE clusters (
 );
 
 CREATE TABLE tenants (
-    cluster         text NOT NULL REFERENCES clusters (name),
+    cluster         text NOT NULL,
     name            text NOT NULL,
     namespace       text NOT NULL,
     policy_revision text NOT NULL,
