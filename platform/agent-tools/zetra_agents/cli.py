@@ -27,6 +27,7 @@ from zetra_agents import (
     preflight,
     release,
     render,
+    tags,
 )
 
 MCP_RESOURCE_BASE = "https://mcp.almckay.io"  # Kubani registry-controller.yaml
@@ -39,6 +40,14 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("list", help="print the agent names as a JSON array")
+
+    sub.add_parser("tags", help="print the release tags no one has created yet as a JSON array")
+
+    vch = sub.add_parser(
+        "version-check",
+        help="fail when an agent's source changed since BASE and its version did not",
+    )
+    vch.add_argument("--base", required=True, help="the ref the change is measured from")
 
     chk = sub.add_parser(
         "check",
@@ -169,6 +178,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list":
         print(json.dumps([a.name for a in layout.all_agents(repo)]))
         return 0
+    if args.command == "tags":
+        return tags_command(repo)
+    if args.command == "version-check":
+        return version_check_command(repo, args.base)
     if args.command == "image-target":
         target = layout.image_target(layout.find(repo, args.agent))
         print(target)
@@ -223,6 +236,28 @@ def main(argv: list[str] | None = None) -> int:
     for path in release.write(artifacts, args.out):
         print(path)
     return 0
+
+
+def tags_command(repo: Path) -> int:
+    try:
+        print(json.dumps(tags.missing_tags(repo, tags.git_in(repo))))
+    except tags.TagError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    return 0
+
+
+def version_check_command(repo: Path, base: str) -> int:
+    try:
+        problems = tags.unversioned_changes(repo, base, tags.git_in(repo))
+    except tags.TagError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    for problem in problems:
+        print(problem, file=sys.stderr)
+    if not problems:
+        print(f"ok: no agent changed without a new version since {base}")
+    return 1 if problems else 0
 
 
 def code_problems(agent: layout.AgentDir) -> list[str]:
