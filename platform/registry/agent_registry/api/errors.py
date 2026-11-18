@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from agent_registry.rules import Refusal
 from agent_registry.store import Conflict, Missing, Unavailable
 
 # code -> (HTTP status, retryable)
@@ -60,6 +61,10 @@ def install(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api(_: Request, error: ApiError) -> JSONResponse:
         return _answer(error)
+
+    @app.exception_handler(Refusal)
+    async def _refusal(_: Request, error: Refusal) -> JSONResponse:
+        return _answer(ApiError(error.code, error.message))
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_: Request, error: RequestValidationError) -> JSONResponse:
