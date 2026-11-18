@@ -8,7 +8,16 @@ from typing import Any, Literal
 
 from agent_registry import derive
 from agent_registry.api import schemas as s
-from agent_registry.models import Alias, Assessment, Deployment, Observation, Release, Revision
+from agent_registry.models import (
+    AliasMove,
+    Alias,
+    Assessment,
+    Deployment,
+    Hold,
+    Observation,
+    Release,
+    Revision,
+)
 from agent_registry.rules import Refusal, activation, assessment, revocation
 from agent_registry.rules.revisions import candidate
 from agent_registry.store import Reads
@@ -145,6 +154,67 @@ def assessment_of(store: Reads, assessment_id: str) -> s.AssessmentOut:
     if found is None:
         raise Refusal("not-found", f"there is no assessment {assessment_id}")
     return assessment_out(store, found)
+
+
+# ---- alias moves -----------------------------------------------------------------------------
+
+
+def _agent_name(store: Reads, deployment: str) -> str:
+    found = store.deployment(deployment)
+    return found.item if found else deployment
+
+
+def _next(store: Reads, move: AliasMove, holds: list[Hold]) -> str:
+    """What the move waits for, in a sentence (`contract/dependencies.md` section 6.3)."""
+
+    def names(state: str) -> list[str]:
+        return sorted(_agent_name(store, h.deployment_id) for h in holds if h.state == state)
+
+    if move.state == "holding":
+        waiting = names("holding")
+        return f"waiting for {len(waiting)} agent(s) to stop: {', '.join(waiting)}"
+    if move.state == "held":
+        return "merge the change that moves the alias"
+    if move.state == "moving":
+        return "restart or wait for the engine, then say it is serving"
+    if move.state == "evaluating":
+        until = move.deadline.isoformat() if move.deadline else "?"
+        return f"evaluating {len(names('held'))} agent(s) until {until}"
+    if move.state == "completed":
+        suspended = names("suspended")
+        return "done" + (f"; suspended: {', '.join(suspended)}" if suspended else "")
+    return f"cancelled: {move.reason}" if move.reason else "cancelled"
+
+
+def move_out(store: Reads, move: AliasMove) -> s.AliasMoveOut:
+    holds = store.holds(move_id=move.id)
+    return s.AliasMoveOut(
+        **move.model_dump(exclude={"candidate"}),
+        candidate=move.candidate,
+        holds=[
+            s.HoldOut(
+                **h.model_dump(exclude={"move_id", "deployment_id"}),
+                deployment=h.deployment_id,
+                agent=_agent_name(store, h.deployment_id),
+            )
+            for h in holds
+        ],
+        next=_next(store, move, holds),
+    )
+
+
+def alias_move(store: Reads, move_id: str) -> s.AliasMoveOut:
+    found = store.alias_move(move_id)
+    if found is None:
+        raise Refusal("not-found", f"there is no alias move {move_id}")
+    return move_out(store, found)
+
+
+def alias_moves(
+    store: Reads, cluster: str | None, alias: str | None, open: bool | None
+) -> s.AliasMovesOut:
+    found = store.alias_moves(cluster=cluster, alias=alias, open=open)
+    return s.AliasMovesOut(moves=[move_out(store, m) for m in found])
 
 
 # ---- dependants ------------------------------------------------------------------------------

@@ -565,3 +565,62 @@ class AssessmentOut(Record):
     created_by: str
     created_at: datetime
     stale: bool  # computed at the time of the call
+
+
+class AliasMoveIn(Record):
+    assessment: str  # the assessment's id
+    sessions: Literal["finish", "cancel"] = "finish"
+    # None: REGISTRY_ALIAS_MOVE_EVALUATION_SECONDS
+    evaluation_seconds: int | None = Field(default=None, ge=60, le=86400)
+
+
+class AliasMoveCancelIn(Record):
+    reason: str = ""
+
+
+class HoldOut(Record):
+    deployment: str
+    agent: str
+    state: Literal["holding", "held", "suspended", "resumed", "released"]
+    reason: str
+    running: int | None
+    acknowledged_at: datetime | None
+    ended_at: datetime | None
+
+
+class AliasMoveOut(Record):
+    id: str
+    assessment_id: str
+    cluster: str
+    alias: str
+    candidate: Pair
+    state: Literal["holding", "held", "moving", "evaluating", "completed", "cancelled"]
+    sessions: Literal["finish", "cancel"]
+    evaluation_seconds: int
+    started_by: str
+    started_at: datetime
+    held_at: datetime | None
+    moved_at: datetime | None
+    evaluating_at: datetime | None
+    deadline: datetime | None
+    finished_at: datetime | None
+    reason: str
+    holds: list[HoldOut]
+    next: str  # one sentence: what the move waits for
+
+
+class AliasMovesOut(Record):
+    moves: list[AliasMoveOut]  # newest first
+
+
+class AliasCheckIn(Record):
+    cluster: str
+    alias: str
+    candidate: Pair
+
+
+class AliasCheckOut(Record):
+    allowed: bool
+    move: str | None
+    assessment: str | None
+    reason: str

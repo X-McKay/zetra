@@ -214,6 +214,291 @@
         "title": "AgentStatus",
         "type": "object"
       },
+      "AliasCheckIn": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cluster",
+          "alias",
+          "candidate"
+        ],
+        "title": "AliasCheckIn",
+        "type": "object"
+      },
+      "AliasCheckOut": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment"
+          },
+          "move": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "allowed",
+          "move",
+          "assessment",
+          "reason"
+        ],
+        "title": "AliasCheckOut",
+        "type": "object"
+      },
+      "AliasMoveCancelIn": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "AliasMoveCancelIn",
+        "type": "object"
+      },
+      "AliasMoveIn": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment": {
+            "title": "Assessment",
+            "type": "string"
+          },
+          "evaluationSeconds": {
+            "anyOf": [
+              {
+                "maximum": 86400.0,
+                "minimum": 60.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluationseconds"
+          },
+          "sessions": {
+            "default": "finish",
+            "enum": [
+              "finish",
+              "cancel"
+            ],
+            "title": "Sessions",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessment"
+        ],
+        "title": "AliasMoveIn",
+        "type": "object"
+      },
+      "AliasMoveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "assessmentId": {
+            "title": "Assessmentid",
+            "type": "string"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/Pair"
+          },
+          "cluster": {
+            "title": "Cluster",
+            "type": "string"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "evaluatingAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluatingat"
+          },
+          "evaluationSeconds": {
+            "title": "Evaluationseconds",
+            "type": "integer"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishedat"
+          },
+          "heldAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heldat"
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/HoldOut"
+            },
+            "title": "Holds",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "movedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movedat"
+          },
+          "next": {
+            "title": "Next",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "sessions": {
+            "enum": [
+              "finish",
+              "cancel"
+            ],
+            "title": "Sessions",
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "title": "Startedat",
+            "type": "string"
+          },
+          "startedBy": {
+            "title": "Startedby",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "holding",
+              "held",
+              "moving",
+              "evaluating",
+              "completed",
+              "cancelled"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "assessmentId",
+          "cluster",
+          "alias",
+          "candidate",
+          "state",
+          "sessions",
+          "evaluationSeconds",
+          "startedBy",
+          "startedAt",
+          "heldAt",
+          "movedAt",
+          "evaluatingAt",
+          "deadline",
+          "finishedAt",
+          "reason",
+          "holds",
+          "next"
+        ],
+        "title": "AliasMoveOut",
+        "type": "object"
+      },
+      "AliasMovesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "moves": {
+            "items": {
+              "$ref": "#/components/schemas/AliasMoveOut"
+            },
+            "title": "Moves",
+            "type": "array"
+          }
+        },
+        "required": [
+          "moves"
+        ],
+        "title": "AliasMovesOut",
+        "type": "object"
+      },
       "Approval": {
         "additionalProperties": false,
         "description": "What a person approved, and what it is bound to (design section 10.3).",
@@ -1607,6 +1892,80 @@
           "mode"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "HoldOut": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledgedat"
+          },
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endedat"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "running": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Running"
+          },
+          "state": {
+            "enum": [
+              "holding",
+              "held",
+              "suspended",
+              "resumed",
+              "released"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment",
+          "agent",
+          "state",
+          "reason",
+          "running",
+          "acknowledgedAt",
+          "endedAt"
+        ],
+        "title": "HoldOut",
         "type": "object"
       },
       "Item": {
@@ -3437,6 +3796,266 @@
         ]
       }
     },
+    "/v1/alias-moves": {
+      "get": {
+        "description": "Moves, newest first.",
+        "operationId": "list_moves_v1_alias_moves_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cluster",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cluster"
+            }
+          },
+          {
+            "in": "query",
+            "name": "alias",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Alias"
+            }
+          },
+          {
+            "in": "query",
+            "name": "open",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Open"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMovesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Moves",
+        "tags": [
+          "alias-moves"
+        ]
+      },
+      "post": {
+        "description": "A1 to A3: start the move an assessment describes.",
+        "operationId": "start_move_v1_alias_moves_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasMoveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMoveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Move",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/alias-moves/{move_id}": {
+      "get": {
+        "operationId": "get_move_v1_alias_moves__move_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "move_id",
+            "required": true,
+            "schema": {
+              "title": "Move Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMoveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Move",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/alias-moves/{move_id}/cancel": {
+      "post": {
+        "description": "A5: cancel a move that is holding or held.",
+        "operationId": "cancel_move_v1_alias_moves__move_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "move_id",
+            "required": true,
+            "schema": {
+              "title": "Move Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasMoveCancelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMoveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Move",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/alias-moves/{move_id}/evaluate": {
+      "post": {
+        "description": "A9: the engine is serving the candidate; evaluate the held agents on it.",
+        "operationId": "evaluate_move_v1_alias_moves__move_id__evaluate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "move_id",
+            "required": true,
+            "schema": {
+              "title": "Move Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasMoveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Move",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
     "/v1/assessments": {
       "post": {
         "description": "Compute and store what moving the alias to the candidate would touch.",
@@ -3516,6 +4135,48 @@
           }
         },
         "summary": "Get Assessment",
+        "tags": [
+          "alias-moves"
+        ]
+      }
+    },
+    "/v1/checks/alias": {
+      "post": {
+        "description": "Section 8: may a change that moves the alias to the candidate merge? Writes nothing.",
+        "operationId": "check_alias_v1_checks_alias_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasCheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Alias",
         "tags": [
           "alias-moves"
         ]
