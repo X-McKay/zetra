@@ -5,6 +5,7 @@ import hashlib
 import json
 import shutil
 import textwrap
+from pathlib import Path
 
 import pytest
 import yaml
@@ -853,6 +854,20 @@ def test_init_bootstraps_git_and_reports_the_lock(tmp_path, capsys, monkeypatch)
         "uv lock" in err and "just agent register tenant-test" in err and "my-agent/v0.1.0" in err
     )
     assert "git add -A" in err
+
+
+def test_next_steps_name_every_repository_setting_and_what_a_missing_one_costs():
+    text = render.next_steps(Path("/tmp/x"), "demo", "tenant-demo", {"lock": "locked"})
+    for setting in (
+        "RELEASE_TAG_KEY",
+        "AGENT_REGISTRY_URL",
+        "AGENT_REGISTRY_AUDIENCE",
+        "REGISTRY_USERNAME",
+        "RELEASE_RUNNER",
+    ):
+        assert setting in text
+    assert "creates no release tags" in text
+    assert "not reported to the Agent Registry" in text
 
 
 def test_next_steps_do_not_tell_a_nested_checkout_to_commit(tmp_path):

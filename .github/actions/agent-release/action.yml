@@ -120,6 +120,11 @@ runs:
           echo "uploaded $(basename "$f")"
         done
         py 'import json,sys; print(json.loads(sys.argv[1])["html_url"])' "$release"
+    - name: Say the release is not reported to the Agent Registry
+      if: inputs.registry-url == ''
+      shell: bash
+      run: |
+        echo "::warning title=Release not reported to the Agent Registry::The release was published but not reported to the Agent Registry: the repository variable AGENT_REGISTRY_URL is not set (AGENT_REGISTRY_AUDIENCE is needed with it). Set both and report the release again."
     # The release is published by now; a failure here does not withdraw it. The job needs
     # `permissions: id-token: write` for the identity token.
     - name: Report the release to the Agent Registry

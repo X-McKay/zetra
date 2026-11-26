@@ -8,7 +8,8 @@
 # with a deploy key. Repository settings this needs:
 #   secrets  RELEASE_TAG_KEY   the private half of a deploy key with write access, allowed
 #                              by any tag rule to create the release tags
-# Without the secret this workflow prints the tags it would have created and succeeds.
+# Without the secret this workflow prints the tags it would have created, warns that none
+# was created when any is owed, and succeeds.
 name: Tag on merge
 on:
   push:
@@ -52,6 +53,9 @@ jobs:
         run: |
           echo "RELEASE_TAG_KEY is not set; not creating tags. Would create:"
           echo "$TAGS" | jq -r '.[]'
+          if [ "$(echo "$TAGS" | jq 'length')" -gt 0 ]; then
+            echo "::warning title=No release tag was created::This merge owes release tags ($(echo "$TAGS" | jq -r 'join(", ")')) but no tag was created because the secret RELEASE_TAG_KEY is not set, so nothing will be released. Add the secret and push the tags."
+          fi
       - name: Create and push the tags
         if: steps.key.outputs.present == 'true'
         env:

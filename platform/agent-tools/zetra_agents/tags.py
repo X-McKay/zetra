@@ -66,7 +66,9 @@ def exempt(relative: PurePosixPath) -> bool:
 
 
 def unversioned_changes(repo: Path, base: str, git: Git) -> list[str]:
-    """Problems for each agent whose source differs from `base` with its version unchanged.
+    """Problems for each agent whose source differs from `base` with its version unchanged,
+    or whose new version already has its tag (the tag workflow only creates tags that do not
+    exist, so that change would never be released).
 
     The comparison is against the merge base, so a branch that is behind `base` is not
     blamed for what `base` gained. An agent that did not exist there is new.
@@ -79,12 +81,13 @@ def unversioned_changes(repo: Path, base: str, git: Git) -> list[str]:
         if len(parts) > 2 and parts[0] == "agents" and not exempt(PurePosixPath(*parts[2:])):
             touched.add(parts[1])
     problems = []
+    existing = set(git("tag", "--list").split()) if touched else set()
     for name in sorted(touched):
         relative = f"agents/{name}/pyproject.toml"
         try:
             before = version_of(git("show", f"{anchor}:{relative}"), f"{relative} at {base}")
         except TagError:
-            continue  # no such file or version at the base: a new agent
+            before = None  # no such file or version at the base: a new agent
         try:
             now = version_of(git("show", f"HEAD:{relative}"), relative)
         except TagError as exc:
@@ -94,5 +97,10 @@ def unversioned_changes(repo: Path, base: str, git: Git) -> list[str]:
             problems.append(
                 f"{name}: files under agents/{name}/ changed but the version in {relative} "
                 f"is still {now}; raise it"
+            )
+        elif f"{name}/v{now}" in existing:
+            problems.append(
+                f"{name}: version {now} in {relative} already has the tag {name}/v{now}; "
+                "raise it above the highest tag"
             )
     return problems
