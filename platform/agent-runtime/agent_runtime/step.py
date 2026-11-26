@@ -286,6 +286,11 @@ def run_model(state: dict, manifest: dict, tools: dict, out: dict) -> int:
     except (openai.PermissionDeniedError, openai.AuthenticationError) as e:
         out["summary"] = f"model call refused ({e.status_code})"
         return 3
+    except (openai.BadRequestError, openai.NotFoundError, openai.UnprocessableEntityError) as e:
+        # Rejected as malformed: the same request is rejected every time, so a replay on a
+        # fresh sandbox cannot help. Only the status is kept; the message may hold the request.
+        out["summary"] = f"model call rejected ({e.status_code})"
+        return 3
     choice = resp.choices[0]
     msg = {"role": "assistant", "content": choice.message.content or ""}
     calls = [tc for tc in choice.message.tool_calls or [] if getattr(tc, "function", None)]

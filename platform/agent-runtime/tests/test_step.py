@@ -260,6 +260,18 @@ def test_model_403_is_agent_error_and_429_is_budget(sandbox, status, rc):
     assert got == rc and out["done"] is False and len(sandbox.gw.chat_requests) == 1
 
 
+@pytest.mark.parametrize("status", [400, 404, 422])
+def test_a_request_the_model_endpoint_rejects_is_an_agent_error_with_only_the_status(
+    sandbox, status
+):
+    leak = "sk-leaky-request-content"
+    sandbox.gw.chat_replies = [(status, {"error": {"message": leak}})]
+    rc, out, err = sandbox.run(0)
+    assert rc == 3 and out["done"] is False and len(sandbox.gw.chat_requests) == 1
+    assert out["summary"] == f"model call rejected ({status})"
+    assert leak not in json.dumps(out) and leak not in err
+
+
 def test_advisory_budget_exits_4_after_the_call(sandbox):
     sandbox.env["AGENT_TOKENS_PER_SESSION"] = "10"
     sandbox.gw.chat_replies = [(200, chat_response(tool_calls=[("boom", {})], usage=(8, 4)))]
