@@ -347,6 +347,37 @@ def _grant_problems(name: str, spec: dict[str, Any]) -> list[str]:
     return problems
 
 
+def reservation_problems(agent: AgentDir) -> list[str]:
+    """A model grant whose budget is below what the gateway reserves for one call of its
+    backend is never admitted. On the one-file layout `deploy/agent.yaml` has been compared
+    with what `agent.yaml` generates by now, so the grant read here is the author's
+    `requires.budget`, and that is where the author raises it."""
+    try:
+        spec = agent.agent_cr()["spec"]
+        one_file = declaration.one_file(agent)
+        models = (spec.get("capabilities") or {}).get("models") or []
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, RecursionError, KeyError, AttributeError):
+        return []  # `check` reports a file that cannot be read
+    table = declaration.reservations(agent.repo)
+    where = "agent.yaml (requires.budget)" if one_file else "deploy/agent.yaml"
+    problems = []
+    for index, entry in enumerate(models):
+        reserved = table.get(entry.get("backend"))
+        budget = entry.get("budget")
+        if reserved is None or not isinstance(budget, dict):
+            continue
+        for field in ("tokensPerSession", "tokensPerDay"):
+            value = budget.get(field)
+            if type(value) is int and value < reserved:
+                problems.append(
+                    f"{agent.name}: {field} {value} is below the {reserved} tokens the "
+                    f"gateway reserves for each call to {entry['backend']}; no call would be "
+                    f"admitted. Raise it to at least {reserved} in {where}"
+                    + ("" if one_file else f" (spec.capabilities.models[{index}].budget)")
+                )
+    return problems
+
+
 def check(agent: AgentDir) -> list[str]:
     """Every problem with one agent directory; an empty list means it is releasable."""
     problems = check_files(agent)

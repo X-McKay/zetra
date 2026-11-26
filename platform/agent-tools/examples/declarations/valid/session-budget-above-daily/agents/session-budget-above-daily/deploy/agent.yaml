@@ -12,6 +12,6 @@ spec:
     models:
       - backend: llm-main
         models: [example-model]
-        budget: {tokensPerDay: 2000, tokensPerSession: 200000}
+        budget: {tokensPerDay: 150000, tokensPerSession: 200000}
     mcp: []
   runtime: {cpu: "1", memory: 1Gi, ttlSeconds: 1800}
