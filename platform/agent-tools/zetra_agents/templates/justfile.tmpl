@@ -17,6 +17,7 @@ check:
     uv run --locked ruff format --check .
     uv run --locked zetra-agents check
     uv run --locked --all-packages zetra-agents render --check
+    if git rev-parse --verify --quiet origin/main >/dev/null; then uv run --locked zetra-agents version-check --base origin/main || exit $?; else echo "version-check skipped: no origin/main ref to compare with"; fi
     agents=$(uv run --locked zetra-agents list) || exit $?; for a in $(printf '%s' "$agents" | tr -d '[],"'); do just check-agent "$a" || exit $?; done
 
 # Rewrite what is derived: the files rendered from zetra, and each agent.yaml `tools:`

@@ -467,7 +467,10 @@ def next_steps(target: Path, agent: str, tenant: str, bootstrapped: dict[str, st
         steps.append("commit in your repository and push main (git was not initialised here)")
     steps += [
         "repository settings: secrets REGISTRY_USERNAME and REGISTRY_PASSWORD (from the Kubani operator),",
-        "  variable RELEASE_RUNNER (the self-hosted runner that reaches the registry)",
+        "  variable RELEASE_RUNNER (the self-hosted runner that reaches the registry),",
+        "  secret RELEASE_TAG_KEY (deploy key: without it a merge to main creates no release tags, and warns),",
+        "  variables AGENT_REGISTRY_URL and AGENT_REGISTRY_AUDIENCE (from the Kubani operator: without them a",
+        "  release is published but not reported to the Agent Registry, and warns)",
         f"Kubani operator: just agent register {tenant} <owner>/<repo> {agent} --source <this checkout>",
         f"release: git tag {agent}/v0.1.0 && git push --tags   (from merged main, one tag at a time)",
         f"Kubani operator: just agent stage {agent} {agent}/v0.1.0, then just agent approve <release>",

@@ -18,6 +18,11 @@
 #                                                   registry.almckay.io and the private Sigstore
 #            AGENT_REGISTRY (optional)              override of the registry default
 #            VULN_EXCEPTIONS (optional)             High finding ids the tenant allows
+#            AGENT_REGISTRY_URL, AGENT_REGISTRY_AUDIENCE
+#                                                   where and for whom the release is reported
+#                                                   to the Agent Registry; without them the
+#                                                   release is published and not reported (the
+#                                                   run says so in a warning)
 # There is no signing key: do not add one.
 name: Release agent
 on:

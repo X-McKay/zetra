@@ -23,6 +23,8 @@ API_VERSION = "agentplatform.io/v1alpha1"
 HEADER = f"# Written by `{COMMAND}` from agent.yaml; not edited by hand.\n"
 KEYS = ("owner", "description", "tenant", "identity", "budget", "tools", "effects", "runtime")
 ALIASES = {"main": "llm-main", "fast": "llm-fast"}
+# Tokens the gateway reserves for each model call: the backend's context length.
+RESERVATIONS = {"llm-main": 131072, "llm-fast": 32768}
 
 
 def is_one_file(manifest: Any) -> bool:
@@ -51,6 +53,19 @@ def aliases(repo: Path) -> dict[str, str]:
     if isinstance(table, dict) and all(isinstance(v, str) for v in table.values()):
         return dict(table)
     return dict(ALIASES)
+
+
+def reservations(repo: Path) -> dict[str, int]:
+    """The reservation table: the repository's `[tool.zetra-agents.reservations]` when it
+    has one, which replaces the built-in table, else the built-in."""
+    try:
+        data = tomllib.loads((repo / "pyproject.toml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return dict(RESERVATIONS)
+    table = data.get("tool", {}).get("zetra-agents", {}).get("reservations")
+    if isinstance(table, dict) and all(type(v) is int and v > 0 for v in table.values()):
+        return dict(table)
+    return dict(RESERVATIONS)
 
 
 def generate(manifest: dict[str, Any]) -> dict[str, Any]:

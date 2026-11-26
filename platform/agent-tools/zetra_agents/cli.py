@@ -220,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
         problems += [p for a in agents for p in layout.check(a)]
         if not problems:
             problems += [p for a in agents for p in code_problems(a)]
+            problems += [p for a in agents for p in layout.reservation_problems(a)]
         if not problems:
             problems += [
                 p for a in agents for p in release.compile_problems(a, args.mcp_resource_base)
