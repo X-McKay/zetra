@@ -71,7 +71,8 @@ def unversioned_changes(repo: Path, base: str, git: Git) -> list[str]:
     exist, so that change would never be released).
 
     The comparison is against the merge base, so a branch that is behind `base` is not
-    blamed for what `base` gained. An agent that did not exist there is new.
+    blamed for what `base` gained. An agent that did not exist there is new, and one whose
+    whole directory is gone at HEAD was removed: there is nothing left to release.
     """
     anchor = git("merge-base", base, "HEAD").strip()
     changed = git("diff", "--name-only", "-z", anchor, "HEAD").split("\0")
@@ -80,6 +81,9 @@ def unversioned_changes(repo: Path, base: str, git: Git) -> list[str]:
         parts = PurePosixPath(path).parts
         if len(parts) > 2 and parts[0] == "agents" and not exempt(PurePosixPath(*parts[2:])):
             touched.add(parts[1])
+    touched = {
+        name for name in touched if git("ls-tree", "--name-only", "HEAD", f"agents/{name}/").strip()
+    }
     problems = []
     existing = set(git("tag", "--list").split()) if touched else set()
     for name in sorted(touched):

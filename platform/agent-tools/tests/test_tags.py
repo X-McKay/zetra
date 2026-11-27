@@ -123,6 +123,21 @@ def test_version_check_refuses_a_new_agent_whose_tag_exists(history, capsys):
     assert err.startswith("gamma: version 0.1.0 in agents/gamma/pyproject.toml already has")
 
 
+def test_version_check_accepts_an_agent_whose_whole_directory_was_removed(history, capsys):
+    git(history, "tag", "alpha/v1.0.0")
+    git(history, "rm", "-r", "-q", "agents/alpha")
+    commit(history)
+    assert check(history, capsys) == (0, "")
+
+
+def test_version_check_still_fails_an_agent_left_without_its_pyproject(history, capsys):
+    git(history, "rm", "-q", "agents/alpha/pyproject.toml")
+    commit(history)
+    code, err = check(history, capsys)
+    assert code == 1
+    assert "agents/alpha/pyproject.toml" in err
+
+
 def test_unversioned_changes_asks_git_for_the_tags_only_when_an_agent_changed(tmp_path):
     calls = []
 
