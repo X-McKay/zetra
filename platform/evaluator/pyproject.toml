@@ -12,7 +12,7 @@ registry-evaluator = "registry_evaluator.main:main"
 
 [dependency-groups]
 dev = [
-    "pytest==8.4.2",
+    "pytest==9.0.3",
     "ruff==0.14.3",
 ]
 
