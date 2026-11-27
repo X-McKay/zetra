@@ -81,7 +81,9 @@ def unversioned_changes(repo: Path, base: str, git: Git) -> list[str]:
         parts = PurePosixPath(path).parts
         if len(parts) > 2 and parts[0] == "agents" and not exempt(PurePosixPath(*parts[2:])):
             touched.add(parts[1])
-    touched = {name for name in touched if git("ls-tree", "--name-only", "HEAD", f"agents/{name}/").strip()}
+    touched = {
+        name for name in touched if git("ls-tree", "--name-only", "HEAD", f"agents/{name}/").strip()
+    }
     problems = []
     existing = set(git("tag", "--list").split()) if touched else set()
     for name in sorted(touched):
